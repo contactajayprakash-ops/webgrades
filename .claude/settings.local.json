@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s -m 30 -X POST https://86ad62d3-ded9-4a55-8e8d-990f6b94afa5-00-rayloc37mst2.kirk.replit.dev/login -H 'Content-Type: application/json' -d '{\"username\":\"__test__\",\"password\":\"__test__\"}' -w '\\\\nHTTP %{http_code} in %{time_total}s\\\\n')",
+      "Bash(curl -s -m 60 -X POST https://86ad62d3-ded9-4a55-8e8d-990f6b94afa5-00-rayloc37mst2.kirk.replit.dev/login -H 'Content-Type: application/json' -d '{\"username\":\"224732\",\"password\":\"prakash2011#\"}')",
+      "Bash(curl -s -m 90 -X POST https://86ad62d3-ded9-4a55-8e8d-990f6b94afa5-00-rayloc37mst2.kirk.replit.dev/data -H 'Content-Type: application/json' -d '{\"username\":\"224732\",\"password\":\"prakash2011#\",\"type\":\"class\",\"quarter\":\"1\"}')",
+      "Bash(python3 -c ' *)",
+      "Bash(cat)",
+      "Bash(node /tmp/verify.mjs)",
+      "Bash(node /tmp/verify2.mjs)",
+      "Bash(curl -s -m 60 -X POST https://86ad62d3-ded9-4a55-8e8d-990f6b94afa5-00-rayloc37mst2.kirk.replit.dev/data -H 'Content-Type: application/json' -d '{\"username\":\"224732\",\"password\":\"prakash2011#\",\"type\":\"rank\"}')",
+      "Bash(curl *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git -c user.name=WebGrades -c user.email=pdanfam@gmail.com commit -q -m 'Checkpoint: working GPA portal \\(live/cumulative, quarterly grades, what-if\\) *)"
+    ]
+  }
+}
