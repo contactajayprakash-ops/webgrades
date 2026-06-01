@@ -9,7 +9,6 @@ const NAV = [
   { to: '/gpa', label: 'GPA', icon: 'calc' },
   { section: 'Records' },
   { to: '/schedule', label: 'Schedule', icon: 'clock' },
-  { to: '/rank', label: 'Rank & GPA', icon: 'trophy' },
   { to: '/transcript', label: 'Transcript', icon: 'scroll' },
   { to: '/attendance', label: 'Attendance', icon: 'calendar' },
   { section: 'More' },

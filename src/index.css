@@ -213,11 +213,36 @@ input, select { font-family: inherit; }
 /* ---------- Misc ---------- */
 .spinner { width: 22px; height: 22px; border: 2.5px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.center-load { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 60px 20px; color: var(--text-dim); }
+.center-load { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 60px 20px; color: var(--text-dim); }
+
+.loadbar { width: 260px; max-width: 70vw; height: 7px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; position: relative; }
+.loadbar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 38%; border-radius: 20px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow: 0 0 12px -2px var(--accent); animation: loadslide 1.25s cubic-bezier(.65,.05,.36,1) infinite; }
+@keyframes loadslide { 0% { left: -40%; } 100% { left: 102%; } }
+.loading-quip { animation: quipfade .5s ease; min-height: 1.2em; }
+@keyframes quipfade { from { opacity: 0; transform: translateY(3px); } to { opacity: .65; transform: none; } }
 .skeleton { background: linear-gradient(90deg, var(--panel) 25%, var(--panel-2) 50%, var(--panel) 75%); background-size: 200% 100%; animation: shimmer 1.3s infinite; border-radius: 8px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 .error-box { background: #f8717115; border: 1px solid #f8717140; color: #fca5a5; padding: 13px 16px; border-radius: var(--radius-sm); font-size: 14px; display: flex; gap: 10px; align-items: flex-start; }
+
+.whatif-banner { display: flex; align-items: center; gap: 11px; background: #fbbf2418; border: 1px solid #fbbf2455; color: #fcd34d; padding: 11px 16px; border-radius: var(--radius-sm); font-size: 13.5px; margin-bottom: 18px; }
+.whatif-banner b { color: var(--yellow); }
+.whatif-banner .btn { color: var(--yellow); border-color: #fbbf2455; }
+.whatif-banner .btn:hover { border-color: var(--yellow); }
+
+/* GPA impact panel on the Grades page (distinct from the grade tables) */
+.impact { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.impact-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 18px; background: var(--panel-2); border-bottom: 1px solid var(--border-soft); }
+.impact-head h3 { font-size: 15px; }
+.impact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.impact-cell { padding: 15px 18px; border-right: 1px solid var(--border-soft); }
+.impact-cell:last-child { border-right: none; }
+.impact-cell .k { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); font-weight: 700; }
+.impact-cell .v { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin-top: 5px; line-height: 1; }
+.impact-cell .d { font-size: 12px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+.delta-up { color: var(--green); }
+.delta-down { color: var(--red); }
+.delta-zero { color: var(--text-faint); }
 .notice { background: var(--accent-soft); border: 1px solid #6366f155; color: #c7caff; padding: 12px 15px; border-radius: var(--radius-sm); font-size: 13px; }
 
 .empty { text-align: center; color: var(--text-faint); padding: 50px 20px; font-size: 14.5px; }

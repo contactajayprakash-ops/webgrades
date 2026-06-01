@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
-import { PageHead, Loading, ErrorBox, Empty } from '../components/ui.jsx'
+import { useWhatIf } from '../context/WhatIfContext.jsx'
+import { PageHead, Loading, ErrorBox, Empty, WhatIfBanner } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
+import { effectiveAverage } from '../lib/whatif.js'
 import {
-  detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, semesterGrade, fmtGpa,
+  detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, semesterGrade, liveSemesterAverage, fmtGpa,
   WEIGHT_OPTIONS, weightTagClass, weightLabel,
 } from '../lib/gpa.js'
 import { cleanCourseName, courseKey, transcriptGrade, transcriptPeriod, PERIODS } from '../lib/courses.js'
@@ -19,9 +21,10 @@ function liveCoursePeriod(q, period) {
   const s2 = semesterGrade([q['3'], q['4']])
   if (period === 's1') return s1 == null ? null : { grade: s1, credit: 0.5 }
   if (period === 's2') return s2 == null ? null : { grade: s2, credit: 0.5 }
-  const sems = [s1, s2].filter((x) => x != null)
-  if (!sems.length) return null
-  return { grade: Math.round((sems.reduce((a, b) => a + b, 0) / sems.length) * 10) / 10, credit: sems.length === 2 ? 1.0 : 0.5 }
+  // Full year = average across all four quarters (HAC rounding), full credit.
+  const yearGrade = semesterGrade([q['1'], q['2'], q['3'], q['4']])
+  if (yearGrade == null) return null
+  return { grade: yearGrade, credit: s1 != null && s2 != null ? 1.0 : 0.5 }
 }
 
 export default function Gpa() {
@@ -35,6 +38,7 @@ export default function Gpa() {
   const [transcript, setTranscript] = useState(undefined) // groups[] | { error }
   const [liveGrades, setLiveGrades] = useState({}) // courseName -> grade override
   const [liveExcluded, setLiveExcluded] = useState({}) // courseName -> true
+  const { edits, count: whatIfCount } = useWhatIf()
 
   const updatePrefs = useCallback((mut) => {
     setPrefsState((p) => { const n = structuredClone(p); mut(n); savePrefs(n); return n })
@@ -81,13 +85,14 @@ export default function Gpa() {
       for (const q of qs) {
         for (const c of quarters[q]?.classes || []) {
           if (!map.has(c.courseName)) map.set(c.courseName, [])
-          const g = parseGrade(c.overallAverage)
+          const g = effectiveAverage(q, c, edits).avg
           if (g != null) map.get(c.courseName).push(g)
         }
       }
       return Array.from(map.entries()).map(([name, grades]) => {
-        // semester grade = round(avg(each quarter rounded)) — HAC's method
-        const auto = semesterGrade(grades)
+        // Live semester average = average of the rounded quarters (NOT re-rounded),
+        // so the live GPA stays consistent with the quarter GPAs.
+        const auto = liveSemesterAverage(grades)
         return { key: name, name: cleanCourseName(name), rawName: name, autoGrade: auto }
       })
     }
@@ -107,7 +112,7 @@ export default function Gpa() {
       include: !liveExcluded[r.key] && (liveGrades[r.key] !== undefined ? liveGrades[r.key] : r.autoGrade) != null,
     }))
     return { rows, ready, anyError, error: needed.map((q) => quarters[q]?.error).find(Boolean) }
-  }, [quarters, period, liveGrades, liveExcluded, weightForLive])
+  }, [quarters, period, liveGrades, liveExcluded, weightForLive, edits])
 
   const liveResult = weightedGpa(liveBuild.rows)
 
@@ -128,7 +133,7 @@ export default function Gpa() {
       for (const c of quarters[q]?.classes || []) {
         const k = courseKey(c.courseName)
         if (!map.has(k)) map.set(k, { key: k, name: cleanCourseName(c.courseName), rawName: c.courseName, q: {} })
-        const g = parseGrade(c.overallAverage)
+        const g = effectiveAverage(q, c, edits).avg
         if (g != null) map.get(k).q[q] = g
       }
     }
@@ -137,7 +142,7 @@ export default function Gpa() {
       const s2 = semesterGrade([c.q['3'], c.q['4']])
       return { ...c, s1, s2, sems: [s1, s2].filter((x) => x != null).join(' / ') || '—' }
     })
-  }, [quarters])
+  }, [quarters, edits])
 
   const priorCourses = useMemo(() => {
     const out = []
@@ -197,6 +202,8 @@ export default function Gpa() {
     <>
       <PageHead title="GPA" sub="Weighted GPA by time period — live from current grades, or cumulative across your transcript." />
 
+      <WhatIfBanner />
+
       {/* time-period axis */}
       <div className="seg mb-3">
         {PERIODS.map((p) => (
@@ -211,13 +218,14 @@ export default function Gpa() {
           label="Live GPA" accent="var(--accent)"
           value={liveBuild.ready ? fmtGpa(liveResult.gpa) : null}
           note={`This year’s grades · ${liveResult.credits.toFixed(1)} cr`}
-          whatIf={hasLiveEdits}
+          whatIf={hasLiveEdits || whatIfCount > 0}
         />
         <HeadlineCard
           active={view === 'cumulative'} onClick={() => setView('cumulative')}
           label="Cumulative GPA" accent="var(--accent-2)"
           value={!cumConfirmed ? 'Set up' : (Array.isArray(transcript) ? fmtGpa(cumResult.gpa) : null)}
           note={!cumConfirmed ? 'Pick which courses count →' : `Incl. transcript · ${cumRows.length} courses · ${cumResult.credits.toFixed(1)} cr`}
+          whatIf={whatIfCount > 0}
         />
       </div>
 

@@ -75,13 +75,22 @@ export function roundGrade(g) {
   return g == null ? null : Math.round(g);
 }
 
-// HAC's semester grade = round(average(each quarter rounded to a whole number)).
-// Verified against the transcript: AP Human Geo 92.5,97.5 -> round(93,98 avg)=96;
-// Eng 1 85.33,92.29 -> round(85,92 avg)=89. (Rounding each quarter FIRST matters.)
+// HAC's OFFICIAL semester grade = round(average(each quarter rounded)). The final
+// re-round is what HAC posts to the transcript (Eng 1 85.33,92.29 -> 89;
+// AP Human Geo 92.5,97.5 -> 96). Use this for cumulative / transcript matching.
 export function semesterGrade(quarterAverages) {
   const r = quarterAverages.filter((x) => x != null).map((x) => Math.round(x));
   if (!r.length) return null;
   return Math.round(r.reduce((a, b) => a + b, 0) / r.length);
+}
+
+// "Live" semester average = average of the whole-number quarter grades WITHOUT
+// the final re-round. Keeps a live semester GPA consistent with its quarter
+// GPAs (so it never reads higher than both quarters from a .5 round-up).
+export function liveSemesterAverage(quarterAverages) {
+  const r = quarterAverages.filter((x) => x != null).map((x) => Math.round(x));
+  if (!r.length) return null;
+  return Math.round((r.reduce((a, b) => a + b, 0) / r.length) * 100) / 100;
 }
 
 // Unweighted 4.0-scale points for a numeric grade (Texas: passing is 70).

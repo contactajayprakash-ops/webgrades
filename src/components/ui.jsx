@@ -1,5 +1,23 @@
+import { useEffect, useState } from 'react'
 import { Icon } from './icons.jsx'
 import { letterGrade } from '../lib/gpa.js'
+import { useWhatIf } from '../context/WhatIfContext.jsx'
+
+// Global indicator shown wherever GPAs appear, whenever what-if edits are active.
+export function WhatIfBanner() {
+  const { count, reset } = useWhatIf()
+  if (!count) return null
+  return (
+    <div className="whatif-banner">
+      <Icon.beaker width={17} height={17} />
+      <span>
+        <b>What-if mode</b> — {count} assignment {count === 1 ? 'change' : 'changes'} applied. Every GPA below shows the
+        estimated result, not your real grades.
+      </span>
+      <button className="btn ghost sm" onClick={reset} style={{ marginLeft: 'auto' }}>Reset all</button>
+    </div>
+  )
+}
 
 export function GradeBadge({ value, showLetter = true }) {
   // value: number | null
@@ -13,12 +31,29 @@ export function GradeBadge({ value, showLetter = true }) {
   )
 }
 
+const LOADING_QUIPS = [
+  'Logging into HAC for you…',
+  'Scraping your grades out of HAC…',
+  'Doing the GPA math HAC refuses to…',
+  'Beating the Chromebook experience…',
+  'Rounding grades…',
+  'Averaging your quarters…',
+  'Politely asking HAC to hurry up…',
+  'Crunching weighted + unweighted…',
+  'Almost there — HAC is slow, not us…',
+]
+
 export function Loading({ label = 'Loading from HAC…' }) {
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setI((n) => (n + 1) % LOADING_QUIPS.length), 2200)
+    return () => clearInterval(t)
+  }, [])
   return (
     <div className="center-load">
-      <div className="spinner" />
-      <div>{label}</div>
-      <div className="small faint">First load can take a few seconds — the API logs into HAC live.</div>
+      <div className="loadbar" />
+      <div style={{ fontWeight: 600 }}>{label}</div>
+      <div className="small faint loading-quip" key={i}>{LOADING_QUIPS[i]}</div>
     </div>
   )
 }

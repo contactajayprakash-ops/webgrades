@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useWhatIf } from '../context/WhatIfContext.jsx'
 import { useHacData } from '../hooks/useHacData.js'
 import { PageHead, Loading, ErrorBox, Empty, GradeBadge } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import { detectWeight, parseGrade, weightedGpa, roundGrade, fmtGpa } from '../lib/gpa.js'
-import { cleanCourseName, SEMESTERS } from '../lib/courses.js'
+import { cleanCourseName, courseKey, QUARTERS } from '../lib/courses.js'
+import { effectiveAverage } from '../lib/whatif.js'
+import { loadPrefs } from '../lib/prefs.js'
 
 export default function Dashboard() {
   const { userName } = useAuth()
@@ -22,13 +25,25 @@ export default function Dashboard() {
 }
 
 function greeting(name) {
-  const first = (name || '').replace(/,/g, '').trim().split(/\s+/).slice(-1)[0]
+  if (!name) return 'Dashboard'
+  
+  // If the name contains a comma (e.g., "Prakash, Ajay"), 
+  // split by the comma and take the second part (the first name).
+  if (name.includes(',')) {
+    const parts = name.split(',')
+    const firstName = parts[1].trim().split(/\s+/)[0]
+    return `Hey, ${firstName} 👋`
+  }
+  
+  // Fallback for standard "First Last" formatting
+  const first = name.trim().split(/\s+/)[0]
   return first ? `Hey, ${first} 👋` : 'Dashboard'
 }
 
-// Computes the live semester GPA + shows official rank/GPA side by side.
+// Shows the latest quarter's weighted GPA + official rank/GPA side by side.
 function TopStats() {
   const { getData } = useAuth()
+  const { edits, count: whatIfCount } = useWhatIf()
   const { data: rankData, loading: rankLoading, error: rankErr } = useHacData('rank', null)
   const [gpa, setGpa] = useState(null)
   const [gpaLoading, setGpaLoading] = useState(true)
@@ -37,27 +52,16 @@ function TopStats() {
   const computeGpa = useCallback(async () => {
     setGpaLoading(true); setGpaErr(null)
     try {
-      // Pick the most recent semester that actually has grades.
-      for (const sem of [...SEMESTERS].reverse()) {
-        const results = await Promise.all(
-          sem.quarters.map((q) => getData('class', { quarter: q }).catch(() => null))
-        )
-        const rows = []
-        const seen = new Map()
-        for (const d of results) {
-          for (const c of d?.assignmentsData || []) {
-            const g = parseGrade(c.overallAverage)
-            if (g == null) continue
-            if (!seen.has(c.courseName)) seen.set(c.courseName, [])
-            seen.get(c.courseName).push(g)
-          }
-        }
-        for (const [name, grades] of seen) {
-          const avg = roundGrade(grades.reduce((a, b) => a + b, 0) / grades.length)
-          rows.push({ grade: avg, weight: detectWeight(name), credit: 0.5, include: true })
-        }
+      const prefs = loadPrefs()
+      // Walk from the latest quarter back to the first; use the latest that has grades.
+      for (const q of [...QUARTERS].reverse()) {
+        const d = await getData('class', { quarter: q.value }).catch(() => null)
+        const rows = (d?.assignmentsData || []).map((c) => {
+          const avg = roundGrade(effectiveAverage(q.value, c, edits).avg)
+          return { grade: avg, weight: prefs.weights[courseKey(c.courseName)] ?? detectWeight(c.courseName), credit: 0.5, include: avg != null }
+        }).filter((r) => r.grade != null)
         if (rows.length) {
-          setGpa({ ...weightedGpa(rows), sem: sem.label, count: rows.length })
+          setGpa({ ...weightedGpa(rows), label: q.label, count: rows.length })
           setGpaLoading(false)
           return
         }
@@ -68,7 +72,7 @@ function TopStats() {
     } finally {
       setGpaLoading(false)
     }
-  }, [getData])
+  }, [getData, edits])
 
   useEffect(() => { computeGpa() }, [computeGpa])
 
@@ -76,13 +80,13 @@ function TopStats() {
     <div className="grid grid-3">
       <div className="card stat">
         <span className="glow" style={{ background: 'var(--accent)' }} />
-        <span className="label">Weighted GPA</span>
+        <span className="label">Weighted GPA {whatIfCount > 0 && <em style={{ color: 'var(--yellow)' }}>· what-if</em>}</span>
         {gpaLoading ? <span className="value skeleton" style={{ height: 34, width: 120 }} />
           : gpaErr ? <span className="value" style={{ fontSize: 18, color: 'var(--red)' }}>—</span>
           : gpa ? <span className="value">{fmtGpa(gpa.gpa)}</span>
           : <span className="value" style={{ fontSize: 20 }}>N/A</span>}
         <span className="meta">
-          {gpa ? `${gpa.sem} · ${gpa.count} classes · calculated` : 'live from quarter grades'}
+          {gpa ? `${gpa.label} · ${gpa.count} classes · current quarter` : 'latest quarter grades'}
           {' · '}<Link to="/gpa" style={{ color: 'var(--accent)' }}>details →</Link>
         </span>
       </div>

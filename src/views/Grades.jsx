@@ -1,57 +1,61 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
-import { PageHead, Loading, ErrorBox, Empty, GradeBadge } from '../components/ui.jsx'
+import { useWhatIf } from '../context/WhatIfContext.jsx'
+import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
-import { parseGrade, detectWeight, weightedGpa, roundGrade, fmtGpa, weightLabel, weightTagClass } from '../lib/gpa.js'
-import { cleanCourseName, courseKey, estimateAverage, QUARTERS } from '../lib/courses.js'
+import {
+  parseGrade, detectWeight, weightedGpa, unweightedGpa, roundGrade, liveSemesterAverage,
+  fmtGpa, weightLabel, weightTagClass,
+} from '../lib/gpa.js'
+import { cleanCourseName, courseKey, QUARTERS, SEMESTERS, semesterOfQuarter } from '../lib/courses.js'
+import { editKey, classRows, effectiveAverage } from '../lib/whatif.js'
 import { loadPrefs } from '../lib/prefs.js'
 
-// editKey identifies one assignment field: quarter + course + row index.
-const ek = (q, course, i) => `${q}::${course}::${i}`
+const weightFor = (courseName, prefs) => prefs.weights[courseKey(courseName)] ?? detectWeight(courseName)
 
 export default function Grades() {
   const { getData } = useAuth()
+  const { edits, setEdit, reset: resetEdits, count: whatIfCount } = useWhatIf()
   const [tab, setTab] = useState('4') // current quarter
-  const [byQuarter, setByQuarter] = useState({}) // quarter -> { classes, error }
-  const [loading, setLoading] = useState({}) // quarter -> bool
-  const [edits, setEdits] = useState({}) // editKey -> { score, total }
+  const [byQuarter, setByQuarter] = useState({}) // quarter -> { classes } | { error }
+  const [loading, setLoading] = useState({})
   const prefs = loadPrefs()
 
   const loadQuarter = useCallback(async (q, force = false) => {
-    setByQuarter((s) => (force ? { ...s, [q]: undefined } : s))
     setLoading((s) => ({ ...s, [q]: true }))
     try {
       const d = await getData('class', { quarter: q, force })
       setByQuarter((s) => ({ ...s, [q]: { classes: d?.assignmentsData || [] } }))
     } catch (e) {
-      setByQuarter((s) => ({ ...s, [q]: { classes: [], error: e.message } }))
+      setByQuarter((s) => ({ ...s, [q]: { error: e.message } }))
     } finally {
       setLoading((s) => ({ ...s, [q]: false }))
     }
   }, [getData])
 
-  // Ensure the data the active tab needs is loaded.
+  // Load the data the active tab needs — for a quarter tab, load BOTH quarters
+  // of its semester so the semester GPA in the impact panel is real.
   useEffect(() => {
-    const need = tab === 'all' ? QUARTERS.map((q) => q.value) : [tab]
+    const need = tab === 'all'
+      ? QUARTERS.map((q) => q.value)
+      : SEMESTERS.find((s) => s.id === semesterOfQuarter(tab)).quarters
     for (const q of need) {
       if (byQuarter[q] === undefined && !loading[q]) loadQuarter(q)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
-  const setEdit = (key, patch) =>
-    setEdits((e) => ({ ...e, [key]: { ...e[key], ...patch } }))
-  const resetEdits = () => setEdits({})
-  const hasEdits = Object.keys(edits).length > 0
-
   return (
     <>
-      <PageHead title="Grades" sub="Browse each quarter and edit any assignment to see live impact on your averages and GPA.">
-        {hasEdits && <button className="btn ghost sm" onClick={resetEdits}>Reset edits</button>}
+      <PageHead title="Grades" sub="Browse each quarter and edit any assignment — every GPA updates live.">
+        {whatIfCount > 0 && <button className="btn ghost sm" onClick={resetEdits}>Reset edits</button>}
         <button className="btn ghost sm" onClick={() => loadQuarter(tab === 'all' ? '4' : tab, true)}>
           <Icon.refresh width={15} height={15} /> Refresh
         </button>
       </PageHead>
+
+      <WhatIfBanner />
 
       <div className="seg mb-3" style={{ flexWrap: 'wrap' }}>
         {QUARTERS.map((q) => (
@@ -61,72 +65,69 @@ export default function Grades() {
       </div>
 
       {tab === 'all'
-        ? <Overview byQuarter={byQuarter} loading={loading} prefs={prefs} />
+        ? <Overview byQuarter={byQuarter} loading={loading} prefs={prefs} edits={edits} />
         : <QuarterView
-            quarter={tab}
-            state={byQuarter[tab]}
-            loading={loading[tab]}
-            edits={edits}
-            setEdit={setEdit}
+            quarter={tab} byQuarter={byQuarter} loading={loading} prefs={prefs}
+            edits={edits} setEdit={setEdit} whatIfCount={whatIfCount}
             onRetry={() => loadQuarter(tab, true)}
-            prefs={prefs}
           />}
     </>
   )
 }
 
-// Compute a class's effective assignment rows + live average given edits.
-function liveClass(quarter, course, edits) {
-  const base = (course.assignments || []).map((a, i) => {
-    const key = ek(quarter, course.courseName, i)
-    const e = edits[key]
-    return {
-      key,
-      name: a.assignmentName || 'Assignment',
-      category: a.category,
-      dateDue: a.dateDue,
-      score: e?.score !== undefined ? e.score : parseGrade(a.grade),
-      total: e?.total !== undefined ? e.total : (parseGrade(a.totalPoints) ?? 100),
-      edited: !!e,
-    }
+// ---- GPA computation helpers (shared by the impact panel) ----
+function quarterGpa(classes, quarter, edits, prefs) {
+  const rows = (classes || []).map((c) => {
+    const avg = roundGrade(effectiveAverage(quarter, c, edits).avg)
+    return { grade: avg, weight: weightFor(c.courseName, prefs), credit: 0.5, include: avg != null }
   })
-  const official = parseGrade(course.overallAverage)
-  const live = estimateAverage(base)
-  const anyEdit = base.some((b) => b.edited)
-  // Use the live estimate only when the student has actually edited something —
-  // otherwise trust HAC's (category-weighted) official average.
-  const effective = anyEdit ? live : official
-  return { rows: base, official, live, effective, anyEdit }
+  return { w: weightedGpa(rows).gpa, u: unweightedGpa(rows).gpa }
 }
 
-function weightFor(course, prefs) {
-  const k = courseKey(course.courseName)
-  return prefs.weights[k] ?? detectWeight(course.courseName)
+function semesterGpa(byQuarter, semQuarters, edits, prefs) {
+  const map = new Map() // courseName -> quarter averages
+  for (const q of semQuarters) {
+    for (const c of byQuarter[q]?.classes || []) {
+      if (!map.has(c.courseName)) map.set(c.courseName, [])
+      const avg = effectiveAverage(q, c, edits).avg
+      if (avg != null) map.get(c.courseName).push(avg)
+    }
+  }
+  const rows = Array.from(map.entries()).map(([name, qa]) => ({
+    grade: liveSemesterAverage(qa), weight: weightFor(name, prefs), credit: 0.5, include: qa.length > 0,
+  }))
+  return { w: weightedGpa(rows).gpa, u: unweightedGpa(rows).gpa }
 }
 
-function QuarterView({ quarter, state, loading, edits, setEdit, onRetry, prefs }) {
-  if (loading || state === undefined) return <Loading label={`Loading ${QUARTERS.find((q) => q.value === quarter)?.label}…`} />
+function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry }) {
+  const state = byQuarter[quarter]
+  if (loading[quarter] || state === undefined) return <Loading label={`Loading ${QUARTERS.find((q) => q.value === quarter)?.label}…`} />
   if (state.error) return <ErrorBox message={state.error} onRetry={onRetry} />
   const classes = state.classes || []
   if (!classes.length) return <Empty>No classes found for this quarter.</Empty>
 
-  // Live quarter GPA from each class's effective average.
-  const rows = classes.map((c) => {
-    const lc = liveClass(quarter, c, edits)
-    return { grade: roundGrade(lc.effective), weight: weightFor(c, prefs), credit: 0.5, include: lc.effective != null }
-  })
-  const { gpa } = weightedGpa(rows)
-  const edited = classes.some((c) => liveClass(quarter, c, edits).anyEdit)
+  const sem = SEMESTERS.find((s) => s.id === semesterOfQuarter(quarter))
+  const noEdits = {} // baseline (real grades)
+
+  const curQ = quarterGpa(classes, quarter, edits, prefs)
+  const baseQ = quarterGpa(classes, quarter, noEdits, prefs)
+  const curS = semesterGpa(byQuarter, sem.quarters, edits, prefs)
+  const baseS = semesterGpa(byQuarter, sem.quarters, noEdits, prefs)
+  const semReady = sem.quarters.every((q) => byQuarter[q] && !byQuarter[q].error)
 
   return (
     <div className="grid" style={{ gridTemplateColumns: '1fr' }}>
-      <div className="card stat" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <span className="label">Quarter GPA {edited && <em style={{ color: 'var(--yellow)' }}>· what-if</em>}</span>
-          <div className="value" style={{ marginTop: 6 }}>{fmtGpa(gpa)}</div>
+      {/* GPA impact — a distinct panel, kept separate from the grade tables */}
+      <div className="impact">
+        <div className="impact-head">
+          <h3>GPA impact {whatIfCount > 0 && <span className="pill" style={{ color: 'var(--yellow)', marginLeft: 6 }}>what-if</span>}</h3>
+          <Link to="/gpa" className="btn ghost sm">Full GPA &amp; cumulative <Icon.chevron width={13} height={13} /></Link>
         </div>
-        <div className="small faint" style={{ maxWidth: 260, textAlign: 'right' }}>
-          Weighted GPA if this quarter’s averages were your semester grades. Edit assignments below to watch it move.
+        <div className="impact-grid">
+          <ImpactCell label={`${QUARTERS.find((q) => q.value === quarter)?.label} · weighted`} cur={curQ.w} base={baseQ.w} digits={4} active={whatIfCount > 0} />
+          <ImpactCell label={`${QUARTERS.find((q) => q.value === quarter)?.label} · 4.0`} cur={curQ.u} base={baseQ.u} digits={2} active={whatIfCount > 0} />
+          <ImpactCell label={`${sem.short} · weighted`} cur={semReady ? curS.w : null} base={baseS.w} digits={4} active={whatIfCount > 0} />
+          <ImpactCell label={`${sem.short} · 4.0`} cur={semReady ? curS.u : null} base={baseS.u} digits={2} active={whatIfCount > 0} />
         </div>
       </div>
 
@@ -137,16 +138,33 @@ function QuarterView({ quarter, state, loading, edits, setEdit, onRetry, prefs }
   )
 }
 
+function ImpactCell({ label, cur, base, digits, active }) {
+  const fmt = (n) => (n == null ? '—' : digits === 4 ? fmtGpa(n) : n.toFixed(digits))
+  const delta = active && cur != null && base != null ? cur - base : null
+  const dCls = delta == null || Math.abs(delta) < 0.0005 ? 'delta-zero' : delta > 0 ? 'delta-up' : 'delta-down'
+  return (
+    <div className="impact-cell">
+      <div className="k">{label}</div>
+      <div className="v">{cur == null ? <span className="skeleton" style={{ display: 'inline-block', width: 80, height: 22 }} /> : fmt(cur)}</div>
+      {active && delta != null && (
+        <div className={`d ${dCls}`}>
+          {Math.abs(delta) < 0.0005 ? 'no change' : `${delta > 0 ? '+' : ''}${digits === 4 ? delta.toFixed(4) : delta.toFixed(2)} vs real`}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
   const [open, setOpen] = useState(!!defaultOpen)
-  const lc = liveClass(quarter, course, edits)
-  const weight = weightFor(course, prefs)
+  const eff = effectiveAverage(quarter, course, edits)
+  const weight = weightFor(course.courseName, prefs)
   const name = cleanCourseName(course.courseName)
-  const delta = lc.anyEdit && lc.official != null && lc.live != null ? lc.live - lc.official : null
+  const delta = eff.edited && eff.official != null && eff.avg != null ? eff.avg - eff.official : null
 
   const addRow = () => {
-    const i = (course.assignments?.length || 0) + Object.keys(edits).filter((k) => k.startsWith(`${quarter}::${course.courseName}::extra`)).length
-    setEdit(`${quarter}::${course.courseName}::extra${i}`, { score: 100, total: 100, name: 'New assignment', hypo: true })
+    const n = Object.keys(edits).filter((k) => k.startsWith(`${quarter}::${course.courseName}::extra`)).length
+    setEdit(editKey(quarter, course.courseName, `extra${n}`), { score: 100, total: 100, name: 'New assignment', hypo: true })
   }
 
   return (
@@ -160,17 +178,17 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
           </div>
         </div>
         <div className="right">
-          {lc.anyEdit && lc.live != null && (
-            <span className="small faint">was <GradeBadge value={lc.official} showLetter={false} /></span>
+          {eff.edited && eff.avg != null && (
+            <span className="small faint">was <GradeBadge value={eff.official} showLetter={false} /></span>
           )}
-          <GradeBadge value={lc.effective} />
+          <GradeBadge value={eff.avg} />
           <Icon.chevron className={`chev ${open ? 'open' : ''}`} width={18} height={18} />
         </div>
       </div>
 
       {open && (
         <div className="assignments">
-          {lc.rows.length === 0 ? (
+          {(course.assignments?.length || 0) === 0 ? (
             <div className="empty" style={{ padding: 24 }}>No assignments posted.</div>
           ) : (
             <>
@@ -180,11 +198,11 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
                     <tr><th>Assignment</th><th>Category</th><th className="num">Score</th><th className="num">Out of</th><th className="num">%</th></tr>
                   </thead>
                   <tbody>
-                    {lc.rows.map((r) => {
+                    {classRows(quarter, course, edits).map((r) => {
                       const pct = r.score != null && r.total > 0 ? (r.score / r.total) * 100 : null
                       return (
-                        <tr key={r.key} className={r.edited ? '' : ''}>
-                          <td>{r.name}{r.edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow)' }}>edited</span>}</td>
+                        <tr key={r.key}>
+                          <td>{r.name}{r.edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow)' }}>{r.hypo ? 'added' : 'edited'}</span>}</td>
                           <td className="faint small">{r.category || '—'}</td>
                           <td className="num">
                             <input className="input mini" type="number" step="0.5" value={r.score ?? ''}
@@ -202,8 +220,10 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
                 </table>
               </div>
               <div className="row-between" style={{ padding: '12px 20px' }}>
+                <button className="btn ghost sm" onClick={addRow}><Icon.plus width={14} height={14} /> Add assignment</button>
                 <span className="small faint">
-                  Live average is a points-based estimate; HAC weights by category. {delta != null && (
+                  Live average is a points-based estimate; HAC weights by category.
+                  {delta != null && (
                     <span style={{ color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
                       {' '}({delta >= 0 ? '+' : ''}{delta.toFixed(2)} vs HAC)
                     </span>
@@ -218,32 +238,27 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
   )
 }
 
-// All-quarters matrix: class rows × Q1–Q4 averages.
-function Overview({ byQuarter, loading, prefs }) {
+// All-quarters matrix: class rows × Q1–Q4 averages (reflects what-if edits).
+function Overview({ byQuarter, loading, prefs, edits }) {
   const anyLoading = QUARTERS.some((q) => loading[q] || byQuarter[q.value] === undefined)
 
-  // Union of courses by stable key, in the order first seen.
   const courses = useMemo(() => {
     const map = new Map()
     for (const q of QUARTERS) {
       for (const c of byQuarter[q.value]?.classes || []) {
         const k = courseKey(c.courseName)
         if (!map.has(k)) map.set(k, { key: k, name: cleanCourseName(c.courseName), raw: c.courseName, perQ: {} })
-        map.get(k).perQ[q.value] = parseGrade(c.overallAverage)
+        map.get(k).perQ[q.value] = roundGrade(effectiveAverage(q.value, c, edits).avg)
       }
     }
     return Array.from(map.values())
-  }, [byQuarter])
+  }, [byQuarter, edits])
 
   if (anyLoading && courses.length === 0) return <Loading label="Loading all four quarters…" />
 
-  // Per-quarter GPA across the bottom.
-  const quarterGpa = {}
+  const quarterGpas = {}
   for (const q of QUARTERS) {
-    const rows = (byQuarter[q.value]?.classes || []).map((c) => ({
-      grade: roundGrade(parseGrade(c.overallAverage)), weight: weightFor(c, prefs), credit: 0.5, include: true,
-    }))
-    quarterGpa[q.value] = rows.length ? weightedGpa(rows).gpa : null
+    quarterGpas[q.value] = (byQuarter[q.value]?.classes || []).length ? quarterGpa(byQuarter[q.value].classes, q.value, edits, prefs).w : null
   }
 
   return (
@@ -275,7 +290,7 @@ function Overview({ byQuarter, loading, prefs }) {
             <td colSpan={2} className="faint small" style={{ fontWeight: 700 }}>Quarter GPA</td>
             {QUARTERS.map((q) => (
               <td key={q.value} className="num mono" style={{ fontWeight: 700 }}>
-                {quarterGpa[q.value] != null ? fmtGpa(quarterGpa[q.value]) : '—'}
+                {quarterGpas[q.value] != null ? fmtGpa(quarterGpas[q.value]) : '—'}
               </td>
             ))}
           </tr>
