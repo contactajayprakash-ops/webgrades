@@ -106,22 +106,31 @@ function diffResource(type, extra, oldData, newData) {
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(initialSession)
   const [profiles, setProfiles] = useState(loadProfiles)
-  const cache = useRef(hydrateCache(session?.username))
-  const inflight = useRef(new Map())
+  // One isolated cache per account: username -> Map(key -> data). A fetch always
+  // writes to ITS OWN account's cache, so a late background sync from a previous
+  // profile can never bleed into the one you switched to.
+  const caches = useRef(new Map())
+  const inflight = useRef(new Map()) // `${username}|${key}` -> promise
+  const syncGen = useRef(0) // bumped on every sync start; aborts superseded syncs
   const [dataVersion, setDataVersion] = useState(0) // bumped when cache changes -> consumers re-read
 
   // background sync state for the toast
   const [sync, setSync] = useState({ phase: 'idle', done: 0, total: 0, changes: [], initial: false })
-  const syncing = useRef(false)
 
   const bump = useCallback(() => setDataVersion((v) => v + 1), [])
+
+  const cacheFor = useCallback((username) => {
+    if (!username) return new Map()
+    if (!caches.current.has(username)) caches.current.set(username, hydrateCache(username))
+    return caches.current.get(username)
+  }, [])
 
   const persistCache = useCallback((username) => {
     if (!username) return
     try {
-      localStorage.setItem(dataKeyFor(username), JSON.stringify(Object.fromEntries(cache.current)))
+      localStorage.setItem(dataKeyFor(username), JSON.stringify(Object.fromEntries(cacheFor(username))))
     } catch (_) {}
-  }, [])
+  }, [cacheFor])
 
   const creds = useMemo(
     () => (session ? { username: session.username, password: session.password } : null),
@@ -132,56 +141,61 @@ export function AuthProvider({ children }) {
   const userRef = useRef(session?.username)
   userRef.current = session?.username
 
-  // Synchronous cache read — lets components render persisted data instantly.
-  const peekData = useCallback((type, extra) => cache.current.get(keyOf(type, extra)), [])
+  // Synchronous read of the ACTIVE account's cache — instant render.
+  const peekData = useCallback((type, extra) => cacheFor(userRef.current).get(keyOf(type, extra)), [cacheFor])
 
-  // Cached fetch with in-flight de-duplication. `force` re-fetches.
+  // Cached fetch, scoped to the account it was issued for, with in-flight dedup.
   const getData = useCallback(async (type, extra) => {
     extra = extra || {}
     const c = credsRef.current
     if (!c) throw new Error('Not signed in.')
+    const username = c.username
     const key = keyOf(type, extra)
-    if (!extra.force && cache.current.has(key)) return cache.current.get(key)
-    if (inflight.current.has(key)) return inflight.current.get(key)
+    const acct = cacheFor(username)
+    if (!extra.force && acct.has(key)) return acct.get(key)
+    const ikey = `${username}|${key}`
+    if (inflight.current.has(ikey)) return inflight.current.get(ikey)
     const { force, ...rest } = extra
     const p = (async () => {
       try {
         const { data } = await apiFetchData(c, type, rest)
-        cache.current.set(key, data)
-        persistCache(userRef.current)
+        cacheFor(username).set(key, data) // write to THIS account's cache, never the active one
+        persistCache(username)
         return data
       } finally {
-        inflight.current.delete(key)
+        inflight.current.delete(ikey)
       }
     })()
-    inflight.current.set(key, p)
+    inflight.current.set(ikey, p)
     return p
-  }, [persistCache])
+  }, [cacheFor, persistCache])
 
-  // Prefetch + revalidate everything. Reports diffs only for data we already had.
+  // Prefetch + revalidate everything for the current account. Aborts if the
+  // user switches accounts mid-sync (a newer sync supersedes this one).
   const syncAll = useCallback(async () => {
     const c = credsRef.current
-    if (!c || syncing.current) return
-    syncing.current = true
-    const initial = cache.current.size === 0
+    if (!c) return
+    const username = c.username
+    const myGen = ++syncGen.current
+    const acct = cacheFor(username)
+    const initial = acct.size === 0
     setSync({ phase: 'syncing', done: 0, total: RESOURCES.length, changes: [], initial })
     const changes = []
     for (let i = 0; i < RESOURCES.length; i++) {
+      if (syncGen.current !== myGen) return // superseded by an account switch
       const [type, extra] = RESOURCES[i]
-      const key = keyOf(type, extra)
-      const old = cache.current.get(key)
+      const old = acct.get(keyOf(type, extra))
       try {
-        // force a fresh fetch only when we already had data (revalidation);
-        // on first load, no force so it de-dupes with the views' own fetches
         const data = await getData(type, { ...extra, force: old !== undefined })
         changes.push(...diffResource(type, extra, old, data))
-        bump() // each completion updates any mounted view in place
+        if (syncGen.current === myGen) bump()
       } catch (_) { /* keep stale */ }
-      setSync((s) => ({ ...s, done: i + 1 }))
+      if (syncGen.current === myGen) setSync((s) => ({ ...s, done: i + 1 }))
     }
-    syncing.current = false
-    setSync({ phase: 'done', done: RESOURCES.length, total: RESOURCES.length, changes, initial })
-  }, [getData, bump])
+    if (syncGen.current === myGen) {
+      setSync({ phase: 'done', done: RESOURCES.length, total: RESOURCES.length, changes, initial })
+    }
+  }, [cacheFor, getData, bump])
 
   const dismissSync = useCallback(() => setSync((s) => ({ ...s, phase: 'idle' })), [])
 
@@ -195,8 +209,6 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (username, password) => {
     const res = await apiLogin(username, password)
     const p = { username, password, userName: res.userName || username }
-    cache.current = hydrateCache(username) // restore this account's data if we have it
-    inflight.current = new Map()
     setProfiles((prev) => {
       const next = [...prev.filter((x) => x.username !== username), p]
       localStorage.setItem(PROFILES_KEY, JSON.stringify(next))
@@ -212,8 +224,7 @@ export function AuthProvider({ children }) {
   const switchProfile = useCallback((username) => {
     const p = profiles.find((x) => x.username === username)
     if (!p || username === session?.username) return
-    cache.current = hydrateCache(username)
-    inflight.current = new Map()
+    syncGen.current++ // abort the outgoing account's in-flight sync
     localStorage.setItem(ACTIVE_KEY, username)
     setSession({ ...p, remember: true })
     bump()
@@ -222,26 +233,23 @@ export function AuthProvider({ children }) {
   const removeProfile = useCallback((username) => {
     const next = profiles.filter((x) => x.username !== username)
     saveProfiles(next)
+    caches.current.delete(username)
     localStorage.removeItem(dataKeyFor(username))
     if (session?.username === username) {
+      syncGen.current++
       if (next.length) {
-        const p = next[0]
-        cache.current = hydrateCache(p.username)
-        inflight.current = new Map()
-        localStorage.setItem(ACTIVE_KEY, p.username)
-        setSession({ ...p, remember: true })
+        localStorage.setItem(ACTIVE_KEY, next[0].username)
+        setSession({ ...next[0], remember: true })
         bump()
       } else {
         localStorage.removeItem(ACTIVE_KEY)
-        cache.current = new Map()
         setSession(null)
       }
     }
   }, [profiles, session, saveProfiles, bump])
 
   const logout = useCallback(() => {
-    cache.current = new Map()
-    inflight.current = new Map()
+    syncGen.current++
     localStorage.removeItem(ACTIVE_KEY)
     localStorage.removeItem(STORE_KEY)
     setSession(null)
@@ -258,7 +266,7 @@ export function AuthProvider({ children }) {
     return apiFetchIprDates(creds)
   }, [creds])
 
-  const clearCache = useCallback(() => { cache.current = new Map(); bump() }, [bump])
+  const clearCache = useCallback(() => { cacheFor(userRef.current).clear(); bump() }, [cacheFor, bump])
 
   const value = {
     session,
