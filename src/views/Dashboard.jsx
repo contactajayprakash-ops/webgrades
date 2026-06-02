@@ -42,7 +42,7 @@ function greeting(name) {
 
 // Shows the latest quarter's weighted GPA + official rank/GPA side by side.
 function TopStats() {
-  const { getData } = useAuth()
+  const { getData, peekData, dataVersion } = useAuth()
   const { edits, count: whatIfCount } = useWhatIf()
   const { data: rankData, loading: rankLoading, error: rankErr } = useHacData('rank', null)
   const [gpa, setGpa] = useState(null)
@@ -50,7 +50,9 @@ function TopStats() {
   const [gpaErr, setGpaErr] = useState(null)
 
   const computeGpa = useCallback(async () => {
-    setGpaLoading(true); setGpaErr(null)
+    const warm = ['1', '2', '3', '4'].some((q) => peekData('class', { quarter: q }))
+    if (!warm) setGpaLoading(true)
+    setGpaErr(null)
     try {
       const prefs = loadPrefs()
       // Walk from the latest quarter back to the first; use the latest that has grades.
@@ -72,7 +74,7 @@ function TopStats() {
     } finally {
       setGpaLoading(false)
     }
-  }, [getData, edits])
+  }, [getData, peekData, edits, dataVersion])
 
   useEffect(() => { computeGpa() }, [computeGpa])
 

@@ -28,14 +28,25 @@ function liveCoursePeriod(q, period) {
 }
 
 export default function Gpa() {
-  const { getData } = useAuth()
+  const { getData, peekData, dataVersion } = useAuth()
   const [prefs, setPrefsState] = useState(loadPrefs)
   const [period, setPeriod] = useState('year')
   const [view, setView] = useState('live')
 
-  const [quarters, setQuarters] = useState({}) // q -> { classes } | { error }
+  // seed from the (prefetched/persisted) cache so it renders instantly
+  const [quarters, setQuarters] = useState(() => {
+    const init = {}
+    for (const q of ['1', '2', '3', '4']) {
+      const d = peekData('class', { quarter: q })
+      if (d) init[q] = { classes: d.assignmentsData || [] }
+    }
+    return init
+  })
   const [qLoading, setQLoading] = useState({})
-  const [transcript, setTranscript] = useState(undefined) // groups[] | { error }
+  const [transcript, setTranscript] = useState(() => {
+    const d = peekData('transcript')
+    return d ? (d.transcript || []) : undefined
+  })
   const [liveGrades, setLiveGrades] = useState({}) // courseName -> grade override
   const [liveExcluded, setLiveExcluded] = useState({}) // courseName -> true
   const { edits, count: whatIfCount } = useWhatIf()
@@ -44,8 +55,10 @@ export default function Gpa() {
     setPrefsState((p) => { const n = structuredClone(p); mut(n); savePrefs(n); return n })
   }, [])
 
-  // ---- loaders (serial queue in the API layer keeps these safe) ----
+  // ---- loaders — read cache instantly, only spin when genuinely empty ----
   const loadQuarter = useCallback(async (q, force = false) => {
+    const cached = peekData('class', { quarter: q })
+    if (!force && cached) { setQuarters((s) => ({ ...s, [q]: { classes: cached.assignmentsData || [] } })); return }
     setQLoading((s) => ({ ...s, [q]: true }))
     try {
       const d = await getData('class', { quarter: q, force })
@@ -55,17 +68,19 @@ export default function Gpa() {
     } finally {
       setQLoading((s) => ({ ...s, [q]: false }))
     }
-  }, [getData])
+  }, [getData, peekData])
 
   const loadTranscript = useCallback(async (force = false) => {
-    setTranscript(undefined)
+    const cached = peekData('transcript')
+    if (!force && cached) { setTranscript(cached.transcript || []); return }
+    if (!cached) setTranscript(undefined)
     try {
       const d = await getData('transcript', { force })
       setTranscript(d?.transcript || [])
     } catch (e) {
       setTranscript({ error: e.message })
     }
-  }, [getData])
+  }, [getData, peekData])
 
   useEffect(() => {
     for (const q of PERIOD_QUARTERS[period]) {
@@ -75,6 +90,21 @@ export default function Gpa() {
   }, [period])
 
   useEffect(() => { loadTranscript() }, [loadTranscript])
+
+  // background sync finished — pull fresh data in place (no spinners)
+  useEffect(() => {
+    setQuarters((s) => {
+      const n = { ...s }
+      for (const q of ['1', '2', '3', '4']) {
+        const d = peekData('class', { quarter: q })
+        if (d) n[q] = { classes: d.assignmentsData || [] }
+      }
+      return n
+    })
+    const t = peekData('transcript')
+    if (t) setTranscript(t.transcript || [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataVersion])
 
   // ---- LIVE rows (classwork) ----
   const weightForLive = useCallback((name) => prefs.weights[courseKey(name)] ?? detectWeight(name), [prefs])

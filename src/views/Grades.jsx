@@ -15,14 +15,23 @@ import { loadPrefs } from '../lib/prefs.js'
 const weightFor = (courseName, prefs) => prefs.weights[courseKey(courseName)] ?? detectWeight(courseName)
 
 export default function Grades() {
-  const { getData } = useAuth()
+  const { getData, peekData, dataVersion } = useAuth()
   const { edits, setEdit, reset: resetEdits, count: whatIfCount } = useWhatIf()
   const [tab, setTab] = useState('4') // current quarter
-  const [byQuarter, setByQuarter] = useState({}) // quarter -> { classes } | { error }
+  const [byQuarter, setByQuarter] = useState(() => {
+    const init = {}
+    for (const q of ['1', '2', '3', '4']) {
+      const d = peekData('class', { quarter: q })
+      if (d) init[q] = { classes: d.assignmentsData || [] }
+    }
+    return init
+  })
   const [loading, setLoading] = useState({})
   const prefs = loadPrefs()
 
   const loadQuarter = useCallback(async (q, force = false) => {
+    const cached = peekData('class', { quarter: q })
+    if (!force && cached) { setByQuarter((s) => ({ ...s, [q]: { classes: cached.assignmentsData || [] } })); return }
     setLoading((s) => ({ ...s, [q]: true }))
     try {
       const d = await getData('class', { quarter: q, force })
@@ -32,7 +41,7 @@ export default function Grades() {
     } finally {
       setLoading((s) => ({ ...s, [q]: false }))
     }
-  }, [getData])
+  }, [getData, peekData])
 
   // Load the data the active tab needs — for a quarter tab, load BOTH quarters
   // of its semester so the semester GPA in the impact panel is real.
@@ -45,6 +54,19 @@ export default function Grades() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
+
+  // background sync refreshed the cache — pull fresh quarters in place
+  useEffect(() => {
+    setByQuarter((s) => {
+      const n = { ...s }
+      for (const q of ['1', '2', '3', '4']) {
+        const d = peekData('class', { quarter: q })
+        if (d) n[q] = { classes: d.assignmentsData || [] }
+      }
+      return n
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataVersion])
 
   return (
     <>

@@ -175,7 +175,12 @@ button.card:active { transform: translateY(-1px) scale(.994); }
 .stat .label { font-size: 12.5px; color: var(--text-dim); font-weight: 620; text-transform: uppercase; letter-spacing: .06em; }
 .stat .value { font-size: 40px; font-weight: 740; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
 .stat .meta { font-size: 12.5px; color: var(--text-faint); }
-.stat .glow { position: absolute; right: -34px; top: -40px; width: 160px; height: 160px; border-radius: 50%; filter: blur(38px); opacity: .55; }
+/* Glow anchored to the right edge. Shaped with a radial MASK (not blur) so it
+   fades out smoothly and clips cleanly along the rounded corners — blur is what
+   produced the hard clipped edge before. */
+.stat .glow { position: absolute; top: 0; right: 0; bottom: 0; width: 64%; pointer-events: none; opacity: .5;
+  -webkit-mask: radial-gradient(125% 135% at 100% 42%, #000 0%, rgba(0, 0, 0, 0.5) 38%, transparent 73%);
+  mask: radial-gradient(125% 135% at 100% 42%, #000 0%, rgba(0, 0, 0, 0.5) 38%, transparent 73%); }
 
 /* ---------- Grade badges (glass pills) ---------- */
 .grade-badge {
@@ -339,6 +344,29 @@ button.card:active { transform: translateY(-1px) scale(.994); }
 @media (prefers-reduced-motion: reduce) {
   body::before, .grid > *, .page-head, .login-card, .whatif-banner, .assignments { animation: none !important; }
 }
+
+/* ---------- Sync toast ---------- */
+.sync-toast {
+  position: fixed; bottom: 22px; right: 22px; z-index: 60; max-width: 340px;
+  display: flex; align-items: center; gap: 11px;
+  background: var(--glass); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+  box-shadow: var(--rim), var(--drop); padding: 13px 16px;
+  font-size: 13.5px; color: var(--text);
+  animation: toastin .4s var(--spring) backwards;
+}
+.sync-toast.ok { color: #7fe6a0; }
+.sync-toast .sync-count { margin-left: auto; color: var(--text-faint); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.sync-toast.changes { flex-direction: column; align-items: stretch; gap: 8px; }
+.sync-toast-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sync-toast-head b { color: #67b2ff; font-weight: 700; }
+.sync-x { background: transparent; border: none; color: var(--text-faint); font-size: 13px; padding: 2px 6px; border-radius: 8px; transition: .15s; }
+.sync-x:hover { color: var(--text); background: var(--glass-flat); }
+.sync-list { margin: 0; padding: 0 0 0 2px; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.sync-list li { font-size: 12.5px; color: var(--text-dim); padding-left: 12px; position: relative; }
+.sync-list li::before { content: ''; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.sync-list li.faint::before { background: var(--text-faint); }
+@keyframes toastin { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: none; } }
 
 .mobile-topbar { display: none; }
 
