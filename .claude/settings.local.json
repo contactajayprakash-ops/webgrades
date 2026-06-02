@@ -21,7 +21,10 @@
       "Bash(git -c user.name=WebGrades -c user.email=pdanfam@gmail.com commit -q -m 'Checkpoint: working GPA portal \\(live/cumulative, quarterly grades, what-if\\) *)",
       "Bash(git -C /Users/ajayprakash/Code/WebGrades stash list)",
       "Bash(git -C /Users/ajayprakash/Code/WebGrades rev-parse --short HEAD)",
-      "Bash(echo \"checkpoint commit: $\\(git -C /Users/ajayprakash/Code/WebGrades rev-parse --short HEAD\\)\")"
+      "Bash(echo \"checkpoint commit: $\\(git -C /Users/ajayprakash/Code/WebGrades rev-parse --short HEAD\\)\")",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(brew --version)"
     ]
   }
 }
