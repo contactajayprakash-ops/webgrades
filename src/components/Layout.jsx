@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext.jsx'
 import { Icon } from './icons.jsx'
+import ProfileSwitcher from './ProfileSwitcher.jsx'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
@@ -15,14 +15,7 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
 
-function initials(name) {
-  if (!name) return '?'
-  const parts = name.replace(/,/g, '').trim().split(/\s+/)
-  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?'
-}
-
 export default function Layout() {
-  const { userName, logout } = useAuth()
   const [open, setOpen] = useState(false)
 
   const SidebarInner = (
@@ -50,14 +43,7 @@ export default function Layout() {
       )}
 
       <div className="sidebar-foot">
-        <div className="user-chip">
-          <div className="avatar">{initials(userName)}</div>
-          <div>
-            <div className="name">{userName || 'Student'}</div>
-            <div className="sub">HAC connected</div>
-          </div>
-        </div>
-        <button className="logout-btn" onClick={logout}>Sign out</button>
+        <ProfileSwitcher />
       </div>
     </aside>
   )

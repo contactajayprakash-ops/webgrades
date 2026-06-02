@@ -4,8 +4,20 @@ import { cleanCourseName } from '../lib/courses.js'
 
 const AuthContext = createContext(null)
 
-const STORE_KEY = 'wg_session'
+const STORE_KEY = 'wg_session' // legacy single-session (migrated to profiles)
+const PROFILES_KEY = 'wg_profiles'
+const ACTIVE_KEY = 'wg_active'
 const dataKeyFor = (username) => `wg_data_${username}`
+
+function loadProfiles() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PROFILES_KEY))
+    if (Array.isArray(p)) return p.filter((x) => x && x.username && x.password)
+  } catch (_) {}
+  // migrate a legacy remembered session into a profile
+  const legacy = loadStored()
+  return legacy ? [legacy] : []
+}
 
 // Every endpoint the app uses — prefetched on load so navigation is instant
 // and re-fetched in the background to detect updates. Ordered by what the
@@ -35,6 +47,17 @@ function loadStored() {
     if (s && s.username && s.password) return s
   } catch (_) {}
   return null
+}
+
+// The session to start with: the active profile, else a legacy remembered one.
+function initialSession() {
+  const profiles = loadProfiles()
+  const active = localStorage.getItem(ACTIVE_KEY)
+  if (active) {
+    const p = profiles.find((x) => x.username === active)
+    if (p) return { ...p, remember: true }
+  }
+  return profiles[0] ? { ...profiles[0], remember: true } : null
 }
 
 // Hydrate the cache for a user from localStorage so a reload shows data instantly.
@@ -81,7 +104,8 @@ function diffResource(type, extra, oldData, newData) {
 }
 
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(loadStored)
+  const [session, setSession] = useState(initialSession)
+  const [profiles, setProfiles] = useState(loadProfiles)
   const cache = useRef(hydrateCache(session?.username))
   const inflight = useRef(new Map())
   const [dataVersion, setDataVersion] = useState(0) // bumped when cache changes -> consumers re-read
@@ -91,11 +115,6 @@ export function AuthProvider({ children }) {
   const syncing = useRef(false)
 
   const bump = useCallback(() => setDataVersion((v) => v + 1), [])
-
-  const persistSession = useCallback((s) => {
-    if (s && s.remember) localStorage.setItem(STORE_KEY, JSON.stringify(s))
-    else localStorage.removeItem(STORE_KEY)
-  }, [])
 
   const persistCache = useCallback((username) => {
     if (!username) return
@@ -166,22 +185,65 @@ export function AuthProvider({ children }) {
 
   const dismissSync = useCallback(() => setSync((s) => ({ ...s, phase: 'idle' })), [])
 
-  const login = useCallback(async (username, password, remember) => {
+  const saveProfiles = useCallback((next) => {
+    setProfiles(next)
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(next))
+  }, [])
+
+  // Validate credentials, save as a profile, and switch to it. Used both for
+  // the first sign-in and for "Add account".
+  const login = useCallback(async (username, password) => {
     const res = await apiLogin(username, password)
-    const s = { username, password, userName: res.userName || username, remember: !!remember }
-    cache.current = new Map()
+    const p = { username, password, userName: res.userName || username }
+    cache.current = hydrateCache(username) // restore this account's data if we have it
     inflight.current = new Map()
-    setSession(s)
-    persistSession(s)
-    return s
-  }, [persistSession])
+    setProfiles((prev) => {
+      const next = [...prev.filter((x) => x.username !== username), p]
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(next))
+      return next
+    })
+    localStorage.setItem(ACTIVE_KEY, username)
+    localStorage.removeItem(STORE_KEY)
+    setSession({ ...p, remember: true })
+    bump()
+    return p
+  }, [bump])
+
+  const switchProfile = useCallback((username) => {
+    const p = profiles.find((x) => x.username === username)
+    if (!p || username === session?.username) return
+    cache.current = hydrateCache(username)
+    inflight.current = new Map()
+    localStorage.setItem(ACTIVE_KEY, username)
+    setSession({ ...p, remember: true })
+    bump()
+  }, [profiles, session, bump])
+
+  const removeProfile = useCallback((username) => {
+    const next = profiles.filter((x) => x.username !== username)
+    saveProfiles(next)
+    localStorage.removeItem(dataKeyFor(username))
+    if (session?.username === username) {
+      if (next.length) {
+        const p = next[0]
+        cache.current = hydrateCache(p.username)
+        inflight.current = new Map()
+        localStorage.setItem(ACTIVE_KEY, p.username)
+        setSession({ ...p, remember: true })
+        bump()
+      } else {
+        localStorage.removeItem(ACTIVE_KEY)
+        cache.current = new Map()
+        setSession(null)
+      }
+    }
+  }, [profiles, session, saveProfiles, bump])
 
   const logout = useCallback(() => {
-    const u = userRef.current
     cache.current = new Map()
     inflight.current = new Map()
+    localStorage.removeItem(ACTIVE_KEY)
     localStorage.removeItem(STORE_KEY)
-    if (u) localStorage.removeItem(dataKeyFor(u))
     setSession(null)
   }, [])
 
@@ -202,7 +264,12 @@ export function AuthProvider({ children }) {
     session,
     userName: session?.userName || null,
     isAuthed: !!session,
+    profiles,
+    activeUsername: session?.username || null,
     login,
+    addAccount: login, // adding an account is the same flow (validate + switch)
+    switchProfile,
+    removeProfile,
     logout,
     getData,
     peekData,
