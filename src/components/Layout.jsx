@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext.jsx'
 import { Icon } from './icons.jsx'
 import ProfileSwitcher from './ProfileSwitcher.jsx'
 
@@ -16,6 +17,7 @@ const NAV = [
 ]
 
 export default function Layout() {
+  const { activeUsername } = useAuth()
   const [open, setOpen] = useState(false)
 
   const SidebarInner = (
@@ -62,7 +64,8 @@ export default function Layout() {
           </div>
           <div style={{ width: 36 }} />
         </div>
-        <main className="main">
+        {/* key by account so switching profiles remounts the views with fresh state */}
+        <main className="main" key={activeUsername}>
           <Outlet />
         </main>
       </div>
