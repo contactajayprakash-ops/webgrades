@@ -196,7 +196,7 @@ export default function Gpa() {
         key: c.key, name: c.name, year: latestYear,
         grade: prefs.cumulative.grades?.[c.key] ?? pg.grade, autoGrade: pg.grade,
         weight: prefs.cumulative.weights[c.key] ?? detectWeight(c.rawName),
-        credit: pg.credit, include: true,
+        credit: prefs.cumulative.credits?.[c.key] ?? pg.credit, include: true,
       })
     }
     // prior years — completed, so they ALWAYS count at their full-year grade
@@ -209,7 +209,7 @@ export default function Gpa() {
         key: c.code, name: c.description || c.code, year: c.year,
         grade: prefs.cumulative.grades?.[c.code] ?? pg.grade, autoGrade: pg.grade,
         weight: prefs.cumulative.weights[c.code] ?? detectWeight(c.description, c.courseCode),
-        credit: pg.credit, include: true,
+        credit: prefs.cumulative.credits?.[c.code] ?? pg.credit, include: true,
       })
     }
     return rows
@@ -283,7 +283,8 @@ export default function Gpa() {
         <CumulativeView
           transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
           priorGroups={priorGroups} latestYear={latestYear} period={period}
-          confirmed={cumConfirmed} included={cumIncluded} weights={prefs.cumulative.weights}
+          confirmed={cumConfirmed} included={cumIncluded}
+          weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}}
           rows={cumRows} result={cumResult}
           onToggle={toggleCum} updatePrefs={updatePrefs}
           onRetry={() => loadTranscript(true)}
@@ -315,7 +316,7 @@ function WeightSelect({ value, onChange }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, period, confirmed, included, weights, rows, result, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, period, confirmed, included, weights, credits, rows, result, onToggle, updatePrefs, onRetry }) {
   if (transcript === undefined) return <Loading label="Loading your transcript…" />
   if (transcript?.error) return <ErrorBox message={transcript.error} onRetry={onRetry} />
   if (!priorGroups.length && !currentLive.length && Array.isArray(transcript)) {
@@ -332,6 +333,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const confirm = () => updatePrefs((p) => { p.cumulative.confirmed = true })
   const editSelection = () => updatePrefs((p) => { p.cumulative.confirmed = false })
   const setWeight = (key, w) => updatePrefs((p) => { p.cumulative.weights[key] = Number(w) })
+  const setCredit = (key, v) => updatePrefs((p) => { p.cumulative.credits = p.cumulative.credits || {}; p.cumulative.credits[key] = v === '' ? null : Number(v) })
   const selectedCount = Object.keys(included).length
 
   if (!confirmed) {
@@ -342,7 +344,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
           <p className="small faint mt-2" style={{ marginBottom: 0 }}>
             Current-year classes come from live grades (real names, both semesters). Older courses come from your
             transcript. Check the ones that count toward class rank — pass/fail courses (grade “P”) can’t be averaged.
-            Weights are editable here and remembered on this device.
+            Weights and the credit each course is worth (1.0 full-year, 0.5 single-semester) are editable here and remembered.
           </p>
           <div className="flex mt-3">
             <button className="btn ghost sm" onClick={selectAllNumeric}>Select all graded</button>
@@ -361,6 +363,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
               <tr><td className="faint small" style={{ padding: '14px 20px' }}>Loading current classes…</td></tr>
             ) : currentLive.map((c) => {
               const w = weights[c.key] ?? detectWeight(c.rawName)
+              const defCr = c.s1 != null && c.s2 != null ? 1 : 0.5
+              const cr = credits[c.key] ?? defCr
               return (
                 <tr key={c.key}>
                   <td style={{ width: 40 }}>
@@ -370,7 +374,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                   <td>{c.name}<span className="faint small"> · live</span></td>
                   <td><WeightSelect value={w} onChange={(e) => setWeight(c.key, e.target.value)} /></td>
                   <td className="num faint small">{c.sems}</td>
-                  <td className="num mono" colSpan={2}>{c.s1 != null && c.s2 != null ? ((c.s1 + c.s2) / 2) : (c.s1 ?? c.s2 ?? '—')}</td>
+                  <td className="num mono">{c.s1 != null && c.s2 != null ? ((c.s1 + c.s2) / 2) : (c.s1 ?? c.s2 ?? '—')}</td>
+                  <td className="num"><input className="input mini" type="number" step="0.5" min="0" title="Credit" value={cr} onChange={(e) => setCredit(c.key, e.target.value)} /></td>
                 </tr>
               )
             })}
@@ -390,6 +395,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                   const grade = transcriptGrade(c)
                   const numeric = grade != null
                   const w = weights[code] ?? detectWeight(c.description, c.courseCode)
+                  const cr = credits[code] ?? (parseGrade(c.credit) ?? 0.5)
                   return (
                     <tr key={ci} className={numeric ? '' : 'dim'}>
                       <td style={{ width: 40 }}>
@@ -399,7 +405,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                       <td>{c.description}<span className="faint small"> · {c.courseCode}</span></td>
                       <td>{numeric && <WeightSelect value={w} onChange={(e) => setWeight(code, e.target.value)} />}</td>
                       <td className="num faint small">{[c.sem1, c.sem2].filter((v) => v).join(' / ') || '—'}</td>
-                      <td className="num mono" colSpan={2}>{numeric ? grade : (c.sem1 || '—')}</td>
+                      <td className="num mono">{numeric ? grade : (c.sem1 || '—')}</td>
+                      <td className="num">{numeric && <input className="input mini" type="number" step="0.5" min="0" title="Credit" value={cr} onChange={(e) => setCredit(code, e.target.value)} />}</td>
                     </tr>
                   )
                 })}
@@ -409,7 +416,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
         ))}
 
         <div className="row-between" style={{ padding: '16px 20px' }}>
-          <span className="small faint">Weights auto-detected from class names (override anytime).</span>
+          <span className="small faint">Weights &amp; credits are editable (last column) — change any before showing.</span>
           <button className="btn" disabled={!selectedCount} onClick={confirm}>Show cumulative GPA ({selectedCount})</button>
         </div>
       </div>
@@ -433,6 +440,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
             rows={rows} result={result} showYear editableGrade
             onGrade={(k, v) => updatePrefs((p) => { p.cumulative.grades = p.cumulative.grades || {}; p.cumulative.grades[k] = v })}
             onWeight={(k, w) => updatePrefs((p) => { p.cumulative.weights[k] = Number(w) })}
+            onCredit={(k, v) => setCredit(k, v)}
             onInclude={(k) => onToggle(k)}
           />}
     </>

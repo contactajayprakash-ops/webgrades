@@ -14,6 +14,7 @@ const DEFAULT = {
     included: {},      // key (courseKey for current, transcript code for prior) -> true
     weights: {},       // key -> weight
     grades: {},        // key -> grade override
+    credits: {},       // key -> credit override
     confirmed: false,  // has the user picked courses at least once?
   },
 }
