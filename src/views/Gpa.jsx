@@ -16,19 +16,39 @@ const PERIOD_QUARTERS = { s1: ['1', '2'], s2: ['3', '4'], year: ['1', '2', '3', 
 // Period-scoped grade + credit for a live current-year course (q = {1:avg,...}).
 // Semester grades use HAC's rounding; the full-year grade is the average of the
 // two whole-number semester grades (so 96 & 92 -> 94, and a one-sem 96 -> 96).
-function liveCoursePeriod(q, period) {
-  const s1 = semesterGrade([q['1'], q['2']])
-  const s2 = semesterGrade([q['3'], q['4']])
-  if (period === 's1') return s1 == null ? null : { grade: s1, credit: 0.5 }
-  if (period === 's2') return s2 == null ? null : { grade: s2, credit: 0.5 }
-  // Full year = round EACH quarter to a whole number, then average the four (no
-  // re-rounding). Verified to reproduce the official app's per-course GPA exactly
-  // (e.g. BIM 1 -> mean(97,98,100,100)=98.75 -> 4.875).
-  const qs = [q['1'], q['2'], q['3'], q['4']].filter((x) => x != null).map((x) => Math.round(x))
-  if (!qs.length) return null
-  const grade = Math.round((qs.reduce((a, b) => a + b, 0) / qs.length) * 100) / 100
-  const bothSems = (q['1'] != null || q['2'] != null) && (q['3'] != null || q['4'] != null)
-  return { grade, credit: bothSems ? 1.0 : 0.5 }
+// Period grade + credit for a resolved current-year course. s1/s2 are the
+// OFFICIAL transcript semester grades when posted, else the live estimate.
+function resolvedPeriod(c, period) {
+  if (period === 's1') return c.s1 == null ? null : { grade: c.s1, credit: 0.5 }
+  if (period === 's2') return c.s2 == null ? null : { grade: c.s2, credit: 0.5 }
+  const sems = [c.s1, c.s2].filter((x) => x != null)
+  if (!sems.length) return null
+  return { grade: sems.reduce((a, b) => a + b, 0) / sems.length, credit: c.credit }
+}
+
+// Match each live current-year course to its transcript course so we can use
+// HAC's official semester grades. Live `semesterGrade` equals the posted sem1
+// for every course, so grades are a reliable join key (text breaks ties).
+const normName = (s) => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+function matchOfficial(liveCourses, txCourses) {
+  const pairs = []
+  for (const L of liveCourses) for (const T of txCourses) {
+    const t1 = parseGrade(T.sem1), t2 = parseGrade(T.sem2)
+    let s = 0
+    if (L.rawS1 != null && t1 != null && L.rawS1 === t1) s += 100
+    if (L.rawS2 != null && t2 != null && L.rawS2 === t2) s += 50
+    const a = normName(L.name), b = normName(T.description)
+    if (a && b && (a.includes(b) || b.includes(a))) s += 20
+    if (s > 0) pairs.push({ L, T, s })
+  }
+  pairs.sort((a, b) => b.s - a.s)
+  const uL = new Set(), uT = new Set(), map = {}
+  for (const p of pairs) {
+    if (uL.has(p.L.key) || uT.has(p.T.code)) continue
+    map[p.L.key] = { sem1: parseGrade(p.T.sem1), sem2: parseGrade(p.T.sem2), credit: parseGrade(p.T.credit) }
+    uL.add(p.L.key); uT.add(p.T.code)
+  }
+  return map
 }
 
 export default function Gpa() {
@@ -160,8 +180,8 @@ export default function Gpa() {
   const currentGroup = useMemo(() => txGroups.find((g) => g.year === latestYear), [txGroups, latestYear])
   const priorGroups = useMemo(() => txGroups.filter((g) => g.year !== latestYear), [txGroups, latestYear])
 
-  // Current-year courses from live classwork, keyed by courseKey.
-  const currentLive = useMemo(() => {
+  // Current-year courses from live classwork (computed semester grades).
+  const currentLiveRaw = useMemo(() => {
     const map = new Map()
     for (const q of ['1', '2', '3', '4']) {
       for (const c of quarters[q]?.classes || []) {
@@ -174,9 +194,25 @@ export default function Gpa() {
     return Array.from(map.values()).map((c) => {
       const s1 = semesterGrade([c.q['1'], c.q['2']])
       const s2 = semesterGrade([c.q['3'], c.q['4']])
-      return { ...c, s1, s2, sems: [s1, s2].filter((x) => x != null).join(' / ') || '—' }
+      return { ...c, rawS1: s1, rawS2: s2 }
     })
   }, [quarters, edits])
+
+  // Map live courses to their official transcript grades (current school year).
+  const officialMap = useMemo(() => {
+    const txCur = (currentGroup?.courses || []).map((c) => ({ ...c, code: c.courseCode || `${latestYear}-${c.description}` }))
+    return txCur.length ? matchOfficial(currentLiveRaw, txCur) : {}
+  }, [currentLiveRaw, currentGroup, latestYear])
+
+  // Resolved current courses: use HAC's posted semester grades + credit when
+  // available (year finalized), else fall back to the live estimate (mid-year).
+  const currentLive = useMemo(() => currentLiveRaw.map((c) => {
+    const o = officialMap[c.key]
+    const s1 = o && o.sem1 != null ? o.sem1 : c.rawS1
+    const s2 = o && o.sem2 != null ? o.sem2 : c.rawS2
+    const credit = o && o.credit != null && s1 != null && s2 != null ? o.credit : (s1 != null && s2 != null ? 1 : 0.5)
+    return { ...c, s1, s2, credit, official: !!o, sems: [s1, s2].filter((x) => x != null).join(' / ') || '—' }
+  }), [currentLiveRaw, officialMap])
 
   const priorCourses = useMemo(() => {
     const out = []
@@ -191,10 +227,10 @@ export default function Gpa() {
 
   const cumRows = useMemo(() => {
     const rows = []
-    // current year — from live (both semesters)
+    // current year — official transcript grades when posted, else live estimate
     for (const c of currentLive) {
       if (!cumIncluded[c.key]) continue
-      const pg = liveCoursePeriod(c.q, period)
+      const pg = resolvedPeriod(c, period)
       if (!pg) continue
       rows.push({
         key: c.key, name: c.name, year: latestYear,
@@ -288,7 +324,7 @@ export default function Gpa() {
           transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
           priorGroups={priorGroups} latestYear={latestYear} period={period}
           confirmed={cumConfirmed} included={cumIncluded}
-          weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}}
+          weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
           rows={cumRows} result={cumResult}
           onToggle={toggleCum} updatePrefs={updatePrefs}
           onRetry={() => loadTranscript(true)}
@@ -320,7 +356,7 @@ function WeightSelect({ value, onChange }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, period, confirmed, included, weights, credits, rows, result, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, period, confirmed, included, weights, credits, grades, rows, result, onToggle, updatePrefs, onRetry }) {
   if (transcript === undefined) return <Loading label="Loading your transcript…" />
   if (transcript?.error) return <ErrorBox message={transcript.error} onRetry={onRetry} />
   if (!priorGroups.length && !currentLive.length && Array.isArray(transcript)) {
@@ -338,6 +374,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const editSelection = () => updatePrefs((p) => { p.cumulative.confirmed = false })
   const setWeight = (key, w) => updatePrefs((p) => { p.cumulative.weights[key] = Number(w) })
   const setCredit = (key, v) => updatePrefs((p) => { p.cumulative.credits = p.cumulative.credits || {}; p.cumulative.credits[key] = v === '' ? null : Number(v) })
+  const resetOverrides = () => updatePrefs((p) => { p.cumulative.weights = {}; p.cumulative.grades = {}; p.cumulative.credits = {} })
+  const hasOverrides = Object.keys(weights).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0
   const selectedCount = Object.keys(included).length
 
   if (!confirmed) {
@@ -353,6 +391,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
           <div className="flex mt-3">
             <button className="btn ghost sm" onClick={selectAllNumeric}>Select all graded</button>
             <button className="btn ghost sm" onClick={clearAll}>Clear</button>
+            {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
             <span className="small faint">{selectedCount} selected</span>
           </div>
         </div>
@@ -434,6 +473,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
           {PERIODS.find((p) => p.id === period)?.label} · {rows.length} of your selected courses have a grade for this period.
         </div>
         <div className="flex">
+          {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
           <button className="btn ghost sm" onClick={editSelection}>Edit selection</button>
           <button className="btn ghost sm" onClick={onRetry}><Icon.refresh width={15} height={15} /> Refresh</button>
         </div>

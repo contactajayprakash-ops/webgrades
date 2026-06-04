@@ -50,14 +50,14 @@ export function estimateAverage(rows) {
   return (earned / possible) * 100
 }
 
-// A transcript course's full-year grade = the whole-number average of its
-// posted semester grades (HAC posts a single rounded final per course).
+// A transcript course's full-year grade = the average of its posted (already
+// whole-number) semester grades — NOT re-rounded, so a 99/98 course is 98.5.
 export function transcriptGrade(course) {
   const vals = [course.sem1, course.sem2, course.final]
     .map((v) => parseGrade(v))
     .filter((v) => v != null)
   if (!vals.length) return null
-  return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
+  return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100
 }
 
 export const PERIODS = [

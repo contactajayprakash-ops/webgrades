@@ -24,7 +24,9 @@
       "Bash(echo \"checkpoint commit: $\\(git -C /Users/ajayprakash/Code/WebGrades rev-parse --short HEAD\\)\")",
       "Bash(gh --version)",
       "Bash(gh auth *)",
-      "Bash(brew --version)"
+      "Bash(brew --version)",
+      "Bash(python3 *)",
+      "Bash(node /tmp/off.mjs)"
     ]
   }
 }
