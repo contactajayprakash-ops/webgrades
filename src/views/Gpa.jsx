@@ -21,10 +21,14 @@ function liveCoursePeriod(q, period) {
   const s2 = semesterGrade([q['3'], q['4']])
   if (period === 's1') return s1 == null ? null : { grade: s1, credit: 0.5 }
   if (period === 's2') return s2 == null ? null : { grade: s2, credit: 0.5 }
-  // Full year = average across all four quarters (HAC rounding), full credit.
-  const yearGrade = semesterGrade([q['1'], q['2'], q['3'], q['4']])
-  if (yearGrade == null) return null
-  return { grade: yearGrade, credit: s1 != null && s2 != null ? 1.0 : 0.5 }
+  // Full year = round EACH quarter to a whole number, then average the four (no
+  // re-rounding). Verified to reproduce the official app's per-course GPA exactly
+  // (e.g. BIM 1 -> mean(97,98,100,100)=98.75 -> 4.875).
+  const qs = [q['1'], q['2'], q['3'], q['4']].filter((x) => x != null).map((x) => Math.round(x))
+  if (!qs.length) return null
+  const grade = Math.round((qs.reduce((a, b) => a + b, 0) / qs.length) * 100) / 100
+  const bothSems = (q['1'] != null || q['2'] != null) && (q['3'] != null || q['4'] != null)
+  return { grade, credit: bothSems ? 1.0 : 0.5 }
 }
 
 export default function Gpa() {
