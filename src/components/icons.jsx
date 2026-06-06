@@ -27,4 +27,5 @@ export const Icon = {
   plus: (p) => (<svg {...base} {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>),
   trash: (p) => (<svg {...base} {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>),
   beaker: (p) => (<svg {...base} {...p}><path d="M4.5 3h15M6 3v7.5L3.5 19a2 2 0 0 0 1.8 3h13.4a2 2 0 0 0 1.8-3L18 10.5V3"/><line x1="6.5" y1="13" x2="17.5" y2="13"/></svg>),
+  edit: (p) => (<svg {...base} {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>),
 }

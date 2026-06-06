@@ -9,6 +9,9 @@ const CUMULATIVE_VERSION = 2
 
 const DEFAULT = {
   weights: {},        // courseKey -> overridden weight
+  dashboard: {         // dashboard customization
+    gpaMetric: null,   // id of the GPA metric pinned to the first card (null = plain link)
+  },
   cumulative: {        // cumulative GPA config
     v: CUMULATIVE_VERSION,
     included: {},      // key (courseKey for current, transcript code for prior) -> true

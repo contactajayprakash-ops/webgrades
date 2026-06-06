@@ -28,7 +28,9 @@
       "Bash(python3 *)",
       "Bash(node /tmp/off.mjs)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(pkill -f \"remote-debugging-port=9341\")",
+      "Bash(pkill -f \"vite\")"
     ]
   }
 }

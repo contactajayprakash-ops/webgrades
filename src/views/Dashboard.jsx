@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useHacData } from '../hooks/useHacData.js'
+import { useGpaMetrics, GPA_METRICS, findMetric } from '../hooks/useGpaMetrics.js'
 import { PageHead, Loading, ErrorBox, Empty, GradeBadge } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
 import { cleanCourseName } from '../lib/courses.js'
+import { loadPrefs, savePrefs } from '../lib/prefs.js'
 
 export default function Dashboard() {
   const { userName } = useAuth()
@@ -36,20 +39,13 @@ function greeting(name) {
   return first ? `Hey, ${first} 👋` : 'Dashboard'
 }
 
-// Shows the latest quarter's weighted GPA + official rank/GPA side by side.
+// Shows a GPA shortcut (with an editable pinned number) + official rank/GPA.
 function TopStats() {
   const { data: rankData, loading: rankLoading } = useHacData('rank', null)
 
   return (
     <div className="grid grid-3">
-      <Link to="/gpa" className="card stat card-link">
-        <span className="glow" style={{ background: 'var(--accent)' }} />
-        <span className="label">Your GPA</span>
-        <span className="value" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          Open <Icon.chevron width={26} height={26} />
-        </span>
-        <span className="meta">Weighted · semester · cumulative</span>
-      </Link>
+      <GpaCard />
 
       <div className="card stat">
         <span className="label">Official GPA</span>
@@ -64,6 +60,76 @@ function TopStats() {
           : <span className="value">{rankData?.rank ? `#${rankData.rank}` : '—'}</span>}
         <span className="meta">{rankData?.outOf ? `out of ${rankData.outOf}` : 'rank in class'}</span>
       </div>
+    </div>
+  )
+}
+
+// The first card: a button to the GPA page. The pencil opens a menu to pin any
+// GPA-page number (the cards with a value in them) onto it — computed live.
+function GpaCard() {
+  const [metricId, setMetricId] = useState(() => loadPrefs().dashboard?.gpaMetric || null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const metric = findMetric(metricId)
+  const m = useGpaMetrics(metric?.period || 'year')
+
+  const choose = (id) => {
+    setMetricId(id)
+    const p = loadPrefs()
+    p.dashboard = { ...(p.dashboard || {}), gpaMetric: id }
+    savePrefs(p)
+    setMenuOpen(false)
+  }
+
+  // Resolve what the value/label/meta should read for the pinned metric.
+  let label = 'Your GPA', meta = 'Weighted · semester · cumulative', value = 'open'
+  if (metric) {
+    label = metric.label
+    meta = metric.sub
+    const notReady = metric.view === 'live' ? !m.ready : !m.hasTranscript
+    if (metric.view === 'cumulative' && !m.cumConfirmed) value = 'setup'
+    else if (notReady) value = null            // show skeleton
+    else value = metric.pick(m)
+  }
+
+  return (
+    <div className="stat-pick">
+      <Link to="/gpa" className="card stat card-link" style={{ flexDirection: 'column' }}>
+        <span className="glow" style={{ background: 'var(--accent)' }} />
+        <span className="label">{label}</span>
+        {value === null
+          ? <span className="value skeleton" style={{ height: 34, width: 120 }} />
+          : value === 'open'
+            ? <span className="value" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>Open <Icon.chevron width={26} height={26} /></span>
+            : value === 'setup'
+              ? <span className="value" style={{ fontSize: 22 }}>Set up →</span>
+              : <span className="value">{value}</span>}
+        <span className="meta">{meta}</span>
+      </Link>
+
+      <button className="card-edit" title="Choose what this shows"
+        onClick={(e) => { e.preventDefault(); setMenuOpen((o) => !o) }}>
+        <Icon.edit width={15} height={15} />
+      </button>
+
+      {menuOpen && (
+        <>
+          <div className="profile-backdrop" onClick={() => setMenuOpen(false)} />
+          <div className="card card-menu">
+            <div className="menu-head">Show on this card</div>
+            <button className={`menu-item ${!metricId ? 'active' : ''}`} onClick={() => choose(null)}>
+              <span className="mi-text"><span className="mi-name">Just a link</span><span className="mi-sub">Opens the GPA page</span></span>
+              {!metricId && <Icon.check width={16} height={16} className="profile-check" />}
+            </button>
+            <div className="menu-divider" />
+            {GPA_METRICS.map((opt) => (
+              <button key={opt.id} className={`menu-item ${metricId === opt.id ? 'active' : ''}`} onClick={() => choose(opt.id)}>
+                <span className="mi-text"><span className="mi-name">{opt.label}</span><span className="mi-sub">{opt.sub}</span></span>
+                {metricId === opt.id && <Icon.check width={16} height={16} className="profile-check" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
