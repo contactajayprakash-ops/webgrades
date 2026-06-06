@@ -1,58 +1,76 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
-import { getApiUrl, setApiUrl } from '../api/hac.js'
 import { PageHead } from '../components/ui.jsx'
-import { detectWeight, weightLabel, weightTagClass } from '../lib/gpa.js'
+import { Icon } from '../components/icons.jsx'
+import { ACCENTS, loadTheme, saveTheme } from '../lib/theme.js'
 
 export default function Settings() {
   const { session, clearCache, logout } = useAuth()
-  const [apiUrl, setApiUrlState] = useState(getApiUrl())
-  const [saved, setSaved] = useState(false)
-  const [test, setTest] = useState('AP Biology')
+  const [theme, setTheme] = useState(loadTheme)
 
-  const save = () => {
-    setApiUrl(apiUrl)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1800)
+  // every change persists + applies to the live document immediately
+  const update = (patch) => {
+    const next = { ...theme, ...patch }
+    setTheme(next)
+    saveTheme(next)
   }
 
   return (
     <>
-      <PageHead title="Settings" sub="Configure the API and manage your session." />
+      <PageHead title="Settings" sub="Make WebGrades yours — appearance, performance, and your session." />
 
       <div className="grid" style={{ gridTemplateColumns: '1fr' }}>
+        {/* Appearance */}
         <div className="card card-pad">
-          <h3 className="mb-3">API endpoint</h3>
+          <h3 className="mb-3">Appearance</h3>
+
           <div className="field">
-            <label>Base URL</label>
-            <input className="input" value={apiUrl} onChange={(e) => setApiUrlState(e.target.value)} />
-            <span className="small faint">Where your HAC scraping API is hosted. Stored in this browser only.</span>
+            <label>Theme</label>
+            <div className="seg" style={{ marginTop: 4, alignSelf: 'flex-start' }}>
+              <button className={theme.theme === 'dark' ? 'active' : ''} onClick={() => update({ theme: 'dark' })}>Dark</button>
+              <button className={theme.theme === 'light' ? 'active' : ''} onClick={() => update({ theme: 'light' })}>Light</button>
+            </div>
           </div>
-          <div className="flex mt-3">
-            <button className="btn sm" onClick={save}>Save</button>
-            {saved && <span className="small" style={{ color: 'var(--green)' }}>Saved ✓</span>}
+
+          <div className="field mt-3">
+            <label>Accent color</label>
+            <div className="swatches">
+              {ACCENTS.map((a) => (
+                <button
+                  key={a.id}
+                  className={`swatch ${theme.accentId === a.id ? 'active' : ''}`}
+                  title={a.label}
+                  aria-label={a.label}
+                  onClick={() => update({ accentId: a.id })}
+                  style={{ background: `linear-gradient(150deg, ${a.accent}, ${a.accent2})` }}
+                >
+                  {theme.accentId === a.id && <Icon.check width={16} height={16} />}
+                </button>
+              ))}
+            </div>
+            <span className="small faint">Recolors every accent across the app — and the browser tab icon.</span>
           </div>
         </div>
 
+        {/* Performance */}
         <div className="card card-pad">
-          <h3 className="mb-3">Weight detector</h3>
-          <p className="small faint" style={{ marginTop: 0 }}>
-            Type a class name to see which weight WebGrades would auto-assign. You can always override it in the GPA Calculator.
-          </p>
-          <div className="field" style={{ maxWidth: 360 }}>
-            <input className="input" value={test} onChange={(e) => setTest(e.target.value)} placeholder="e.g. Pre-AP Chemistry" />
-          </div>
-          <div className="flex mt-3">
-            <span className="muted">Detected weight:</span>
-            <span className={`grade-badge ${weightTagClass(detectWeight(test))}`} style={{ background: 'var(--bg)' }}>
-              {detectWeight(test)} · {weightLabel(detectWeight(test))}
-            </span>
-          </div>
-          <div className="small faint mt-3">
-            Rules: <b>AP / IB / Dual Credit → 6.0</b> · <b>PAP / GT / Honors / Advanced → 5.5</b> · everything else → 5.0
-          </div>
+          <h3 className="mb-3">Performance</h3>
+          <ToggleRow
+            label="Reduce blur"
+            hint="Lighter glass — smoother on Chromebooks and older devices."
+            checked={theme.reduceBlur}
+            onChange={(v) => update({ reduceBlur: v })}
+          />
+          <div style={{ height: 14 }} />
+          <ToggleRow
+            label="Reduce motion"
+            hint="Turn off background and UI animations."
+            checked={theme.reduceMotion}
+            onChange={(v) => update({ reduceMotion: v })}
+          />
         </div>
 
+        {/* Session */}
         <div className="card card-pad">
           <h3 className="mb-3">Session</h3>
           <div className="small muted">
@@ -65,11 +83,22 @@ export default function Settings() {
               Sign out
             </button>
           </div>
-          <div className="notice mt-3">
-            Your HAC credentials are sent to your own API to scrape grades and are never shared with anyone else.
-          </div>
         </div>
       </div>
     </>
+  )
+}
+
+function ToggleRow({ label, hint, checked, onChange }) {
+  return (
+    <div className="row-between" style={{ gap: 16 }}>
+      <div>
+        <div style={{ fontWeight: 600 }}>{label}</div>
+        <div className="small faint">{hint}</div>
+      </div>
+      <button className={`switch ${checked ? 'on' : ''}`} role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}>
+        <span className="knob" />
+      </button>
+    </div>
   )
 }
