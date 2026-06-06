@@ -8,7 +8,7 @@ import {
   detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
   WEIGHT_OPTIONS, weightTagClass, weightLabel,
 } from '../lib/gpa.js'
-import { courseKey, transcriptGrade, PERIODS } from '../lib/courses.js'
+import { courseKey, transcriptGrade, isNonGpaCourse, PERIODS } from '../lib/courses.js'
 import {
   PERIOD_QUARTERS, buildLiveRows, buildCurrentLiveRaw, buildCurrentLive,
   buildPriorCourses, buildCumRows, splitTranscript,
@@ -278,9 +278,13 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   }
 
   const selectAllNumeric = () => updatePrefs((p) => {
-    for (const c of currentLive) if (c.s1 != null || c.s2 != null) p.cumulative.included[c.key] = true
+    for (const c of currentLive) {
+      if ((c.s1 != null || c.s2 != null) && !isNonGpaCourse(c.name, c.rawName)) p.cumulative.included[c.key] = true
+    }
     for (const g of priorGroups) for (const c of g.courses || []) {
-      if (transcriptGrade(c) != null) p.cumulative.included[c.courseCode || `${g.year}-${c.description}`] = true
+      if (transcriptGrade(c) != null && !isNonGpaCourse(c.description, c.courseCode)) {
+        p.cumulative.included[c.courseCode || `${g.year}-${c.description}`] = true
+      }
     }
   })
   const clearAll = () => updatePrefs((p) => { p.cumulative.included = {} })

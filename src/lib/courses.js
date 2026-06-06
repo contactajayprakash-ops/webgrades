@@ -18,6 +18,15 @@ export function courseKey(raw) {
   return cleanCourseName(raw).toUpperCase().replace(/\s+EQ\d+$/i, '').trim()
 }
 
+// "Other Foreign Language" credit-by-exam courses (OTHR FL1–4) are pass/fail
+// LOTE credit and don't count toward the weighted GPA, so "Select all graded"
+// skips them even when one happens to post a number grade. (Still manually
+// selectable if a student really wants to include one.)
+export function isNonGpaCourse(description, code) {
+  const d = (description || '').toUpperCase().replace(/\s+/g, ' ').trim()
+  return /^OTH(?:E)?R\s*FL/.test(d)
+}
+
 export const SEMESTERS = [
   { id: 's1', label: 'Semester 1', short: 'S1', quarters: ['1', '2'] },
   { id: 's2', label: 'Semester 2', short: 'S2', quarters: ['3', '4'] },
