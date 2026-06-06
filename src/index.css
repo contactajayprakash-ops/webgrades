@@ -196,9 +196,10 @@ input, select { font-family: inherit; }
 }
 
 /* clickable cards lift like floating glass */
-button.card { text-align: left; transition: transform .3s var(--spring), border-color .25s, box-shadow .3s var(--ease); }
-button.card:hover { transform: translateY(-4px); border-color: var(--glass-border-strong); box-shadow: var(--rim), 0 34px 78px -28px rgba(0, 0, 0, 0.95); }
-button.card:active { transform: translateY(-1px) scale(.994); }
+button.card, a.card-link { text-align: left; transition: transform .3s var(--spring), border-color .25s, box-shadow .3s var(--ease); }
+a.card-link { text-decoration: none; color: inherit; cursor: pointer; }
+button.card:hover, a.card-link:hover { transform: translateY(-4px); border-color: var(--glass-border-strong); box-shadow: var(--rim), 0 34px 78px -28px rgba(0, 0, 0, 0.95); }
+button.card:active, a.card-link:active { transform: translateY(-1px) scale(.994); }
 
 /* ---------- Stat cards ---------- */
 .stat { padding: 22px 24px; display: flex; flex-direction: column; gap: 7px; position: relative; overflow: hidden; }

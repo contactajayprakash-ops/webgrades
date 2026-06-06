@@ -1,14 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
-import { useWhatIf } from '../context/WhatIfContext.jsx'
 import { useHacData } from '../hooks/useHacData.js'
 import { PageHead, Loading, ErrorBox, Empty, GradeBadge } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
-import { detectWeight, parseGrade, weightedGpa, roundGrade, fmtGpa } from '../lib/gpa.js'
-import { cleanCourseName, courseKey, QUARTERS } from '../lib/courses.js'
-import { effectiveAverage } from '../lib/whatif.js'
-import { loadPrefs } from '../lib/prefs.js'
+import { parseGrade } from '../lib/gpa.js'
+import { cleanCourseName } from '../lib/courses.js'
 
 export default function Dashboard() {
   const { userName } = useAuth()
@@ -42,56 +38,18 @@ function greeting(name) {
 
 // Shows the latest quarter's weighted GPA + official rank/GPA side by side.
 function TopStats() {
-  const { getData, peekData, dataVersion } = useAuth()
-  const { edits, count: whatIfCount } = useWhatIf()
-  const { data: rankData, loading: rankLoading, error: rankErr } = useHacData('rank', null)
-  const [gpa, setGpa] = useState(null)
-  const [gpaLoading, setGpaLoading] = useState(true)
-  const [gpaErr, setGpaErr] = useState(null)
-
-  const computeGpa = useCallback(async () => {
-    const warm = ['1', '2', '3', '4'].some((q) => peekData('class', { quarter: q }))
-    if (!warm) setGpaLoading(true)
-    setGpaErr(null)
-    try {
-      const prefs = loadPrefs()
-      // Walk from the latest quarter back to the first; use the latest that has grades.
-      for (const q of [...QUARTERS].reverse()) {
-        const d = await getData('class', { quarter: q.value }).catch(() => null)
-        const rows = (d?.assignmentsData || []).map((c) => {
-          const avg = roundGrade(effectiveAverage(q.value, c, edits).avg)
-          return { grade: avg, weight: prefs.weights[courseKey(c.courseName)] ?? detectWeight(c.courseName), credit: 0.5, include: avg != null }
-        }).filter((r) => r.grade != null)
-        if (rows.length) {
-          setGpa({ ...weightedGpa(rows), label: q.label, count: rows.length })
-          setGpaLoading(false)
-          return
-        }
-      }
-      setGpa(null)
-    } catch (e) {
-      setGpaErr(e.message)
-    } finally {
-      setGpaLoading(false)
-    }
-  }, [getData, peekData, edits, dataVersion])
-
-  useEffect(() => { computeGpa() }, [computeGpa])
+  const { data: rankData, loading: rankLoading } = useHacData('rank', null)
 
   return (
     <div className="grid grid-3">
-      <div className="card stat">
+      <Link to="/gpa" className="card stat card-link">
         <span className="glow" style={{ background: 'var(--accent)' }} />
-        <span className="label">Weighted GPA {whatIfCount > 0 && <em style={{ color: 'var(--yellow)' }}>· what-if</em>}</span>
-        {gpaLoading ? <span className="value skeleton" style={{ height: 34, width: 120 }} />
-          : gpaErr ? <span className="value" style={{ fontSize: 18, color: 'var(--red)' }}>—</span>
-          : gpa ? <span className="value">{fmtGpa(gpa.gpa)}</span>
-          : <span className="value" style={{ fontSize: 20 }}>N/A</span>}
-        <span className="meta">
-          {gpa ? `${gpa.label} · ${gpa.count} classes · current quarter` : 'latest quarter grades'}
-          {' · '}<Link to="/gpa" style={{ color: 'var(--accent)' }}>details →</Link>
+        <span className="label">Your GPA</span>
+        <span className="value" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          Open <Icon.chevron width={26} height={26} />
         </span>
-      </div>
+        <span className="meta">Weighted · semester · cumulative</span>
+      </Link>
 
       <div className="card stat">
         <span className="label">Official GPA</span>
