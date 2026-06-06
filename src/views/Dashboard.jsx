@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useHacData } from '../hooks/useHacData.js'
 import { useGpaMetrics, GPA_METRICS, findMetric } from '../hooks/useGpaMetrics.js'
-import { PageHead, Loading, ErrorBox, Empty, GradeBadge } from '../components/ui.jsx'
+import { PageHead, Loading, Empty, GradeBadge } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
-import { cleanCourseName } from '../lib/courses.js'
+import { cleanCourseName, QUARTERS } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 
 export default function Dashboard() {
@@ -135,16 +135,30 @@ function GpaCard() {
 }
 
 function CurrentClasses() {
-  const { data, loading, error, refresh } = useHacData('class', null)
-  const { sync, syncAll } = useAuth()
-  const classes = data?.assignmentsData || []
+  const { peekData, dataVersion, sync, syncAll } = useAuth()
   const updating = sync.phase === 'syncing'
+
+  // Show the MOST RECENT quarter that actually has grades — the active quarter
+  // during the school year, or Q4 once the year's over. (HAC's default classwork
+  // view can't be trusted: over the summer it falls back to Q1.) Fall back to
+  // the default view only until the per-quarter data has synced in.
+  const { quarter, classes } = useMemo(() => {
+    for (const q of ['4', '3', '2', '1']) {
+      const list = peekData('class', { quarter: q })?.assignmentsData || []
+      if (list.some((c) => parseGrade(c.overallAverage) != null)) return { quarter: q, classes: list }
+    }
+    return { quarter: null, classes: peekData('class', {})?.assignmentsData || [] }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peekData, dataVersion])
+
+  const qLabel = quarter ? QUARTERS.find((x) => x.value === quarter)?.label : null
+  const loading = classes.length === 0 && updating
 
   return (
     <div className="card">
       <div className="row-between" style={{ padding: '16px 20px' }}>
         <div className="flex" style={{ alignItems: 'center', gap: 10 }}>
-          <h3>Current grades</h3>
+          <h3>Current grades{qLabel ? ` — ${qLabel}` : ''}</h3>
           {updating && (
             <span className="flex faint small" style={{ gap: 6, alignItems: 'center' }}>
               <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> updating…
@@ -159,12 +173,11 @@ function CurrentClasses() {
         </div>
       </div>
       {loading && <Loading label="Loading classes…" />}
-      {error && !loading && <ErrorBox message={error} onRetry={refresh} />}
-      {!loading && !error && classes.length === 0 && <Empty>No current classes found.</Empty>}
-      {!loading && !error && classes.length > 0 && (
+      {!loading && classes.length === 0 && <Empty>No current classes found.</Empty>}
+      {classes.length > 0 && (
         <table className="table">
           <thead>
-            <tr><th>Class</th><th>Teacher hint</th><th className="num">Average</th></tr>
+            <tr><th>Class</th><th>Assignments</th><th className="num">Average</th></tr>
           </thead>
           <tbody>
             {classes.map((c, i) => (
