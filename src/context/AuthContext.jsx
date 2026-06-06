@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake } from '../api/hac.js'
 import { cleanCourseName } from '../lib/courses.js'
+import { clearPrefs } from '../lib/prefs.js'
 
 const AuthContext = createContext(null)
 
@@ -267,6 +268,7 @@ export function AuthProvider({ children }) {
     saveProfiles(next)
     caches.current.delete(username)
     localStorage.removeItem(dataKeyFor(username))
+    clearPrefs(username) // forget that profile's cumulative/weight setup too
     if (session?.username === username) {
       syncGen.current++
       if (next.length) {

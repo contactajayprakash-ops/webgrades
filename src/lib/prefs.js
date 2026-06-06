@@ -1,6 +1,9 @@
-// Lightweight per-browser preferences (weight overrides, cumulative course
-// selections). Stored in localStorage so a student's tweaks survive refreshes.
-const KEY = 'wg_prefs'
+// Per-ACCOUNT preferences (weight overrides, cumulative course selections, the
+// pinned dashboard metric). Each profile gets its own setup — they used to share
+// one key, which let one student's cumulative setup bleed onto another's.
+// Stored as `wg_prefs_<username>` so switching profiles loads the right setup.
+const LEGACY_KEY = 'wg_prefs' // old single shared key (migrated once, then removed)
+const keyFor = (username) => `wg_prefs_${username || '_anon'}`
 
 // Bump when the cumulative selection keying changes, so stale saved selections
 // reset instead of showing a half-checked list. v2: current-year courses keyed
@@ -22,23 +25,42 @@ const DEFAULT = {
   },
 }
 
-export function loadPrefs() {
+const normalize = (raw) => {
+  const p = { ...DEFAULT, ...JSON.parse(raw) }
+  // Reset cumulative if it predates the current keying scheme.
+  if (!p.cumulative || p.cumulative.v !== CUMULATIVE_VERSION) {
+    p.cumulative = structuredClone(DEFAULT.cumulative)
+  }
+  return p
+}
+
+export function loadPrefs(username) {
+  const key = keyFor(username)
   try {
-    const raw = localStorage.getItem(KEY)
-    if (raw) {
-      const p = { ...DEFAULT, ...JSON.parse(raw) }
-      // Reset cumulative if it predates the current keying scheme.
-      if (!p.cumulative || p.cumulative.v !== CUMULATIVE_VERSION) {
-        p.cumulative = structuredClone(DEFAULT.cumulative)
+    let raw = localStorage.getItem(key)
+    // One-time migration: the old shared prefs belonged to whoever's signed in
+    // first — hand them to this account, then drop the shared key so it can't
+    // bleed onto other profiles.
+    if (!raw && username) {
+      const legacy = localStorage.getItem(LEGACY_KEY)
+      if (legacy) {
+        localStorage.setItem(key, legacy)
+        localStorage.removeItem(LEGACY_KEY)
+        raw = legacy
       }
-      return p
     }
+    if (raw) return normalize(raw)
   } catch (_) {}
   return structuredClone(DEFAULT)
 }
 
-export function savePrefs(prefs) {
+export function savePrefs(username, prefs) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(prefs))
+    localStorage.setItem(keyFor(username), JSON.stringify(prefs))
   } catch (_) {}
+}
+
+// Drop a profile's saved setup (called when the profile is removed).
+export function clearPrefs(username) {
+  try { localStorage.removeItem(keyFor(username)) } catch (_) {}
 }

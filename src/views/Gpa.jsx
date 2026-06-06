@@ -15,8 +15,8 @@ import {
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 
 export default function Gpa() {
-  const { getData, peekData, dataVersion } = useAuth()
-  const [prefs, setPrefsState] = useState(loadPrefs)
+  const { getData, peekData, dataVersion, activeUsername } = useAuth()
+  const [prefs, setPrefsState] = useState(() => loadPrefs(activeUsername))
   const [period, setPeriod] = useState('year')
   const [view, setView] = useState('live')
 
@@ -39,8 +39,8 @@ export default function Gpa() {
   const { edits, count: whatIfCount } = useWhatIf()
 
   const updatePrefs = useCallback((mut) => {
-    setPrefsState((p) => { const n = structuredClone(p); mut(n); savePrefs(n); return n })
-  }, [])
+    setPrefsState((p) => { const n = structuredClone(p); mut(n); savePrefs(activeUsername, n); return n })
+  }, [activeUsername])
 
   // ---- loaders — read cache instantly, only spin when genuinely empty ----
   const loadQuarter = useCallback(async (q, force = false) => {

@@ -35,9 +35,9 @@ function readQuarters(peekData) {
 // Compute the live + cumulative GPA for one time period, reading from the same
 // prefetched cache the rest of the app uses. Pure, reactive to background sync.
 export function useGpaMetrics(period = 'year') {
-  const { getData, peekData, dataVersion } = useAuth()
+  const { getData, peekData, dataVersion, activeUsername } = useAuth()
   const { edits } = useWhatIf()
-  const [prefs] = useState(loadPrefs)
+  const [prefs] = useState(() => loadPrefs(activeUsername))
 
   const [quarters, setQuarters] = useState(() => readQuarters(peekData))
   const [transcript, setTranscript] = useState(() => {

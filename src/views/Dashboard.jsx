@@ -67,16 +67,17 @@ function TopStats() {
 // The first card: a button to the GPA page. The pencil opens a menu to pin any
 // GPA-page number (the cards with a value in them) onto it — computed live.
 function GpaCard() {
-  const [metricId, setMetricId] = useState(() => loadPrefs().dashboard?.gpaMetric || null)
+  const { activeUsername } = useAuth()
+  const [metricId, setMetricId] = useState(() => loadPrefs(activeUsername).dashboard?.gpaMetric || null)
   const [menuOpen, setMenuOpen] = useState(false)
   const metric = findMetric(metricId)
   const m = useGpaMetrics(metric?.period || 'year')
 
   const choose = (id) => {
     setMetricId(id)
-    const p = loadPrefs()
+    const p = loadPrefs(activeUsername)
     p.dashboard = { ...(p.dashboard || {}), gpaMetric: id }
-    savePrefs(p)
+    savePrefs(activeUsername, p)
     setMenuOpen(false)
   }
 

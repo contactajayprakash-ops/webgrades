@@ -15,7 +15,7 @@ import { loadPrefs } from '../lib/prefs.js'
 const weightFor = (courseName, prefs) => prefs.weights[courseKey(courseName)] ?? detectWeight(courseName)
 
 export default function Grades() {
-  const { getData, peekData, dataVersion } = useAuth()
+  const { getData, peekData, dataVersion, activeUsername } = useAuth()
   const { edits, setEdit, reset: resetEdits, count: whatIfCount } = useWhatIf()
   const [tab, setTab] = useState('4') // current quarter
   const [byQuarter, setByQuarter] = useState(() => {
@@ -27,7 +27,7 @@ export default function Grades() {
     return init
   })
   const [loading, setLoading] = useState({})
-  const prefs = loadPrefs()
+  const prefs = loadPrefs(activeUsername)
 
   const loadQuarter = useCallback(async (q, force = false) => {
     const cached = peekData('class', { quarter: q })
