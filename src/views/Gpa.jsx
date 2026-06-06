@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
 import { PageHead, Loading, ErrorBox, Empty, WhatIfBanner } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
+import Tour from '../components/Tour.jsx'
 import {
   detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
   WEIGHT_OPTIONS, weightTagClass, weightLabel,
@@ -13,6 +14,38 @@ import {
   buildPriorCourses, buildCumRows, splitTranscript,
 } from '../lib/gpaCompute.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
+
+const TOUR_SEEN_KEY = 'wg_tour_cumulative_seen'
+
+// Walkthrough for first-time cumulative setup. The first step is the only real
+// action; the rest are quick double-checks. Targets are matched by selector.
+const CUM_TOUR_STEPS = [
+  {
+    selector: '[data-tour="select-all"]',
+    title: 'Start here',
+    body: 'Tap “Select all graded” to include every class that has a number grade. That’s basically the whole job — everything after this is just a double-check.',
+  },
+  {
+    selector: '.cum-setup input[type="checkbox"]',
+    title: 'Uncheck what doesn’t count',
+    body: 'Untick anything that shouldn’t count toward your GPA. Pass/fail classes (grade “P”) can’t be averaged, so leave those off.',
+  },
+  {
+    selector: '.cum-setup select',
+    title: 'Double-check the GPA scale',
+    body: 'Confirm each class’s weight: AP / IB / Dual Credit = 6.0 · Advanced / GT / Honors / Pre-AP = 5.5 · On-level = 5.0. Change any that look off.',
+  },
+  {
+    selector: '.cum-setup input[type="number"]',
+    title: 'Check the credit',
+    body: 'Make sure the credit each course is worth is right — full-year classes = 1.0, single-semester ones (like Health) = 0.5.',
+  },
+  {
+    selector: '[data-tour="confirm"]',
+    title: 'Show your GPA',
+    body: 'When it all looks right, hit “Show cumulative GPA”. You can come back and edit any of this anytime.',
+  },
+]
 
 export default function Gpa() {
   const { getData, peekData, dataVersion, activeUsername } = useAuth()
@@ -225,6 +258,19 @@ function WeightSelect({ value, onChange }) {
 }
 
 function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, period, confirmed, included, weights, credits, grades, rows, result, onToggle, updatePrefs, onRetry }) {
+  const [tourOpen, setTourOpen] = useState(false)
+  const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
+
+  // First-time walkthrough — auto-opens once the setup table is on screen.
+  useEffect(() => {
+    if (confirmed || !setupReady) return
+    let seen = false
+    try { seen = !!localStorage.getItem(TOUR_SEEN_KEY) } catch (_) {}
+    if (!seen) setTourOpen(true)
+  }, [confirmed, setupReady])
+
+  const closeTour = () => { setTourOpen(false); try { localStorage.setItem(TOUR_SEEN_KEY, '1') } catch (_) {} }
+
   if (transcript === undefined) return <Loading label="Loading your transcript…" />
   if (transcript?.error) return <ErrorBox message={transcript.error} onRetry={onRetry} />
   if (!priorGroups.length && !currentLive.length && Array.isArray(transcript)) {
@@ -248,16 +294,20 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
 
   if (!confirmed) {
     return (
-      <div className="card">
+      <div className="card cum-setup">
+        {tourOpen && <Tour steps={CUM_TOUR_STEPS} onClose={closeTour} />}
         <div style={{ padding: '18px 20px' }}>
-          <h3>Pick the courses that count toward your GPA</h3>
+          <div className="row-between" style={{ gap: 12 }}>
+            <h3>Pick the courses that count toward your GPA</h3>
+            <button className="btn ghost sm" onClick={() => setTourOpen(true)}>Guide</button>
+          </div>
           <p className="small faint mt-2" style={{ marginBottom: 0 }}>
             Current-year classes come from live grades (real names, both semesters). Older courses come from your
             transcript. Check the ones that count toward class rank — pass/fail courses (grade “P”) can’t be averaged.
             Weights and the credit each course is worth (1.0 full-year, 0.5 single-semester) are editable here and remembered.
           </p>
           <div className="flex mt-3">
-            <button className="btn ghost sm" onClick={selectAllNumeric}>Select all graded</button>
+            <button className="btn ghost sm" data-tour="select-all" onClick={selectAllNumeric}>Select all graded</button>
             <button className="btn ghost sm" onClick={clearAll}>Clear</button>
             {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
             <span className="small faint">{selectedCount} selected</span>
@@ -328,7 +378,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
 
         <div className="row-between" style={{ padding: '16px 20px' }}>
           <span className="small faint">Weights &amp; credits are editable (last column) — change any before showing.</span>
-          <button className="btn" disabled={!selectedCount} onClick={confirm}>Show cumulative GPA ({selectedCount})</button>
+          <button className="btn" data-tour="confirm" disabled={!selectedCount} onClick={confirm}>Show cumulative GPA ({selectedCount})</button>
         </div>
       </div>
     )

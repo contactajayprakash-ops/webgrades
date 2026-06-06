@@ -39,6 +39,8 @@ export function detectWeight(name, code) {
   if (/\bGT\b|GIFTED/.test(n)) return WEIGHTS.ADV;
   if (/\bHON(?:ORS)?\b/.test(n)) return WEIGHTS.ADV;
   if (/\bADV(?:ANCED)?\b/.test(n)) return WEIGHTS.ADV;
+  // Algebra 1 is the advanced (high-school-credit) track in Frisco -> 5.5.
+  if (/\bALG(?:EBRA)?\.?\s*(?:1|I)\b/.test(n) || /^ALG(?:EBRA)?0?1\b/.test(nz)) return WEIGHTS.ADV;
 
   return WEIGHTS.REG;
 }

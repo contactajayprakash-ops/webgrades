@@ -479,6 +479,29 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.994);
   .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); z-index: 45; }
 }
 
+/* ---------- Guided tour ---------- */
+.tour-root { position: fixed; inset: 0; z-index: 200; pointer-events: none; }
+.tour-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+.tour-spot {
+  position: absolute; border-radius: 13px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.58), 0 0 0 2px var(--accent), 0 0 26px 3px color-mix(in srgb, var(--accent) 60%, transparent);
+  transition: top .28s var(--ease), left .28s var(--ease), width .28s var(--ease), height .28s var(--ease);
+}
+.tour-pop {
+  position: absolute; width: 320px; max-width: calc(100vw - 32px); pointer-events: auto;
+  background: var(--glass-2); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-border-strong); border-radius: var(--radius-sm);
+  box-shadow: var(--rim), var(--drop); padding: 16px 18px; animation: popin .26s var(--spring) backwards;
+}
+.tour-step-n { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent-bright); font-weight: 700; }
+.tour-title { font-weight: 720; font-size: 16.5px; margin: 4px 0 6px; letter-spacing: -0.015em; }
+.tour-body { font-size: 13.5px; color: var(--text-dim); line-height: 1.5; }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; }
+.tour-skip { background: transparent; border: none; color: var(--text-faint); font-size: 13px; font-weight: 560; cursor: pointer; }
+.tour-skip:hover { color: var(--text-dim); }
+.tour-x { position: absolute; top: 9px; right: 12px; background: transparent; border: none; color: var(--text-faint); font-size: 14px; cursor: pointer; line-height: 1; }
+.tour-x:hover { color: var(--text); }
+
 /* ---------- Settings: accent swatches + toggle switches ---------- */
 .swatches { display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0 2px; }
 .swatch { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--glass-border); display: grid; place-items: center;
