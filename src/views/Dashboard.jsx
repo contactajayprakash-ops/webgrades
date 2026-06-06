@@ -136,13 +136,27 @@ function GpaCard() {
 
 function CurrentClasses() {
   const { data, loading, error, refresh } = useHacData('class', null)
+  const { sync, syncAll } = useAuth()
   const classes = data?.assignmentsData || []
+  const updating = sync.phase === 'syncing'
 
   return (
     <div className="card">
       <div className="row-between" style={{ padding: '16px 20px' }}>
-        <h3>Current grades</h3>
-        <Link to="/grades" className="btn ghost sm">View all <Icon.chevron width={14} height={14} /></Link>
+        <div className="flex" style={{ alignItems: 'center', gap: 10 }}>
+          <h3>Current grades</h3>
+          {updating && (
+            <span className="flex faint small" style={{ gap: 6, alignItems: 'center' }}>
+              <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> updating…
+            </span>
+          )}
+        </div>
+        <div className="flex" style={{ gap: 8 }}>
+          <button className="btn ghost sm" onClick={syncAll} disabled={updating} title="Re-check HAC for new grades">
+            <Icon.refresh width={14} height={14} /> Refresh
+          </button>
+          <Link to="/grades" className="btn ghost sm">View all <Icon.chevron width={14} height={14} /></Link>
+        </div>
       </div>
       {loading && <Loading label="Loading classes…" />}
       {error && !loading && <ErrorBox message={error} onRetry={refresh} />}

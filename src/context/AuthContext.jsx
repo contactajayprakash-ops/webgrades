@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates } from '../api/hac.js'
+import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake } from '../api/hac.js'
 import { cleanCourseName } from '../lib/courses.js'
 
 const AuthContext = createContext(null)
@@ -19,17 +19,21 @@ function loadProfiles() {
   return legacy ? [legacy] : []
 }
 
-// Every endpoint the app uses — prefetched on load so navigation is instant
-// and re-fetched in the background to detect updates. Ordered by what the
-// landing (dashboard) needs first.
-const RESOURCES = [
-  ['class', {}],
+// Resources grouped into priority WAVES, each fetched as ONE batched round-trip
+// (server logs into HAC once per wave). The whole point: a grade-drop refresh
+// only needs wave 1 (current grades), so the new grade lands first instead of
+// 7th in a serial queue. GPA data follows; rarely-changing cold data is last
+// and only fetched when it's missing from the cache.
+const WAVE_HOT = [['class', {}]]
+const WAVE_GPA = [
+  ['rank', {}],
+  ['transcript', {}], // rank + transcript share one HAC page — merged server-side
   ['class', { quarter: '4' }],
   ['class', { quarter: '3' }],
   ['class', { quarter: '2' }],
   ['class', { quarter: '1' }],
-  ['rank', {}],
-  ['transcript', {}],
+]
+const WAVE_COLD = [
   ['schedule', {}],
   ['attendance', {}],
 ]
@@ -170,8 +174,9 @@ export function AuthProvider({ children }) {
     return p
   }, [cacheFor, persistCache])
 
-  // Prefetch + revalidate everything for the current account. Aborts if the
-  // user switches accounts mid-sync (a newer sync supersedes this one).
+  // Prefetch + revalidate everything for the current account, wave by wave, so
+  // the current grades (wave 1) refresh and paint FIRST. Each wave is a single
+  // batched request. Aborts if the user switches accounts mid-sync.
   const syncAll = useCallback(async () => {
     const c = credsRef.current
     if (!c) return
@@ -179,23 +184,50 @@ export function AuthProvider({ children }) {
     const myGen = ++syncGen.current
     const acct = cacheFor(username)
     const initial = acct.size === 0
-    setSync({ phase: 'syncing', done: 0, total: RESOURCES.length, changes: [], initial })
+    // Cold resources rarely change — only refetch them when we have nothing cached.
+    const coldNeeded = WAVE_COLD.filter(([t, e]) => acct.get(keyOf(t, e)) === undefined)
+    const waves = [WAVE_HOT, WAVE_GPA, coldNeeded].filter((w) => w.length)
+    const total = waves.reduce((n, w) => n + w.length, 0)
+    setSync({ phase: 'syncing', done: 0, total, changes: [], initial })
     const changes = []
-    for (let i = 0; i < RESOURCES.length; i++) {
+    let done = 0
+    for (const wave of waves) {
       if (syncGen.current !== myGen) return // superseded by an account switch
-      const [type, extra] = RESOURCES[i]
-      const old = acct.get(keyOf(type, extra))
+      const olds = wave.map(([t, e]) => acct.get(keyOf(t, e)))
+      // Fetch the whole wave in one batched request; if the server doesn't
+      // support /batch (older deploy) or it errors, fall back to per-resource.
+      const gotByKey = {}
       try {
-        const data = await getData(type, { ...extra, force: old !== undefined })
-        changes.push(...diffResource(type, extra, old, data))
-        if (syncGen.current === myGen) bump()
-      } catch (_) { /* keep stale */ }
-      if (syncGen.current === myGen) setSync((s) => ({ ...s, done: i + 1 }))
+        const { results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+        wave.forEach(([type, extra], i) => {
+          const r = results.find((x) => x.type === type && String(x.quarter ?? '') === String(extra.quarter ?? '')) || results[i]
+          if (r && r.success && r.data !== undefined) gotByKey[keyOf(type, extra)] = r.data
+        })
+      } catch (_) {
+        for (const [type, extra] of wave) {
+          if (syncGen.current !== myGen) return
+          try {
+            const data = await getData(type, { ...extra, force: acct.get(keyOf(type, extra)) !== undefined })
+            gotByKey[keyOf(type, extra)] = data
+          } catch (_) { /* keep stale */ }
+        }
+      }
+      if (syncGen.current !== myGen) return
+      wave.forEach(([type, extra], i) => {
+        const key = keyOf(type, extra)
+        if (gotByKey[key] !== undefined) {
+          acct.set(key, gotByKey[key])
+          changes.push(...diffResource(type, extra, olds[i], gotByKey[key]))
+        }
+      })
+      persistCache(username)
+      done += wave.length
+      if (syncGen.current === myGen) { bump(); setSync((s) => ({ ...s, done })) }
     }
     if (syncGen.current === myGen) {
-      setSync({ phase: 'done', done: RESOURCES.length, total: RESOURCES.length, changes, initial })
+      setSync({ phase: 'done', done: total, total, changes, initial })
     }
-  }, [cacheFor, getData, bump])
+  }, [cacheFor, persistCache, getData, bump])
 
   const dismissSync = useCallback(() => setSync((s) => ({ ...s, phase: 'idle' })), [])
 
@@ -255,9 +287,14 @@ export function AuthProvider({ children }) {
     setSession(null)
   }, [])
 
-  // Kick off a full prefetch/revalidate whenever we have a session (login or reload).
+  // Kick off a full prefetch/revalidate whenever we have a session (login or
+  // reload). Wake the (possibly asleep) server first so the first batch doesn't
+  // eat the cold-start and fail.
   useEffect(() => {
-    if (creds) syncAll()
+    if (!creds) return
+    let cancelled = false
+    ;(async () => { await apiWake(); if (!cancelled) syncAll() })()
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creds])
 

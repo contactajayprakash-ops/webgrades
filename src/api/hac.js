@@ -84,3 +84,18 @@ export async function fetchIprDates(creds) {
   if (!j.success) throw new Error(j.message || 'Failed to load IPR dates.');
   return j.availableDates;
 }
+
+// Batch fetch: one server round-trip that logs into HAC once and scrapes every
+// requested resource. `requests` = [{ type, quarter?, date? }]. Returns the
+// per-request results array (each { type, quarter?, success, data?, message? }).
+export async function fetchBatch(creds, requests) {
+  const j = await post('/batch', { ...creds, requests }, 1);
+  if (!j.success) throw new Error(j.message || 'Batch request failed.');
+  return { userName: j.userName, results: j.results || [] };
+}
+
+// Best-effort wake of a sleeping (Replit) server so the first real request
+// doesn't eat the cold-start. Never throws.
+export async function wake() {
+  try { await fetch(getApiUrl() + '/ping', { method: 'GET' }) } catch (_) {}
+}

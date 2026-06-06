@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
 import { letterGrade } from '../lib/gpa.js'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
@@ -23,8 +23,24 @@ export function GradeBadge({ value, showLetter = true }) {
   // value: number | null
   const { letter, cls } = letterGrade(value)
   const text = value == null ? 'N/A' : `${value % 1 === 0 ? value : value.toFixed(2)}%`
+
+  // Flash when the grade changes under us (a fresh score just synced in) so the
+  // new number is impossible to miss — green if it went up, red if it dropped.
+  const prev = useRef(value)
+  const [flash, setFlash] = useState(null)
+  useEffect(() => {
+    const p = prev.current
+    if (p != null && value != null && Math.abs(value - p) > 1e-9) {
+      setFlash(value > p ? 'up' : 'down')
+      const t = setTimeout(() => setFlash(null), 1800)
+      prev.current = value
+      return () => clearTimeout(t)
+    }
+    prev.current = value
+  }, [value])
+
   return (
-    <span className={`grade-badge ${cls}`}>
+    <span className={`grade-badge ${cls}${flash ? ` flash-${flash}` : ''}`}>
       {text}
       {showLetter && value != null && <span className="letter">{letter}</span>}
     </span>

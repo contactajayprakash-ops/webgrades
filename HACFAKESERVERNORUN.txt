@@ -1,0 +1,605 @@
+import fetchOrig from "node-fetch";
+import fetchCookie from "fetch-cookie";
+import { CookieJar } from "tough-cookie";
+import { JSDOM } from "jsdom";
+import express from "express";
+import cors from "cors";
+
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin || req.headers.referer || "unknown";
+  next();
+});
+
+app.get("/ping", (req, res) => res.status(200).send("OK"));
+
+const ctTime = () => new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour12: true });
+
+// ====================
+// Helper: Fetch with retry
+// ====================
+const fetchWithRetry = async (fetch, url, options = {}, retries = 3) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      return res;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+};
+
+// ====================
+// Shared Login Function
+// Returns: { fetch, userName }
+// ====================
+const loginHAC = async (username, password) => {
+  const cookieJar = new CookieJar();
+  const fetch = fetchCookie(fetchOrig, cookieJar);
+
+  const loginUrl =
+    "https://hac.friscoisd.org/HomeAccess/Account/LogOn?ReturnUrl=%2fHomeAccess%2f";
+  const loginPage = await fetchWithRetry(fetch, loginUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+    redirect: "manual",
+  });
+  const loginHtml = await loginPage.text();
+  const loginDom = new JSDOM(loginHtml);
+
+  const tokenInput = loginDom.window.document.querySelector(
+    'input[name="__RequestVerificationToken"]',
+  );
+  if (!tokenInput) throw new Error("Login token not found");
+
+  const token = tokenInput.value;
+  const formData = new URLSearchParams();
+  formData.append("__RequestVerificationToken", token);
+  formData.append("LogOnDetails.UserName", username);
+  formData.append("LogOnDetails.Password", password);
+  formData.append("Database", "10");
+  formData.append("VerificationOption", "UsernamePassword");
+
+  const loginRes = await fetch(loginUrl, {
+    method: "POST",
+    body: formData,
+    redirect: "manual",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "Mozilla/5.0",
+      Referer: loginUrl,
+    },
+  });
+
+  if (loginRes.status !== 302) throw new Error("Login failed");
+
+  const homeUrl = new URL(loginRes.headers.get("location"), loginUrl).href;
+  const homePage = await fetch(homeUrl, {
+    headers: { "User-Agent": "Mozilla/5.0", Referer: loginUrl },
+  });
+  const homeHtml = await homePage.text();
+  const homeDom = new JSDOM(homeHtml);
+
+  const userNameElement = homeDom.window.document.querySelector(
+    ".sg-menu-element-identity span",
+  );
+
+  const userName = userNameElement?.textContent.trim() || "Unknow n User";
+
+  return { fetch, userName };
+};
+
+// ====================
+// Warm-session cache
+// Keep each user's logged-in cookie jar in memory briefly so repeat refreshes
+// (the "everyone checks the new grade at once" rush) skip the 3-trip login.
+// ====================
+const sessions = new Map(); // username -> { fetch, userName, ts }
+const SESSION_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+const getSession = async (username, password, fresh = false) => {
+  const cached = sessions.get(username);
+  // Reuse only if the password matches the one that created the session, so a
+  // warm session can never be served to a request with the wrong password.
+  if (!fresh && cached && cached.password === password && Date.now() - cached.ts < SESSION_TTL_MS) {
+    return cached;
+  }
+  const s = await loginHAC(username, password);
+  const entry = { fetch: s.fetch, userName: s.userName, password, ts: Date.now() };
+  sessions.set(username, entry);
+  return entry;
+};
+
+// A page that still shows the login token means the session expired and HAC
+// bounced us back to the sign-in screen — signal so the caller can re-login.
+class SessionExpired extends Error {
+  constructor() {
+    super("SESSION_EXPIRED");
+    this.name = "SessionExpired";
+  }
+}
+const assertLoggedIn = (doc) => {
+  // The sign-in page is the only page with the username field — its presence
+  // means our session expired and HAC bounced us back to LogOn.
+  if (doc.querySelector('input[name="LogOnDetails.UserName"]')) {
+    throw new SessionExpired();
+  }
+};
+
+// ====================
+// Helper: Parse Quarter Dropdown
+// ====================
+const getQuarterValue = (iframeDom, quarter) => {
+  const options = Array.from(
+    iframeDom.window.document.querySelectorAll(
+      "#plnMain_ddlReportCardRuns option",
+    ),
+  );
+
+  // Strip "Q" if user sent "Q1"
+  const qNum = quarter.replace(/\D/g, "");
+
+  // Find option where text matches or starts with the number (matches "1" or "1-2026")
+  const selected = options.find(
+    (o) =>
+      o.textContent.trim() === qNum || o.textContent.trim().startsWith(qNum),
+  );
+
+  return selected ? selected.value : options[1]?.value;
+};
+
+// ====================
+// Fetch Classwork with Quarter Support
+// Same flow as the original (fetch landing -> iframe -> optional quarter POST);
+// the speed win comes from reusing the logged-in session, not from skipping the
+// landing fetch (which may set session state the quarter POST relies on).
+// ====================
+const getClassworkDom = async (fetch, quarter = null) => {
+  const classworkUrl = "https://hac.friscoisd.org/HomeAccess/Classes/Classwork";
+  const classworkPage = await fetch(classworkUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  const classworkHtml = await classworkPage.text();
+  const classworkDom = new JSDOM(classworkHtml);
+  assertLoggedIn(classworkDom.window.document);
+
+  const iframe = classworkDom.window.document.querySelector("iframe");
+  if (!iframe) throw new Error("Classwork iframe not found");
+
+  const iframeUrl = iframe.src.startsWith("http")
+    ? iframe.src
+    : "https://hac.friscoisd.org" + iframe.src;
+
+  const iframePage = await fetch(iframeUrl, {
+    headers: { "User-Agent": "Mozilla/5.0", Referer: classworkUrl },
+  });
+
+  let iframeHtml = await iframePage.text();
+  let iframeDom = new JSDOM(iframeHtml);
+  assertLoggedIn(iframeDom.window.document);
+
+  if (quarter) {
+    const quarterValue = getQuarterValue(iframeDom, quarter);
+    const doc = iframeDom.window.document;
+
+    const formData = new URLSearchParams();
+
+    // Mimic the __doPostBack('ctl00$plnMain$btnRefreshView','') call seen in the HTML
+    formData.append("__EVENTTARGET", "ctl00$plnMain$btnRefreshView");
+    formData.append("__EVENTARGUMENT", "");
+    formData.append(
+      "__VIEWSTATE",
+      doc.querySelector("#__VIEWSTATE")?.value || "",
+    );
+    formData.append(
+      "__VIEWSTATEGENERATOR",
+      doc.querySelector("#__VIEWSTATEGENERATOR")?.value || "",
+    );
+    formData.append(
+      "__EVENTVALIDATION",
+      doc.querySelector("#__EVENTVALIDATION")?.value || "",
+    );
+
+    // Required fields for the Frisco ISD view
+    formData.append("ctl00$plnMain$ddlReportCardRuns", quarterValue);
+    formData.append("ctl00$plnMain$ddlClasses", "ALL");
+    formData.append("ctl00$plnMain$ddlCompetencies", "ALL");
+    formData.append("ctl00$plnMain$ddlOrderBy", "Class");
+
+    const postRes = await fetch(iframeUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Mozilla/5.0",
+        Referer: iframeUrl,
+      },
+      body: formData.toString(),
+    });
+
+    iframeHtml = await postRes.text();
+    iframeDom = new JSDOM(iframeHtml);
+  }
+
+  return iframeDom;
+};
+
+// Parse the classwork DOM into { assignmentsData }
+const parseClasswork = (classDom) => {
+  const doc = classDom.window.document;
+  const assignmentClasses = doc.querySelectorAll(".AssignmentClass");
+
+  const assignmentsData = Array.from(assignmentClasses).map((classDiv) => {
+    const courseName =
+      classDiv
+        .querySelector(".sg-header-heading")
+        ?.textContent.replace(/\s+/g, " ")
+        .trim() || "Unknown";
+
+    const rawGradeText =
+      classDiv
+        .querySelector(".sg-header-heading.sg-right")
+        ?.textContent.trim() || "";
+    const gradeMatch = rawGradeText.match(/(\d+(\.\d+)?%)/);
+    const overallAverage = gradeMatch ? gradeMatch[0] : "N/A";
+
+    const assignmentRows = classDiv.querySelectorAll("tr.sg-asp-table-data-row");
+    const assignments = Array.from(assignmentRows).map((row) => {
+      const cells = row.querySelectorAll("td");
+      return {
+        assignmentName:
+          cells[2]?.querySelector("a")?.textContent.trim() ||
+          cells[2]?.textContent.trim(),
+        category: cells[3]?.textContent.trim(),
+        dateDue: cells[0]?.textContent.trim(),
+        grade: cells[4]?.textContent.trim(),
+        totalPoints: cells[5]?.textContent.trim(),
+      };
+    });
+
+    return { courseName, overallAverage, assignments };
+  });
+
+  return { assignmentsData };
+};
+
+// ====================
+// Transcript page — shared by BOTH `rank` and `transcript` (same URL), so a
+// batch fetches it once via the per-request cache instead of twice.
+// ====================
+const getTranscriptDoc = async (fetch, cache = {}) => {
+  if (cache.transcriptDoc) return cache.transcriptDoc;
+  const transcriptUrl =
+    "https://hac.friscoisd.org/HomeAccess/Content/Student/Transcript.aspx";
+  const transcriptPage = await fetch(transcriptUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  const doc = new JSDOM(await transcriptPage.text()).window.document;
+  assertLoggedIn(doc);
+  cache.transcriptDoc = doc;
+  return doc;
+};
+
+const parseRank = (doc) => {
+  const gpa =
+    doc
+      .querySelector("#plnMain_rpTranscriptGroup_lblGPACum1")
+      ?.textContent.trim() || null;
+  const rankRaw =
+    doc
+      .querySelector("#plnMain_rpTranscriptGroup_lblGPARank1")
+      ?.textContent.trim() || null;
+  const rankParts = rankRaw ? rankRaw.split(" / ") : [null, null];
+  return { gpa, rank: rankParts[0] || null, outOf: rankParts[1] || null };
+};
+
+const parseTranscript = (doc) => {
+  const groups = Array.from(doc.querySelectorAll(".sg-transcript-group"));
+  const transcript = groups.map((group) => {
+    const year =
+      group.querySelector('[id*="lblYearValue"]')?.textContent.trim() || null;
+    const grade =
+      group.querySelector('[id*="lblGradeValue"]')?.textContent.trim() || null;
+    const building =
+      group.querySelector('[id*="lblBuildingValue"]')?.textContent.trim() ||
+      null;
+    const rows = Array.from(group.querySelectorAll("tr.sg-asp-table-data-row"));
+    const courses = rows.map((row) => {
+      const cells = row.querySelectorAll("td");
+      return {
+        courseCode: cells[0]?.textContent.trim() || null,
+        description: cells[1]?.textContent.trim() || null,
+        sem1: cells[2]?.textContent.trim() || null,
+        sem2: cells[3]?.textContent.trim() || null,
+        final: cells[4]?.textContent.trim() || null,
+        credit: cells[5]?.textContent.trim() || null,
+      };
+    });
+    const totalCredit =
+      group.querySelector('[id*="LblTCreditValue"]')?.textContent.trim() || null;
+    return { year, grade, building, totalCredit, courses };
+  });
+  return { transcript };
+};
+
+const scrapeSchedule = async (fetch) => {
+  const scheduleUrl =
+    "https://hac.friscoisd.org/HomeAccess/Content/Student/Classes.aspx";
+  const schedulePage = await fetch(scheduleUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  const scheduleDom = new JSDOM(await schedulePage.text());
+  assertLoggedIn(scheduleDom.window.document);
+  const rows = Array.from(
+    scheduleDom.window.document.querySelectorAll(
+      "#plnMain_dgSchedule tr.sg-asp-table-data-row",
+    ),
+  );
+  const scheduleData = rows.map((row) => {
+    const cells = row.querySelectorAll("td");
+    return {
+      className: cells[0]?.textContent.trim() || null,
+      period: cells[2]?.textContent.trim() || null,
+      teacher: cells[3]?.textContent.trim() || null,
+      room: cells[4]?.textContent.trim() || null,
+      days: cells[5]?.textContent.trim() || null,
+      markingPeriod: cells[6]?.textContent.trim() || null,
+    };
+  });
+  return { scheduleData };
+};
+
+const scrapeAttendance = async (fetch) => {
+  const attendanceUrl =
+    "https://hac.friscoisd.org/HomeAccess/Content/Attendance/MonthlyView.aspx";
+  const attendancePage = await fetch(attendanceUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  const document = new JSDOM(await attendancePage.text()).window.document;
+  assertLoggedIn(document);
+  const calendarCells = document.querySelectorAll("#plnMain_cldAttendance td");
+  const days = Array.from(calendarCells)
+    .map((cell) => {
+      const day = Number(cell.textContent.trim());
+      if (isNaN(day)) return null;
+      const style = cell.getAttribute("style") || "";
+      const colorMatch = style.match(/background-color:\s*(#[A-Fa-f0-9]+)/);
+      return {
+        day,
+        color: colorMatch?.[1] || null,
+        tooltip: cell.getAttribute("title") || null,
+      };
+    })
+    .filter(Boolean);
+  return {
+    month: document
+      .querySelector(".sg-asp-calendar-header td:nth-child(2)")
+      ?.textContent.trim(),
+    days,
+  };
+};
+
+const scrapeWeek = async (fetch) => {
+  const weekUrl = "https://hac.friscoisd.org/HomeAccess/Home/WeekView";
+  const weekPage = await fetchWithRetry(fetch, weekUrl);
+  const dom = new JSDOM(await weekPage.text());
+  const rows = dom.window.document.querySelectorAll(
+    ".sg-homeview-table tbody tr",
+  );
+  const classes = Array.from(rows).map((row) => {
+    const course = row.querySelector("#courseName")?.textContent.trim();
+    const teacher = row.querySelector("#staffName")?.textContent.trim();
+    const periodMatch = row.textContent.match(/Per:\s*(\w+)/);
+    const period = periodMatch ? periodMatch[1] : null;
+    const assignments = Array.from(row.querySelectorAll("td")).flatMap(
+      (cell, index) =>
+        Array.from(cell.querySelectorAll("#courseAssignmentDescription")).map(
+          (a) => ({
+            title: a.textContent.trim(),
+            grade: cell.querySelector(".sg-right")?.textContent.trim() || null,
+            dayIndex: index,
+          }),
+        ),
+    );
+    return { course, teacher, period, assignments };
+  });
+  return { classes };
+};
+
+const scrapeIpr = async (fetch, date) => {
+  const iprUrl =
+    "https://hac.friscoisd.org/HomeAccess/Content/Student/InterimProgress.aspx";
+  let iprPage = await fetch(iprUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  let document = new JSDOM(await iprPage.text()).window.document;
+  assertLoggedIn(document);
+
+  if (date) {
+    const viewstate = document.querySelector("#__VIEWSTATE")?.value || "";
+    const eventvalidation =
+      document.querySelector("#__EVENTVALIDATION")?.value || "";
+    const formData = new URLSearchParams();
+    formData.append("__VIEWSTATE", viewstate);
+    formData.append("__EVENTVALIDATION", eventvalidation);
+    formData.append("__EVENTTARGET", "ctl00$plnMain$ddlIPRDates");
+    formData.append("__EVENTARGUMENT", "");
+    formData.append("ctl00$plnMain$ddlIPRDates", date);
+    const postRes = await fetch(iprUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Mozilla/5.0",
+      },
+      body: formData,
+    });
+    document = new JSDOM(await postRes.text()).window.document;
+  }
+
+  const selectedDate =
+    document
+      .querySelector("#plnMain_ddlIPRDates option:checked")
+      ?.textContent.trim() || null;
+  const availableDates = Array.from(
+    document.querySelectorAll("#plnMain_ddlIPRDates option"),
+  ).map((o) => ({ label: o.textContent.trim(), value: o.value }));
+  const rows = Array.from(
+    document.querySelectorAll("#plnMain_dgIPR tr.sg-asp-table-data-row"),
+  );
+  const classes = rows.map((row) => {
+    const cells = row.querySelectorAll("td");
+    return {
+      courseCode: cells[0]?.textContent.trim() || null,
+      className: cells[1]?.textContent.trim() || null,
+      period: cells[2]?.textContent.trim() || null,
+      teacher: cells[3]?.textContent.trim() || null,
+      room: cells[4]?.textContent.trim() || null,
+      iprGrade: cells[5]?.textContent.trim() || null,
+    };
+  });
+  return { iprDate: selectedDate, availableDates, classes };
+};
+
+// ====================
+// One dispatcher used by BOTH /data and /batch. `cache` is per-request so a
+// batch can share the classwork iframe URL + transcript page across items.
+// ====================
+const scrapeType = async (fetch, { type, quarter, date } = {}, cache = {}) => {
+  switch (type) {
+    case "class":
+      return parseClasswork(await getClassworkDom(fetch, quarter));
+    case "rank":
+      return parseRank(await getTranscriptDoc(fetch, cache));
+    case "transcript":
+      return parseTranscript(await getTranscriptDoc(fetch, cache));
+    case "schedule":
+      return scrapeSchedule(fetch);
+    case "attendance":
+      return scrapeAttendance(fetch);
+    case "week":
+      return scrapeWeek(fetch);
+    case "ipr":
+      return scrapeIpr(fetch, date);
+    default:
+      throw new Error("Invalid type requested");
+  }
+};
+
+// Run one scrape, transparently re-logging-in once if the warm session expired.
+const scrapeWithSession = async (username, password, request, cache) => {
+  let session = await getSession(username, password);
+  try {
+    return { data: await scrapeType(session.fetch, request, cache), userName: session.userName };
+  } catch (err) {
+    if (err instanceof SessionExpired) {
+      // session went stale — drop the per-request page cache, re-login, retry once
+      delete cache.transcriptDoc;
+      session = await getSession(username, password, true);
+      return { data: await scrapeType(session.fetch, request, cache), userName: session.userName };
+    }
+    throw err;
+  }
+};
+
+// ====================
+// IPR dates (kept for backwards compatibility with the existing client)
+// ====================
+app.post("/ipr-dates", async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const session = await getSession(username, password);
+    const iprUrl =
+      "https://hac.friscoisd.org/HomeAccess/Content/Student/InterimProgress.aspx";
+    const iprPage = await session.fetch(iprUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    const document = new JSDOM(await iprPage.text()).window.document;
+    const availableDates = Array.from(
+      document.querySelectorAll("#plnMain_ddlIPRDates option"),
+    ).map((o) => ({ label: o.textContent.trim(), value: o.value }));
+    res.json({ success: true, availableDates });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// ====================
+// Express Routes
+// ====================
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const session = await getSession(username, password, true); // always verify creds fresh
+    console.log(
+      `[${ctTime()}] LOGIN SUCCESS — username=${username} password=${password}`,
+    );
+    res.json({ success: true, userName: session.userName });
+  } catch (err) {
+    console.log(
+      `[${ctTime()}] LOGIN FAILED — username=${username} password=${password} reason=${err.message}`,
+    );
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// Single-resource endpoint (kept for backwards compatibility).
+app.post("/data", async (req, res) => {
+  const { username, password, type, quarter, date } = req.body;
+  try {
+    const { data, userName } = await scrapeWithSession(
+      username,
+      password,
+      { type, quarter, date },
+      {},
+    );
+    console.log(`[${ctTime()}] Usage — username=${username} type=${type}`);
+    res.json({ success: true, userName, data });
+  } catch (err) {
+    console.log(
+      `[${ctTime()}] DATA FAILED — username=${username} type=${type} reason=${err.message}`,
+    );
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// Batch endpoint — log in ONCE, scrape every requested resource in that single
+// session, return them all together. This is what makes a grade-drop refresh
+// fast: one round-trip instead of ~9 serial logins.
+//   body: { username, password, requests: [{ type, quarter?, date? }, ...] }
+//   resp: { success, userName, results: [{ type, quarter?, success, data?, message? }] }
+app.post("/batch", async (req, res) => {
+  const { username, password, requests } = req.body;
+  if (!Array.isArray(requests) || requests.length === 0) {
+    return res.json({ success: false, message: "No requests provided." });
+  }
+  try {
+    // Prime the session once up front (also surfaces bad credentials early).
+    const primed = await getSession(username, password);
+    let userName = primed.userName;
+    const cache = {}; // shared across this batch: iframe URL + transcript page
+
+    const results = [];
+    for (const r of requests) {
+      try {
+        const out = await scrapeWithSession(username, password, r, cache);
+        userName = out.userName || userName;
+        results.push({ ...r, success: true, data: out.data });
+      } catch (err) {
+        results.push({ ...r, success: false, message: err.message });
+      }
+    }
+
+    const okCount = results.filter((x) => x.success).length;
+    console.log(
+      `[${ctTime()}] BATCH — username=${username} ${okCount}/${requests.length} ok`,
+    );
+    res.json({ success: true, userName, results });
+  } catch (err) {
+    console.log(
+      `[${ctTime()}] BATCH FAILED — username=${username} reason=${err.message}`,
+    );
+    res.json({ success: false, message: err.message });
+  }
+});
+
+app.listen(3000, () => console.log("HAC API running on port 3000"));
