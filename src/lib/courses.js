@@ -12,10 +12,17 @@ export function cleanCourseName(raw) {
   return n.trim() || raw
 }
 
-// A stable key for a course across quarters/semesters (so weight overrides
-// stick). Drops the A/B suffix that distinguishes S1 vs S2 sections.
+// A stable key for a course across quarters/semesters (so the two semesters of
+// a year-long course merge into one). cleanCourseName already drops a trailing
+// " S1"/" S2"; this also drops an EMBEDDED semester marker like the off-campus
+// "Intro Engr Des S1@CTEC" / "...S2@CTEC", so those don't double-count.
 export function courseKey(raw) {
-  return cleanCourseName(raw).toUpperCase().replace(/\s+EQ\d+$/i, '').trim()
+  return cleanCourseName(raw)
+    .toUpperCase()
+    .replace(/\s+EQ\d+$/i, '')
+    .replace(/\s+S[12]\b/i, ' ') // "DES S1@CTEC" -> "DES @CTEC"
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 // "Other Foreign Language" credit-by-exam courses (OTHR FL1–4) are pass/fail
