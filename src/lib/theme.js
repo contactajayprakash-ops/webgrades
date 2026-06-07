@@ -36,6 +36,8 @@ export function loadTheme() {
 export function saveTheme(state) {
   try { localStorage.setItem(KEY, JSON.stringify(state)) } catch (_) {}
   applyTheme(state)
+  window.location.reload();
+
 }
 
 // Lighten a #rrggbb toward white (for the brighter end of gradients/favicon).
