@@ -518,6 +518,8 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.994);
 .tour-step-n { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent-bright); font-weight: 700; }
 .tour-title { font-weight: 720; font-size: 16.5px; margin: 4px 0 6px; letter-spacing: -0.015em; }
 .tour-body { font-size: 13.5px; color: var(--text-dim); line-height: 1.5; }
+.tour-hi { font-weight: 750; color: var(--accent-bright); background: color-mix(in srgb, var(--accent) 18%, transparent);
+  padding: 1px 6px; border-radius: 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .tour-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; }
 .tour-skip { background: transparent; border: none; color: var(--text-faint); font-size: 13px; font-weight: 560; cursor: pointer; }
 .tour-skip:hover { color: var(--text-dim); }

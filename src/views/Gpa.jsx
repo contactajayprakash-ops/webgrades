@@ -28,7 +28,12 @@ const CUM_TOUR_STEPS = [
   {
     selector: '.cum-setup input[type="checkbox"]',
     title: 'Uncheck what doesn’t count',
-    body: 'Untick anything that shouldn’t count toward your GPA. Pass/fail classes (grade “P”) can’t be averaged, so leave those off.',
+    body: (
+      <>
+        Untick anything that shouldn’t count toward your GPA.{' '}
+        <strong className="tour-hi">Remove all courses taken through CBE</strong> (credit by exam) — those don’t count.
+      </>
+    ),
   },
   {
     selector: '.cum-setup select',
