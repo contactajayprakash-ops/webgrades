@@ -237,13 +237,16 @@ export function AuthProvider({ children }) {
     localStorage.setItem(PROFILES_KEY, JSON.stringify(next))
   }, [])
 
-  // Validate credentials, save as a profile, and switch to it. Used both for
-  // the first sign-in and for "Add account".
+  // Validate credentials, save as a profile, and switch to it. Used for the
+  // first sign-in and re-login. Preserves list order: an existing profile is
+  // updated IN PLACE (never moved to the bottom); a new one is appended.
   const login = useCallback(async (username, password) => {
     const res = await apiLogin(username, password)
     const p = { username, password, userName: res.userName || username }
     setProfiles((prev) => {
-      const next = [...prev.filter((x) => x.username !== username), p]
+      const next = prev.some((x) => x.username === username)
+        ? prev.map((x) => (x.username === username ? p : x))
+        : [...prev, p]
       localStorage.setItem(PROFILES_KEY, JSON.stringify(next))
       return next
     })
@@ -253,6 +256,15 @@ export function AuthProvider({ children }) {
     bump()
     return p
   }, [bump])
+
+  // "Add account" from the switcher — refuse to re-add one that's already there
+  // (which would otherwise just reorder the list). Validate + append otherwise.
+  const addAccount = useCallback(async (username, password) => {
+    if (profiles.some((x) => x.username === username)) {
+      throw new Error('That account is already added — pick it from the list above.')
+    }
+    return login(username, password)
+  }, [profiles, login])
 
   const switchProfile = useCallback((username) => {
     const p = profiles.find((x) => x.username === username)
@@ -314,7 +326,7 @@ export function AuthProvider({ children }) {
     profiles,
     activeUsername: session?.username || null,
     login,
-    addAccount: login, // adding an account is the same flow (validate + switch)
+    addAccount, // validate + append; refuses to re-add an existing account
     switchProfile,
     removeProfile,
     logout,

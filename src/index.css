@@ -123,6 +123,12 @@ input, select { font-family: inherit; }
 .sidebar {
   width: 248px;
   flex-shrink: 0;
+  /* Pin to the viewport so the profile switcher (and its upward popover) stay
+     in view even when the page content is taller than the screen. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  align-self: flex-start;
   background: var(--glass);
   -webkit-backdrop-filter: var(--blur);
   backdrop-filter: var(--blur);
@@ -181,7 +187,15 @@ input, select { font-family: inherit; }
 .profile-caret.open { transform: rotate(-90deg); }
 
 .profile-backdrop { position: fixed; inset: 0; z-index: 55; }
-.profile-pop { position: absolute; z-index: 56; bottom: calc(100% + 10px); left: 0; right: 0; padding: 8px; display: flex; flex-direction: column; gap: 2px; animation: popin .28s var(--spring) backwards; }
+/* Higher specificity than `.card` (which it shares) so absolute positioning
+   wins — otherwise `.card { position: relative }` makes the popover in-flow and
+   pushes the trigger off-screen. */
+.profile-switch .profile-pop { position: absolute; z-index: 56; bottom: calc(100% + 10px); left: 0; right: 0; padding: 8px; display: flex; flex-direction: column; gap: 2px; animation: popin .28s var(--spring) backwards; max-height: min(76vh, 620px); }
+/* The account list scrolls so Add account / Sign out stay visible no matter how
+   many accounts are added. */
+.profile-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1 1 auto; margin: 0 -2px; padding: 0 2px; }
+.profile-list::-webkit-scrollbar { width: 8px; }
+.profile-list::-webkit-scrollbar-thumb { background: var(--glass-border-strong); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
 @keyframes popin { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
 .profile-pop-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-faint); font-weight: 700; padding: 6px 10px 4px; }
 .profile-row { display: flex; align-items: center; border-radius: 12px; transition: background .15s; }

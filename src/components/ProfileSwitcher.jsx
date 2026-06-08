@@ -40,22 +40,24 @@ export default function ProfileSwitcher() {
       {open && (
         <div className="profile-pop card">
           <div className="profile-pop-label">Accounts</div>
-          {profiles.map((pr) => (
-            <div key={pr.username} className={`profile-row ${pr.username === activeUsername ? 'active' : ''}`}>
-              <button className="profile-row-main" onClick={() => { switchProfile(pr.username); close() }}>
-                <span className="avatar sm">{initials(pr.userName)}</span>
-                <span className="profile-row-text">
-                  <span className="name">{pr.userName || pr.username}</span>
-                  <span className="sub">{pr.username}</span>
-                </span>
-                {pr.username === activeUsername && <Icon.check className="profile-check" width={16} height={16} />}
-              </button>
-              <button className="profile-remove" title="Remove account"
-                onClick={() => { if (confirm(`Remove ${pr.userName || pr.username}?`)) removeProfile(pr.username) }}>
-                <Icon.trash width={14} height={14} />
-              </button>
-            </div>
-          ))}
+          <div className="profile-list">
+            {profiles.map((pr) => (
+              <div key={pr.username} className={`profile-row ${pr.username === activeUsername ? 'active' : ''}`}>
+                <button className="profile-row-main" onClick={() => { switchProfile(pr.username); close() }}>
+                  <span className="avatar sm">{initials(pr.userName)}</span>
+                  <span className="profile-row-text">
+                    <span className="name">{pr.userName || pr.username}</span>
+                    <span className="sub">{pr.username}</span>
+                  </span>
+                  {pr.username === activeUsername && <Icon.check className="profile-check" width={16} height={16} />}
+                </button>
+                <button className="profile-remove" title="Remove account"
+                  onClick={() => { if (confirm(`Remove ${pr.userName || pr.username}?`)) removeProfile(pr.username) }}>
+                  <Icon.trash width={14} height={14} />
+                </button>
+              </div>
+            ))}
+          </div>
 
           <div className="profile-divider" />
 
