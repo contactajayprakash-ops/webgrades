@@ -195,7 +195,7 @@ input, select { font-family: inherit; }
    many accounts are added. */
 .profile-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1 1 auto; margin: 0 -2px; padding: 0 2px; }
 .profile-list::-webkit-scrollbar { width: 8px; }
-.profile-list::-webkit-scrollbar-thumb { background: var(--glass-border-strong); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+.profile-list::-webkit-scrollbar-thumb { background: var(--glass-border-strong); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
 @keyframes popin { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
 .profile-pop-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-faint); font-weight: 700; padding: 6px 10px 4px; }
 .profile-row { display: flex; align-items: center; border-radius: 12px; transition: background .15s; }
@@ -305,11 +305,11 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.994);
 .grade-badge.flash-up { animation: flashUp 1.8s var(--ease); }
 .grade-badge.flash-down { animation: flashDown 1.8s var(--ease); }
 @keyframes flashUp {
-  0%, 18% { box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.85), 0 0 22px 4px rgba(48, 209, 88, 0.5); transform: scale(1.07); }
+  0%, 18% { box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.85); transform: scale(1.07); }
   100% { box-shadow: inset 0 1px 0.5px rgba(255, 255, 255, 0.18); transform: scale(1); }
 }
 @keyframes flashDown {
-  0%, 18% { box-shadow: 0 0 0 2px rgba(255, 90, 95, 0.85), 0 0 22px 4px rgba(255, 90, 95, 0.5); transform: scale(1.07); }
+  0%, 18% { box-shadow: 0 0 0 2px rgba(255, 90, 95, 0.85); transform: scale(1.07); }
   100% { box-shadow: inset 0 1px 0.5px rgba(255, 255, 255, 0.18); transform: scale(1); }
 }
 
@@ -398,7 +398,7 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.994);
 .center-load { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 70px 20px; color: var(--text-dim); }
 
 .loadbar { width: 280px; max-width: 70vw; height: 8px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--glass-border); border-radius: var(--pill); overflow: hidden; position: relative; box-shadow: var(--rim); }
-.loadbar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; border-radius: var(--pill); background: linear-gradient(90deg, var(--accent-bright), var(--accent-2)); box-shadow: 0 0 20px -1px color-mix(in srgb, var(--accent) 95%, transparent); animation: loadslide 1.25s cubic-bezier(.65, .05, .36, 1) infinite; }
+.loadbar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; border-radius: var(--pill); background: linear-gradient(90deg, var(--accent-bright), var(--accent-2)); animation: loadslide 1.25s cubic-bezier(.65, .05, .36, 1) infinite; }
 @keyframes loadslide { 0% { left: -40%; } 100% { left: 102%; } }
 .loading-quip { animation: quipfade .5s ease; min-height: 1.2em; }
 @keyframes quipfade { from { opacity: 0; transform: translateY(3px); } to { opacity: .65; transform: none; } }
@@ -528,7 +528,7 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .tour-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
 .tour-spot {
   position: absolute; border-radius: 13px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.58), 0 0 0 2px var(--accent), 0 0 26px 3px color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.58), 0 0 0 2px var(--accent); /* unslop-ignore: spotlight backdrop dim + ring for guided tour, not a glow */
   transition: top .28s var(--ease), left .28s var(--ease), width .28s var(--ease), height .28s var(--ease);
 }
 .tour-pop {

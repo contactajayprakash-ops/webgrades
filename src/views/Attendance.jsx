@@ -53,7 +53,7 @@ export default function Attendance() {
           <div className="card">
             <div style={{ padding: '16px 20px' }}><h3>Flagged days</h3></div>
             {flagged.length === 0 ? (
-              <Empty>No absences or tardies this month. 🎉</Empty>
+              <Empty>No absences or tardies this month.</Empty>
             ) : (
               <table className="table">
                 <thead><tr><th>Day</th><th>Details</th></tr></thead>
