@@ -222,10 +222,17 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
                   <tbody>
                     {classRows(quarter, course, edits).map((r) => {
                       const pct = r.score != null && r.total > 0 ? (r.score / r.total) * 100 : null
+                      const cat = (r.category || '').toLowerCase()
+                      const isAOL = cat.includes('assessment')
+                      const isPC = cat.includes('progress')
                       return (
-                        <tr key={r.key}>
+                        <tr key={r.key} className={isAOL ? 'aol-row' : ''}>
                           <td>{r.name}{r.edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow)' }}>{r.hypo ? 'added' : 'edited'}</span>}</td>
-                          <td className="faint small">{r.category || '—'}</td>
+                          <td>
+                            {isAOL ? <span className="cat-tag aol">Assessment</span>
+                              : isPC ? <span className="cat-tag pc">Progress</span>
+                              : <span className="faint small">{r.category || '—'}</span>}
+                          </td>
                           <td className="num">
                             <input className="input mini" type="number" step="0.5" value={r.score ?? ''}
                               onChange={(e) => setEdit(r.key, { score: e.target.value === '' ? null : Number(e.target.value) })} />

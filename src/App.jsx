@@ -6,6 +6,7 @@ import SyncToast from './components/SyncToast.jsx'
 import Dashboard from './views/Dashboard.jsx'
 import Grades from './views/Grades.jsx'
 import Gpa from './views/Gpa.jsx'
+import Target from './views/Target.jsx'
 import Schedule from './views/Schedule.jsx'
 import Rank from './views/Rank.jsx'
 import Transcript from './views/Transcript.jsx'
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/grades" element={<Grades />} />
           <Route path="/gpa" element={<Gpa />} />
+          <Route path="/target" element={<Target />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/rank" element={<Rank />} />
           <Route path="/transcript" element={<Transcript />} />

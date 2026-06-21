@@ -8,6 +8,7 @@ const NAV = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/grades', label: 'Grades', icon: 'book' },
   { to: '/gpa', label: 'GPA', icon: 'calc' },
+  { to: '/target', label: 'Targets', icon: 'target' },
   { section: 'Records' },
   { to: '/schedule', label: 'Schedule', icon: 'clock' },
   { to: '/transcript', label: 'Transcript', icon: 'scroll' },
