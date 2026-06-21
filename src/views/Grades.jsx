@@ -142,7 +142,7 @@ function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatI
       {/* GPA impact — a distinct panel, kept separate from the grade tables */}
       <div className="impact">
         <div className="impact-head">
-          <h3>GPA impact {whatIfCount > 0 && <span className="pill" style={{ color: 'var(--yellow)', marginLeft: 6 }}>what-if</span>}</h3>
+          <h3>GPA impact {whatIfCount > 0 && <span className="pill" style={{ color: 'var(--yellow-text)', marginLeft: 6 }}>what-if</span>}</h3>
           <Link to="/gpa" className="btn ghost sm">Full GPA &amp; cumulative <Icon.chevron width={13} height={13} /></Link>
         </div>
         <div className="impact-grid">
@@ -227,7 +227,7 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
                       const isPC = cat.includes('progress')
                       return (
                         <tr key={r.key} className={isAOL ? 'aol-row' : ''}>
-                          <td>{r.name}{r.edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow)' }}>{r.hypo ? 'added' : 'edited'}</span>}</td>
+                          <td>{r.name}{r.edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow-text)' }}>{r.hypo ? 'added' : 'edited'}</span>}</td>
                           <td>
                             {isAOL ? <span className="cat-tag aol">Assessment</span>
                               : isPC ? <span className="cat-tag pc">Progress</span>
@@ -253,7 +253,7 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
                 <span className="small faint">
                   Live average is a points-based estimate; HAC weights by category.
                   {delta != null && (
-                    <span style={{ color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                    <span style={{ color: delta >= 0 ? 'var(--green-text)' : 'var(--red-text)' }}>
                       {' '}({delta >= 0 ? '+' : ''}{delta.toFixed(2)} vs HAC)
                     </span>
                   )}

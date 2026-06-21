@@ -26,6 +26,15 @@
   --accent-2: #5e5ce6;
   --accent-bright: color-mix(in srgb, var(--accent) 72%, #ffffff);
   --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+  /* accent used for TEXT — lightened on dark so it reads on dark glass. The
+     light theme darkens it instead (see below) so it reads on white. */
+  --accent-text: var(--accent-bright);
+  /* TEXT variants of the semantic colors (the raw tokens stay bright for dots/
+     glows/borders). Light theme darkens these so labels stay readable. */
+  --green-text: var(--green);
+  --red-text: var(--red);
+  --yellow-text: var(--yellow);
+  --orange-text: var(--orange);
   --green: #30d158;
   --blue: var(--accent-bright);
   --yellow: #ffd426;
@@ -56,8 +65,29 @@ html[data-theme="light"] {
   --hairline: rgba(0, 0, 0, 0.09);
   --rim: inset 0 1px 0.5px -0.25px rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(0, 0, 0, 0.025);
   --drop: 0 20px 46px -24px rgba(0, 0, 0, 0.28), 0 6px 16px -10px rgba(0, 0, 0, 0.14);
+  --accent-text: color-mix(in srgb, var(--accent) 68%, #000000);
+  --green-text: #1a8a3c;
+  --red-text: #c42a2f;
+  --yellow-text: #876700;
+  --orange-text: #a85c00;
   color-scheme: light;
 }
+
+/* Light-theme text fixes: the pastel/lightened text colors below are tuned for
+   dark glass and become unreadable on a white field, so darken them on light. */
+html[data-theme="light"] .g-a { color: #1a8a3c; }
+html[data-theme="light"] .g-b { color: #0a66cc; }
+html[data-theme="light"] .g-c { color: #8a6a00; }
+html[data-theme="light"] .g-d { color: #a85c00; }
+html[data-theme="light"] .g-f { color: #c42a2f; }
+html[data-theme="light"] .tag-w6 { color: #5a4fd0; }
+html[data-theme="light"] .error-box { color: #b8242a; }
+html[data-theme="light"] .whatif-banner { color: #876700; }
+html[data-theme="light"] .notice { color: var(--accent-text); }
+html[data-theme="light"] .sync-toast.ok { color: #1a8a3c; }
+html[data-theme="light"] .profile-err { color: #b8242a; }
+html[data-theme="light"] .profile-action.danger:hover { color: #b8242a; }
+html[data-theme="light"] .center-load { color: var(--text-dim); }
 html[data-theme="light"] body::before { opacity: 0.55; filter: saturate(135%); }
 
 /* ===== Convenience toggles ===== */
@@ -154,7 +184,7 @@ input, select { font-family: inherit; }
   display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px;
   box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--accent) 95%, transparent), inset 0 1.5px 0.5px -0.5px rgba(255, 255, 255, 0.8);
 }
-.brand .accent { color: var(--accent); }
+.brand .accent { color: var(--accent-text); }
 
 .nav-link {
   display: flex; align-items: center; gap: 12px;
@@ -166,7 +196,7 @@ input, select { font-family: inherit; }
 .nav-link:hover { background: var(--glass-flat); color: var(--text); transform: translateX(2px); }
 .nav-link.active { background: var(--glass-2); color: var(--text); border-color: var(--glass-border); box-shadow: var(--rim); }
 .nav-link .ico { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-faint); transition: color .2s; }
-.nav-link.active .ico { color: var(--accent-bright); }
+.nav-link.active .ico { color: var(--accent-text); }
 
 .nav-section { margin-top: 16px; padding: 0 13px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--text-faint); font-weight: 700; }
 
@@ -204,10 +234,10 @@ input, select { font-family: inherit; }
 .profile-row-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 9px; background: transparent; border: none; color: var(--text); text-align: left; }
 .profile-row-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .profile-row-text .name, .profile-row-text .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.profile-check { color: var(--accent-bright); flex-shrink: 0; }
+.profile-check { color: var(--accent-text); flex-shrink: 0; }
 .profile-remove { background: transparent; border: none; color: var(--text-faint); padding: 8px 10px; border-radius: 10px; opacity: 0; transition: .15s; }
 .profile-row:hover .profile-remove { opacity: 1; }
-.profile-remove:hover { color: var(--red); background: rgba(255, 90, 95, 0.12); }
+.profile-remove:hover { color: var(--red-text); background: rgba(255, 90, 95, 0.12); }
 .profile-divider { height: 1px; background: var(--hairline); margin: 6px 4px; }
 .profile-action { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 11px; border-radius: 12px; background: transparent; border: none; color: var(--text-dim); font-size: 13.5px; font-weight: 560; transition: .15s; }
 .profile-action:hover { background: var(--glass-flat); color: var(--text); }
@@ -408,7 +438,7 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.994);
 .error-box { background: rgba(255, 90, 95, 0.12); -webkit-backdrop-filter: var(--blur-sm); backdrop-filter: var(--blur-sm); border: 1px solid rgba(255, 90, 95, 0.32); color: #ffa3a6; padding: 14px 17px; border-radius: var(--radius-sm); font-size: 14px; display: flex; gap: 10px; align-items: flex-start; box-shadow: var(--rim); position: relative; z-index: 1; }
 
 .whatif-banner { display: flex; align-items: center; gap: 12px; background: rgba(255, 212, 38, 0.12); -webkit-backdrop-filter: var(--blur-sm); backdrop-filter: var(--blur-sm); border: 1px solid rgba(255, 212, 38, 0.34); color: #ffe890; padding: 13px 18px; border-radius: var(--radius-sm); font-size: 13.5px; margin-bottom: 18px; box-shadow: var(--rim); animation: rise .4s var(--ease) backwards; }
-.whatif-banner b { color: var(--yellow); }
+.whatif-banner b { color: var(--yellow-text); }
 .whatif-banner .btn { color: #25190a; background: linear-gradient(180deg, #ffe66b, #ffd426); border-color: rgba(255, 255, 255, 0.4); box-shadow: 0 10px 20px -10px rgba(255, 212, 38, 0.85), inset 0 1.5px 0.5px -0.5px rgba(255, 255, 255, 0.9); }
 .whatif-banner .btn:hover { filter: brightness(1.05); }
 
@@ -422,15 +452,15 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.994);
 .impact-cell .k { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); font-weight: 700; }
 .impact-cell .v { font-size: 29px; font-weight: 740; letter-spacing: -0.035em; margin-top: 6px; line-height: 1; font-variant-numeric: tabular-nums; }
 .impact-cell .d { font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
-.delta-up { color: var(--green); }
-.delta-down { color: var(--red); }
+.delta-up { color: var(--green-text); }
+.delta-down { color: var(--red-text); }
 .delta-zero { color: var(--text-faint); }
 
 .notice { background: var(--accent-soft); -webkit-backdrop-filter: var(--blur-sm); backdrop-filter: var(--blur-sm); border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent); color: color-mix(in srgb, var(--accent) 25%, #ffffff); padding: 13px 16px; border-radius: var(--radius-sm); font-size: 13px; box-shadow: var(--rim); }
 .empty { text-align: center; color: var(--text-faint); padding: 54px 20px; font-size: 14.5px; position: relative; z-index: 1; }
 
 .tag-w6 { color: #a8a6ff; }
-.tag-w55 { color: var(--blue); }
+.tag-w55 { color: var(--accent-text); }
 .tag-w5 { color: var(--text-dim); }
 
 .divider { height: 1px; background: var(--hairline); margin: 18px 0; border: none; }
@@ -473,7 +503,7 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.994);
 .sync-toast .sync-count { margin-left: auto; color: var(--text-faint); font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .sync-toast.changes { flex-direction: column; align-items: stretch; gap: 8px; }
 .sync-toast-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.sync-toast-head b { color: var(--accent-bright); font-weight: 700; }
+.sync-toast-head b { color: var(--accent-text); font-weight: 700; }
 .sync-x { background: transparent; border: none; color: var(--text-faint); font-size: 13px; padding: 2px 6px; border-radius: 8px; transition: .15s; }
 .sync-x:hover { color: var(--text); background: var(--glass-flat); }
 .sync-list { margin: 0; padding: 0 0 0 2px; list-style: none; display: flex; flex-direction: column; gap: 5px; }
@@ -495,7 +525,7 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.994);
 
 /* ---------- Assignment category emphasis (AOL stands out vs Progress) ---------- */
 .cat-tag { display: inline-block; padding: 2px 10px; border-radius: var(--pill); font-size: 11.5px; font-weight: 650; white-space: nowrap; letter-spacing: .01em; }
-.cat-tag.aol { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-bright);
+.cat-tag.aol { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-text);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent); }
 .cat-tag.pc { background: var(--glass-flat); color: var(--text-faint); font-weight: 540; }
 tr.aol-row td:first-child { font-weight: 680; }
@@ -537,10 +567,10 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   border: 1px solid var(--glass-border-strong); border-radius: var(--radius-sm);
   box-shadow: var(--rim), var(--drop); padding: 16px 18px; animation: popin .26s var(--spring) backwards;
 }
-.tour-step-n { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent-bright); font-weight: 700; }
+.tour-step-n { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent-text); font-weight: 700; }
 .tour-title { font-weight: 720; font-size: 16.5px; margin: 4px 0 6px; letter-spacing: -0.015em; }
 .tour-body { font-size: 13.5px; color: var(--text-dim); line-height: 1.5; }
-.tour-hi { font-weight: 750; color: var(--accent-bright); background: color-mix(in srgb, var(--accent) 18%, transparent);
+.tour-hi { font-weight: 750; color: var(--accent-text); background: color-mix(in srgb, var(--accent) 18%, transparent);
   padding: 1px 6px; border-radius: 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .tour-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; }
 .tour-skip { background: transparent; border: none; color: var(--text-faint); font-size: 13px; font-weight: 560; cursor: pointer; }

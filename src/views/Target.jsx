@@ -110,9 +110,9 @@ function GpaGoal() {
 function NeedCell({ weight, grade }) {
   const lbl = weight >= 6 ? 'All AP (6.0)' : weight >= 5.5 ? 'All Advanced (5.5)' : 'All on-level (5.0)'
   let value, color, meta
-  if (grade > 100) { value = 'Not reachable'; color = 'var(--red)'; meta = 'even a 100 falls short' }
-  else if (grade <= 0) { value = 'Locked in'; color = 'var(--green)'; meta = 'already guaranteed' }
-  else { value = round2(grade) + '%'; color = grade > 97 ? 'var(--orange)' : 'var(--text)'; meta = 'avg grade needed' }
+  if (grade > 100) { value = 'Not reachable'; color = 'var(--red-text)'; meta = 'even a 100 falls short' }
+  else if (grade <= 0) { value = 'Locked in'; color = 'var(--green-text)'; meta = 'already guaranteed' }
+  else { value = round2(grade) + '%'; color = grade > 97 ? 'var(--orange-text)' : 'var(--text)'; meta = 'avg grade needed' }
   return (
     <div className="card stat" style={{ padding: '16px 18px' }}>
       <span className="label">{lbl}</span>

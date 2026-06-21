@@ -79,7 +79,7 @@ export default function Settings() {
           </div>
           <div className="flex mt-3 flex-wrap">
             <button className="btn ghost sm" onClick={clearCache}>Clear cached data</button>
-            <button className="btn ghost sm" onClick={logout} style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+            <button className="btn ghost sm" onClick={logout} style={{ borderColor: 'var(--red)', color: 'var(--red-text)' }}>
               Sign out
             </button>
           </div>

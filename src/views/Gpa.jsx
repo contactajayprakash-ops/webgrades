@@ -245,7 +245,7 @@ function HeadlineCard({ active, onClick, label, value, note, accent, whatIf }) {
     <button className="card stat" onClick={onClick}
       style={{ textAlign: 'left', cursor: 'pointer', border: active ? `1px solid ${accent}` : undefined, background: active ? undefined : 'var(--bg-soft)' }}>
       {active && <span className="glow" style={{ background: accent }} />}
-      <span className="label">{label} {whatIf && <em style={{ color: 'var(--yellow)' }}>· what-if</em>}</span>
+      <span className="label">{label} {whatIf && <em style={{ color: 'var(--yellow-text)' }}>· what-if</em>}</span>
       {value == null
         ? <span className="value skeleton" style={{ height: 34, width: 130 }} />
         : <span className="value" style={{ fontSize: value === 'Set up' ? 22 : undefined }}>{value}</span>}
@@ -427,7 +427,7 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, onGrade, onWe
       <div className="grid grid-3">
         <div className="card stat">
           <span className="glow" style={{ background: 'var(--accent)' }} />
-          <span className="label">Weighted GPA {whatIf && <em style={{ color: 'var(--yellow)' }}>· what-if</em>}</span>
+          <span className="label">Weighted GPA {whatIf && <em style={{ color: 'var(--yellow-text)' }}>· what-if</em>}</span>
           <span className="value">{fmtGpa(res.gpa)}</span>
           <span className="meta">Frisco 6.0 scale</span>
         </div>
@@ -466,7 +466,7 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, onGrade, onWe
                     <input type="checkbox" checked={r.include} onChange={(e) => onInclude?.(r.key, e.target.checked)}
                       style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
                   </td>
-                  <td>{r.name}{edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow)' }}>edited</span>}</td>
+                  <td>{r.name}{edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow-text)' }}>edited</span>}</td>
                   {showYear && <td className="faint small">{r.year}</td>}
                   <td className="num">
                     {editableGrade
