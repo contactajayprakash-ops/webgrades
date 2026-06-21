@@ -30,7 +30,18 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(pkill -f \"remote-debugging-port=9341\")",
-      "Bash(pkill -f \"vite\")"
+      "Bash(pkill -f \"vite\")",
+      "Bash(pkill -f \"remote-debugging-port=9342\")",
+      "Bash(pkill -f vite)",
+      "Bash(xargs kill -9)",
+      "Bash(pkill -f \"remote-debugging-port=9343\")",
+      "Bash(pkill -f \"remote-debugging-port=9344\")",
+      "Bash(cd *)",
+      "Bash(pkill -f \"remote-debugging-port=9346\")",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(pkill -f \"remote-debugging-port=9347\")",
+      "Bash(pkill -f \"remote-debugging-port=9348\")"
     ]
   }
 }
