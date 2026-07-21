@@ -6,7 +6,15 @@
     <link rel="mask-icon" href="/favicon.svg?v=3" color="#4aa9ff" />
     <link rel="apple-touch-icon" href="/favicon.svg?v=3" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-    <meta name="theme-color" content="#0a0a0d" />
+    <meta name="theme-color" content="#eef0f5" />
+    <script>
+      // Apply the saved theme before first paint so there's no flash. Light is
+      // the default when nothing is stored.
+      try {
+        var t = JSON.parse(localStorage.getItem('wg_theme') || '{}');
+        if ((t.theme || 'light') === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

@@ -5,7 +5,7 @@
 const KEY = 'wg_theme'
 
 export const DEFAULT_THEME = {
-  theme: 'dark',       // 'dark' | 'light'
+  theme: 'light',      // 'dark' | 'light' — light is the default
   accentId: 'blue',    // see ACCENTS
   reduceBlur: false,   // lighter backdrop blur (faster on Chromebooks)
   reduceMotion: false, // kill animations/transitions
