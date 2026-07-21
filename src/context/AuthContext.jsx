@@ -117,6 +117,8 @@ export function AuthProvider({ children }) {
   const caches = useRef(new Map())
   const inflight = useRef(new Map()) // `${username}|${key}` -> promise
   const syncGen = useRef(0) // bumped on every sync start; aborts superseded syncs
+  const syncing = useRef(false) // a full sync is currently running
+  const lastSyncAt = useRef(0) // ms timestamp of the last sync start (resume throttle)
   const [dataVersion, setDataVersion] = useState(0) // bumped when cache changes -> consumers re-read
 
   // background sync state for the toast
@@ -183,6 +185,8 @@ export function AuthProvider({ children }) {
     if (!c) return
     const username = c.username
     const myGen = ++syncGen.current
+    syncing.current = true
+    lastSyncAt.current = Date.now()
     const acct = cacheFor(username)
     const initial = acct.size === 0
     // Cold resources rarely change — only refetch them when we have nothing cached.
@@ -226,6 +230,7 @@ export function AuthProvider({ children }) {
       if (syncGen.current === myGen) { bump(); setSync((s) => ({ ...s, done })) }
     }
     if (syncGen.current === myGen) {
+      syncing.current = false
       setSync({ phase: 'done', done: total, total, changes, initial })
     }
   }, [cacheFor, persistCache, getData, bump])
@@ -311,6 +316,33 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creds])
+
+  // An installed PWA (or a mobile tab) stays alive in the background — reopening
+  // it resumes the page WITHOUT a reload, so the mount-time sync never re-runs.
+  // Re-sync whenever the app becomes visible/focused again, so a reopen always
+  // checks for new grades. Throttled so the focus+visibility double-fire and
+  // rapid app-switching don't stack redundant syncs.
+  const syncAllRef = useRef(syncAll)
+  syncAllRef.current = syncAll
+  useEffect(() => {
+    const RESUME_THROTTLE_MS = 8000
+    const resync = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!credsRef.current) return
+      if (syncing.current) return
+      if (Date.now() - lastSyncAt.current < RESUME_THROTTLE_MS) return
+      lastSyncAt.current = Date.now()
+      ;(async () => { await apiWake(); syncAllRef.current() })()
+    }
+    document.addEventListener('visibilitychange', resync)
+    window.addEventListener('focus', resync)
+    window.addEventListener('pageshow', resync) // bfcache restore (iOS back-swipe)
+    return () => {
+      document.removeEventListener('visibilitychange', resync)
+      window.removeEventListener('focus', resync)
+      window.removeEventListener('pageshow', resync)
+    }
+  }, [])
 
   const getIprDates = useCallback(async () => {
     if (!creds) throw new Error('Not signed in.')
