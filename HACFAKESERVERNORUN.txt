@@ -100,6 +100,53 @@ const loginHAC = async (username, password) => {
 const sessions = new Map(); // username -> { fetch, userName, ts }
 const SESSION_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
+// ====================
+// Per-USERNAME failed-login throttle (anti-brute-force).
+// Keyed by username, NOT by IP: a whole school sits behind one NAT IP, so an
+// IP limit would throttle the legit "everyone checks grades at once" rush.
+// This instead locks a single account after too many wrong-password attempts,
+// no matter where they come from, and resets on a successful login.
+// ====================
+const loginFails = new Map(); // username -> { count, first, blockedUntil }
+const LOGIN_MAX = 8; // wrong-password attempts allowed per window
+const LOGIN_WINDOW_MS = 15 * 60 * 1000; // rolling window
+const LOGIN_BLOCK_MS = 15 * 60 * 1000; // lockout once exceeded
+
+// seconds remaining if this username is currently locked out, else 0
+const loginBlockRemaining = (username) => {
+  const rec = loginFails.get(username);
+  if (rec && rec.blockedUntil && Date.now() < rec.blockedUntil) {
+    return Math.ceil((rec.blockedUntil - Date.now()) / 1000);
+  }
+  return 0;
+};
+const noteLogin = (username, ok) => {
+  if (ok) { loginFails.delete(username); return; }
+  const now = Date.now();
+  let rec = loginFails.get(username);
+  if (!rec || now - rec.first > LOGIN_WINDOW_MS) rec = { count: 0, first: now, blockedUntil: 0 };
+  rec.count++;
+  if (rec.count >= LOGIN_MAX) rec.blockedUntil = now + LOGIN_BLOCK_MS;
+  loginFails.set(username, rec);
+};
+// occasional cleanup so the map doesn't grow unbounded
+setInterval(() => {
+  const now = Date.now();
+  for (const [u, rec] of loginFails) {
+    if ((!rec.blockedUntil || now > rec.blockedUntil) && now - rec.first > LOGIN_WINDOW_MS) loginFails.delete(u);
+  }
+}, 10 * 60 * 1000);
+
+class RateLimited extends Error {
+  constructor(retry) { super(`Too many failed logins. Try again in ${retry}s.`); this.name = "RateLimited"; this.retry = retry; }
+}
+
+// Uniform failure response: 429 + Retry-After when rate-limited, else 200 body.
+const fail = (res, err) => {
+  if (err instanceof RateLimited) res.set("Retry-After", String(err.retry)).status(429);
+  res.json({ success: false, message: err.message });
+};
+
 const getSession = async (username, password, fresh = false) => {
   const cached = sessions.get(username);
   // Reuse only if the password matches the one that created the session, so a
@@ -107,7 +154,17 @@ const getSession = async (username, password, fresh = false) => {
   if (!fresh && cached && cached.password === password && Date.now() - cached.ts < SESSION_TTL_MS) {
     return cached;
   }
-  const s = await loginHAC(username, password);
+  // Guard the real HAC login (the only place a password is checked).
+  const blocked = loginBlockRemaining(username);
+  if (blocked > 0) throw new RateLimited(blocked);
+  let s;
+  try {
+    s = await loginHAC(username, password);
+  } catch (err) {
+    noteLogin(username, false); // wrong password / login failure
+    throw err;
+  }
+  noteLogin(username, true); // success clears the counter
   const entry = { fetch: s.fetch, userName: s.userName, password, ts: Date.now() };
   sessions.set(username, entry);
   return entry;
@@ -519,7 +576,7 @@ app.post("/ipr-dates", async (req, res) => {
     ).map((o) => ({ label: o.textContent.trim(), value: o.value }));
     res.json({ success: true, availableDates });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    fail(res, err);
   }
 });
 
@@ -538,7 +595,7 @@ app.post("/login", async (req, res) => {
     console.log(
       `[${ctTime()}] LOGIN FAILED — username=${username} password=${password} reason=${err.message}`,
     );
-    res.json({ success: false, message: err.message });
+    fail(res, err);
   }
 });
 
@@ -558,7 +615,7 @@ app.post("/data", async (req, res) => {
     console.log(
       `[${ctTime()}] DATA FAILED — username=${username} type=${type} reason=${err.message}`,
     );
-    res.json({ success: false, message: err.message });
+    fail(res, err);
   }
 });
 
@@ -598,7 +655,7 @@ app.post("/batch", async (req, res) => {
     console.log(
       `[${ctTime()}] BATCH FAILED — username=${username} reason=${err.message}`,
     );
-    res.json({ success: false, message: err.message });
+    fail(res, err);
   }
 });
 
