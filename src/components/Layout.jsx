@@ -11,6 +11,8 @@ const NAV = [
   { to: '/target', label: 'Targets', icon: 'target' },
   { section: 'Records' },
   { to: '/schedule', label: 'Schedule', icon: 'clock' },
+  { to: '/week', label: 'This Week', icon: 'agenda' },
+  { to: '/ipr', label: 'Interim Progress', icon: 'clipboard' },
   { to: '/transcript', label: 'Transcript', icon: 'scroll' },
   { to: '/attendance', label: 'Attendance', icon: 'calendar' },
   { section: 'More' },

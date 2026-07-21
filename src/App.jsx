@@ -9,6 +9,8 @@ import Grades from './views/Grades.jsx'
 import Gpa from './views/Gpa.jsx'
 import Target from './views/Target.jsx'
 import Schedule from './views/Schedule.jsx'
+import Week from './views/Week.jsx'
+import Ipr from './views/Ipr.jsx'
 import Rank from './views/Rank.jsx'
 import Transcript from './views/Transcript.jsx'
 import Attendance from './views/Attendance.jsx'
@@ -29,6 +31,8 @@ export default function App() {
           <Route path="/gpa" element={<Gpa />} />
           <Route path="/target" element={<Target />} />
           <Route path="/schedule" element={<Schedule />} />
+          <Route path="/week" element={<Week />} />
+          <Route path="/ipr" element={<Ipr />} />
           <Route path="/rank" element={<Rank />} />
           <Route path="/transcript" element={<Transcript />} />
           <Route path="/attendance" element={<Attendance />} />
