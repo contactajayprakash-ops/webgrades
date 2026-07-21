@@ -94,6 +94,30 @@ export function Empty({ children }) {
   return <div className="empty">{children}</div>
 }
 
+// Tiny inline-SVG trend line for a series of (nullable) numbers — e.g. a class's
+// Q1..Q4 grades. Colors green if the last point is up vs the first, red if down.
+export function Sparkline({ values, width = 76, height = 24, domain }) {
+  const pts = (values || []).map((v, i) => ({ v, i })).filter((p) => p.v != null)
+  if (pts.length < 2) return <span className="faint small">—</span>
+  const nums = pts.map((p) => p.v)
+  const lo = domain ? domain[0] : Math.min(...nums)
+  const hi = domain ? domain[1] : Math.max(...nums)
+  const span = hi - lo || 1
+  const n = (values.length - 1) || 1
+  const x = (i) => (i / n) * (width - 4) + 2
+  const y = (v) => height - 3 - ((v - lo) / span) * (height - 6)
+  const d = pts.map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ')
+  const first = pts[0].v, last = pts[pts.length - 1].v
+  const stroke = last > first ? 'var(--green-text)' : last < first ? 'var(--red-text)' : 'var(--text-faint)'
+  const lastP = pts[pts.length - 1]
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }} aria-hidden="true">
+      <path d={d} fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(lastP.i)} cy={y(lastP.v)} r="2.4" fill={stroke} />
+    </svg>
+  )
+}
+
 export function PageHead({ title, sub, children }) {
   return (
     <div className="page-head">

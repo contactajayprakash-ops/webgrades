@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
-import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner } from '../components/ui.jsx'
+import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner, Sparkline } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import {
   parseGrade, detectWeight, weightedGpa, unweightedGpa, roundGrade, liveSemesterAverage,
@@ -298,6 +298,7 @@ function Overview({ byQuarter, loading, prefs, edits }) {
           <tr>
             <th>Class</th><th>Weight</th>
             {QUARTERS.map((q) => <th key={q.value} className="num">{q.label}</th>)}
+            <th className="num">Trend</th>
           </tr>
         </thead>
         <tbody>
@@ -312,6 +313,9 @@ function Overview({ byQuarter, loading, prefs, edits }) {
                     {c.perQ[q.value] != null ? <GradeBadge value={c.perQ[q.value]} showLetter={false} /> : <span className="faint">—</span>}
                   </td>
                 ))}
+                <td className="num" style={{ minWidth: 84 }}>
+                  <Sparkline values={QUARTERS.map((q) => c.perQ[q.value] ?? null)} domain={[60, 100]} />
+                </td>
               </tr>
             )
           })}
@@ -322,6 +326,7 @@ function Overview({ byQuarter, loading, prefs, edits }) {
                 {quarterGpas[q.value] != null ? fmtGpa(quarterGpas[q.value]) : '—'}
               </td>
             ))}
+            <td />
           </tr>
         </tbody>
       </table>
