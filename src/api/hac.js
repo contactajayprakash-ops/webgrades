@@ -9,17 +9,11 @@
 // type ∈ class | schedule | rank | transcript | week | attendance | ipr
 // ============================================================
 
-const ENV_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const LS_KEY = 'wg_api_url';
-
-export function getApiUrl() {
-  return (localStorage.getItem(LS_KEY) || ENV_URL).replace(/\/+$/, '');
-}
-
-export function setApiUrl(url) {
-  if (url && url.trim()) localStorage.setItem(LS_KEY, url.trim());
-  else localStorage.removeItem(LS_KEY);
-}
+// All requests go to a SAME-ORIGIN path ("/api/…"); Vercel (prod) and Vite
+// (dev) proxy it to the real HAC backend server-side. This keeps the backend
+// URL out of the client bundle, the UI, and the browser's network tab — users
+// only ever see this app's own domain.
+const BASE = '/api';
 
 // The API logs into HAC fresh on every request. Hitting it concurrently makes
 // HAC reject the simultaneous logins ("Login failed"), so we funnel every call
@@ -36,7 +30,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function rawPost(path, body) {
   let res;
   try {
-    res = await fetch(getApiUrl() + path, {
+    res = await fetch(BASE + path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -97,5 +91,5 @@ export async function fetchBatch(creds, requests) {
 // Best-effort wake of a sleeping (Replit) server so the first real request
 // doesn't eat the cold-start. Never throws.
 export async function wake() {
-  try { await fetch(getApiUrl() + '/ping', { method: 'GET' }) } catch (_) {}
+  try { await fetch(BASE + "/ping", { method: 'GET' }) } catch (_) {}
 }

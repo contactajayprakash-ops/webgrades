@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/:path*", "destination": "https://hacbackend--AjayPrakash11.replit.app/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

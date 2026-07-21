@@ -1,16 +1,12 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
-import { getApiUrl, setApiUrl } from '../api/hac.js'
 import { ErrorBox } from './ui.jsx'
-import { Icon } from './icons.jsx'
 
 export default function Login() {
   const { login } = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(false)
-  const [showApi, setShowApi] = useState(false)
-  const [apiUrl, setApiUrlState] = useState(getApiUrl())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -21,7 +17,6 @@ export default function Login() {
       setError('Enter your HAC username and password.')
       return
     }
-    setApiUrl(apiUrl)
     setLoading(true)
     try {
       await login(username.trim(), password, remember)
@@ -81,28 +76,6 @@ export default function Login() {
           <button className="btn" disabled={loading} type="submit">
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
-
-          <button
-            type="button"
-            className="flex small faint"
-            style={{ background: 'none', border: 'none', alignSelf: 'center' }}
-            onClick={() => setShowApi((s) => !s)}
-          >
-            <Icon.settings width={14} height={14} /> API settings
-          </button>
-
-          {showApi && (
-            <div className="field">
-              <label>API base URL</label>
-              <input
-                className="input"
-                value={apiUrl}
-                onChange={(e) => setApiUrlState(e.target.value)}
-                placeholder="https://your-api.repl.co"
-              />
-              <span className="small faint">Saved in this browser. Change anytime after deploy.</span>
-            </div>
-          )}
         </form>
       </div>
     </div>
