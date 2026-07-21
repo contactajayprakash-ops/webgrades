@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useHacData } from '../hooks/useHacData.js'
 import { useGpaMetrics, GPA_METRICS, findMetric } from '../hooks/useGpaMetrics.js'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
-import { PageHead, Loading, Empty, GradeBadge } from '../components/ui.jsx'
+import { PageHead, Loading, Empty, GradeBadge, LastUpdated } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
 import { cleanCourseName, QUARTERS } from '../lib/courses.js'
@@ -138,7 +138,7 @@ function GpaCard() {
 }
 
 function CurrentClasses() {
-  const { peekData, dataVersion, sync, syncAll } = useAuth()
+  const { peekData, dataVersion, sync, syncAll, syncedAt } = useAuth()
   const updating = sync.phase === 'syncing'
 
   // Show the MOST RECENT quarter that actually has grades — the active quarter
@@ -162,11 +162,11 @@ function CurrentClasses() {
       <div className="row-between" style={{ padding: '16px 20px' }}>
         <div className="flex" style={{ alignItems: 'center', gap: 10 }}>
           <h3>Current grades{qLabel ? ` — ${qLabel}` : ''}</h3>
-          {updating && (
-            <span className="flex faint small" style={{ gap: 6, alignItems: 'center' }}>
-              <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> updating…
-            </span>
-          )}
+          {updating
+            ? <span className="flex faint small" style={{ gap: 6, alignItems: 'center' }}>
+                <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> updating…
+              </span>
+            : <LastUpdated at={syncedAt} />}
         </div>
         <div className="flex" style={{ gap: 8 }}>
           <button className="btn ghost sm" onClick={syncAll} disabled={updating} title="Re-check HAC for new grades">

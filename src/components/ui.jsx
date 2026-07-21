@@ -97,6 +97,43 @@ export function Empty({ children }) {
   return <div className="empty">{children}</div>
 }
 
+// A slim banner shown while the device is offline, so stale data is honest.
+export function OfflineBanner() {
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine === false)
+  useEffect(() => {
+    const on = () => setOffline(false), off = () => setOffline(true)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+  if (!offline) return null
+  return (
+    <div className="offline-banner">
+      <Icon.alert width={15} height={15} /> Offline — showing your last-synced grades.
+    </div>
+  )
+}
+
+// "grades as of 2m ago", ticking. `at` is a ms epoch (0 = never).
+function agoLabel(at, nowTs) {
+  if (!at) return 'not synced yet'
+  const s = Math.max(0, Math.round((nowTs - at) / 1000))
+  if (s < 45) return 'just now'
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.round(h / 24)}d ago`
+}
+export function LastUpdated({ at, prefix = 'Updated ' }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000)
+    return () => clearInterval(id)
+  }, [])
+  return <span className="small faint">{prefix}{agoLabel(at, now)}</span>
+}
+
 // Tiny inline-SVG trend line for a series of (nullable) numbers — e.g. a class's
 // Q1..Q4 grades. Colors green if the last point is up vs the first, red if down.
 export function Sparkline({ values, width = 76, height = 24, domain }) {

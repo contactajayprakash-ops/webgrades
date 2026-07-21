@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Icon } from './icons.jsx'
+import { OfflineBanner } from './ui.jsx'
 import ProfileSwitcher from './ProfileSwitcher.jsx'
 
 const NAV = [
@@ -69,6 +70,7 @@ export default function Layout() {
         </div>
         {/* key by account so switching profiles remounts the views with fresh state */}
         <main className="main" key={activeUsername}>
+          <OfflineBanner />
           <Outlet />
         </main>
       </div>

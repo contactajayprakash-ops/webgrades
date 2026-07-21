@@ -9,6 +9,16 @@ const STORE_KEY = 'wg_session' // legacy single-session (migrated to profiles)
 const PROFILES_KEY = 'wg_profiles'
 const ACTIVE_KEY = 'wg_active'
 const dataKeyFor = (username) => `wg_data_${username}`
+const syncedKeyFor = (username) => `wg_synced_${username}`
+
+// When a full sync last completed for this account (ms epoch), so we can show
+// "grades as of Xm ago" — persisted so it survives reloads and shows honestly
+// while offline.
+function loadSyncedAt(username) {
+  if (!username) return 0
+  const v = Number(localStorage.getItem(syncedKeyFor(username)))
+  return Number.isFinite(v) ? v : 0
+}
 
 function loadProfiles() {
   try {
@@ -123,6 +133,7 @@ export function AuthProvider({ children }) {
 
   // background sync state for the toast
   const [sync, setSync] = useState({ phase: 'idle', done: 0, total: 0, changes: [], initial: false })
+  const [syncedAt, setSyncedAt] = useState(() => loadSyncedAt(initialSession()?.username))
 
   const bump = useCallback(() => setDataVersion((v) => v + 1), [])
 
@@ -196,6 +207,7 @@ export function AuthProvider({ children }) {
     setSync({ phase: 'syncing', done: 0, total, changes: [], initial })
     const changes = []
     let done = 0
+    let fetched = 0 // how many resources actually refreshed (0 = total failure, e.g. offline)
     for (const wave of waves) {
       if (syncGen.current !== myGen) return // superseded by an account switch
       const olds = wave.map(([t, e]) => acct.get(keyOf(t, e)))
@@ -223,6 +235,7 @@ export function AuthProvider({ children }) {
         if (gotByKey[key] !== undefined) {
           acct.set(key, gotByKey[key])
           changes.push(...diffResource(type, extra, olds[i], gotByKey[key]))
+          fetched++
         }
       })
       persistCache(username)
@@ -231,6 +244,13 @@ export function AuthProvider({ children }) {
     }
     if (syncGen.current === myGen) {
       syncing.current = false
+      // Only stamp "synced" if something actually refreshed — a fully-failed
+      // sync (offline / server down) must not claim the data is fresh.
+      if (fetched > 0) {
+        const now = Date.now()
+        try { localStorage.setItem(syncedKeyFor(username), String(now)) } catch (_) {}
+        if (userRef.current === username) setSyncedAt(now)
+      }
       setSync({ phase: 'done', done: total, total, changes, initial })
     }
   }, [cacheFor, persistCache, getData, bump])
@@ -317,6 +337,9 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creds])
 
+  // Show the switched-to account's own last-synced time immediately.
+  useEffect(() => { setSyncedAt(loadSyncedAt(session?.username)) }, [session?.username])
+
   // An installed PWA (or a mobile tab) stays alive in the background — reopening
   // it resumes the page WITHOUT a reload, so the mount-time sync never re-runs.
   // Re-sync whenever the app becomes visible/focused again, so a reopen always
@@ -369,6 +392,7 @@ export function AuthProvider({ children }) {
     dataVersion,
     sync,
     syncAll,
+    syncedAt,
     dismissSync,
   }
 

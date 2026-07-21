@@ -553,6 +553,12 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   .cal-num { font-size: 12px; top: 5px; right: 7px; }
 }
 
+/* ---------- Offline banner ---------- */
+.offline-banner { display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange-text);
+  border: 1px solid color-mix(in srgb, var(--orange) 34%, transparent); border-radius: var(--radius-sm);
+  padding: 9px 14px; font-size: 13px; font-weight: 560; margin-bottom: 16px; box-shadow: var(--rim); }
+
 /* ---------- Install (Add to Home Screen) prompt ---------- */
 .install-backdrop { position: fixed; inset: 0; z-index: 210; background: rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); animation: fadein .25s ease; }
