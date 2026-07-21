@@ -27,6 +27,8 @@ export default function Grades() {
     return init
   })
   const [loading, setLoading] = useState({})
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState('name') // 'name' | 'high' | 'low'
   const prefs = loadPrefs(activeUsername)
 
   const loadQuarter = useCallback(async (q, force = false) => {
@@ -79,18 +81,29 @@ export default function Grades() {
 
       <WhatIfBanner />
 
-      <div className="seg mb-3" style={{ flexWrap: 'wrap' }}>
-        {QUARTERS.map((q) => (
-          <button key={q.value} className={tab === q.value ? 'active' : ''} onClick={() => setTab(q.value)}>{q.label}</button>
-        ))}
-        <button className={tab === 'all' ? 'active' : ''} onClick={() => setTab('all')}>All quarters</button>
+      <div className="row-between mb-3" style={{ gap: 12, flexWrap: 'wrap' }}>
+        <div className="seg" style={{ flexWrap: 'wrap' }}>
+          {QUARTERS.map((q) => (
+            <button key={q.value} className={tab === q.value ? 'active' : ''} onClick={() => setTab(q.value)}>{q.label}</button>
+          ))}
+          <button className={tab === 'all' ? 'active' : ''} onClick={() => setTab('all')}>All quarters</button>
+        </div>
+        <div className="flex" style={{ gap: 8 }}>
+          <input className="input" type="search" placeholder="Search classes…" value={query}
+            onChange={(e) => setQuery(e.target.value)} aria-label="Search classes" style={{ width: 180, height: 38 }} />
+          <select className="select" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort classes" style={{ height: 38 }}>
+            <option value="name">Sort: Name</option>
+            <option value="high">Sort: Grade ↓</option>
+            <option value="low">Sort: Grade ↑</option>
+          </select>
+        </div>
       </div>
 
       {tab === 'all'
-        ? <Overview byQuarter={byQuarter} loading={loading} prefs={prefs} edits={edits} />
+        ? <Overview byQuarter={byQuarter} loading={loading} prefs={prefs} edits={edits} query={query} sort={sort} />
         : <QuarterView
             quarter={tab} byQuarter={byQuarter} loading={loading} prefs={prefs}
-            edits={edits} setEdit={setEdit} whatIfCount={whatIfCount}
+            edits={edits} setEdit={setEdit} whatIfCount={whatIfCount} query={query} sort={sort}
             onRetry={() => loadQuarter(tab, true)}
           />}
     </>
@@ -121,18 +134,27 @@ function semesterGpa(byQuarter, semQuarters, edits, prefs) {
   return { w: weightedGpa(rows).gpa, u: unweightedGpa(rows).gpa }
 }
 
-function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry }) {
+function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry, query = '', sort = 'name' }) {
   const state = byQuarter[quarter]
   if (loading[quarter] || state === undefined) return <Loading label={`Loading ${QUARTERS.find((q) => q.value === quarter)?.label}…`} />
   if (state.error) return <ErrorBox message={state.error} onRetry={onRetry} />
-  const classes = state.classes || []
-  if (!classes.length) return <Empty>No classes found for this quarter.</Empty>
+  const allClasses = state.classes || []
+  if (!allClasses.length) return <Empty>No classes found for this quarter.</Empty>
+
+  // search + sort applied to the class cards (GPA impact still uses all classes)
+  const q = query.trim().toLowerCase()
+  const avgOf = (c) => effectiveAverage(quarter, c, edits).avg ?? -1
+  const classes = allClasses
+    .filter((c) => !q || cleanCourseName(c.courseName).toLowerCase().includes(q))
+    .sort((a, b) => sort === 'name'
+      ? cleanCourseName(a.courseName).localeCompare(cleanCourseName(b.courseName))
+      : sort === 'high' ? avgOf(b) - avgOf(a) : avgOf(a) - avgOf(b))
 
   const sem = SEMESTERS.find((s) => s.id === semesterOfQuarter(quarter))
   const noEdits = {} // baseline (real grades)
 
-  const curQ = quarterGpa(classes, quarter, edits, prefs)
-  const baseQ = quarterGpa(classes, quarter, noEdits, prefs)
+  const curQ = quarterGpa(allClasses, quarter, edits, prefs)
+  const baseQ = quarterGpa(allClasses, quarter, noEdits, prefs)
   const curS = semesterGpa(byQuarter, sem.quarters, edits, prefs)
   const baseS = semesterGpa(byQuarter, sem.quarters, noEdits, prefs)
   const semReady = sem.quarters.every((q) => byQuarter[q] && !byQuarter[q].error)
@@ -153,9 +175,11 @@ function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatI
         </div>
       </div>
 
-      {classes.map((c, i) => (
-        <ClassCard key={i} quarter={quarter} course={c} edits={edits} setEdit={setEdit} prefs={prefs} defaultOpen={classes.length <= 2} />
-      ))}
+      {classes.length === 0
+        ? <Empty>No classes match “{query}”.</Empty>
+        : classes.map((c, i) => (
+            <ClassCard key={c.courseName || i} quarter={quarter} course={c} edits={edits} setEdit={setEdit} prefs={prefs} defaultOpen={classes.length <= 2} />
+          ))}
     </div>
   )
 }
@@ -268,7 +292,7 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
 }
 
 // All-quarters matrix: class rows × Q1–Q4 averages (reflects what-if edits).
-function Overview({ byQuarter, loading, prefs, edits }) {
+function Overview({ byQuarter, loading, prefs, edits, query = '', sort = 'name' }) {
   const anyLoading = QUARTERS.some((q) => loading[q] || byQuarter[q.value] === undefined)
 
   const courses = useMemo(() => {
@@ -280,8 +304,14 @@ function Overview({ byQuarter, loading, prefs, edits }) {
         map.get(k).perQ[q.value] = roundGrade(effectiveAverage(q.value, c, edits).avg)
       }
     }
+    // latest available quarter grade drives grade-sort
+    const latest = (c) => { for (const q of ['4', '3', '2', '1']) if (c.perQ[q] != null) return c.perQ[q]; return -1 }
+    const qq = query.trim().toLowerCase()
     return Array.from(map.values())
-  }, [byQuarter, edits])
+      .filter((c) => !qq || c.name.toLowerCase().includes(qq))
+      .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name)
+        : sort === 'high' ? latest(b) - latest(a) : latest(a) - latest(b))
+  }, [byQuarter, edits, query, sort])
 
   if (anyLoading && courses.length === 0) return <Loading label="Loading all four quarters…" />
 
