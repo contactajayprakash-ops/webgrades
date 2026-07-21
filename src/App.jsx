@@ -17,7 +17,8 @@ import Settings from './views/Settings.jsx'
 export default function App() {
   const { isAuthed } = useAuth()
 
-  if (!isAuthed) return <Login />
+  // The install prompt shows for everyone — signed in or on the login screen.
+  if (!isAuthed) return (<><Login /><InstallPrompt /></>)
 
   return (
     <>

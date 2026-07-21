@@ -1,18 +1,26 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './icons.jsx'
 
-const SEEN_KEY = 'wg_pwa_prompt_seen'
+// Load counter (new key = every existing user is reset and sees the prompt again).
+const LOADS_KEY = 'wg_pwa_loads'
+// Guards the count/show so it happens once per page load (survives StrictMode's
+// double-invoke and the login->authed remount; resets on a real reload).
+let ranThisLoad = false
 
 const isIos = () => /iphone|ipod|ipad/i.test(navigator.userAgent || '')
-// Already launched from the home screen? Then don't prompt.
+// Already launched from the home screen? Then never prompt.
 const isStandalone = () =>
   window.navigator.standalone === true ||
   window.matchMedia?.('(display-mode: standalone)')?.matches === true
 
+// Show on the 1st and 2nd load; if they keep not installing, re-nudge every
+// 4th load after that (6, 10, 14, …). Stops for good once launched standalone.
+const shouldShowOnLoad = (n) => n <= 2 || (n - 2) % 4 === 0
+
 // First-load nudge to install WebGrades as a home-screen app. On iOS Safari
 // there's no programmatic install, so we show the Share -> Add to Home Screen
 // steps. On Android/desktop Chrome we capture beforeinstallprompt for a real
-// one-tap install. Dismissible ("Never mind") and shown at most once.
+// one-tap install.
 export default function InstallPrompt() {
   const [show, setShow] = useState(false)
   const [deferred, setDeferred] = useState(null) // Android/Chrome install event
@@ -20,9 +28,15 @@ export default function InstallPrompt() {
 
   useEffect(() => {
     if (isStandalone()) return
-    let seen = false
-    try { seen = !!localStorage.getItem(SEEN_KEY) } catch (_) {}
-    if (seen) return
+    if (ranThisLoad) return // count/decide exactly once per page load
+    ranThisLoad = true
+
+    let n = 1
+    try {
+      n = (parseInt(localStorage.getItem(LOADS_KEY) || '0', 10) || 0) + 1
+      localStorage.setItem(LOADS_KEY, String(n))
+    } catch (_) {}
+    if (!shouldShowOnLoad(n)) return
 
     if (ios) {
       // iOS gives no install event — show the instructional prompt shortly after load.
@@ -35,10 +49,9 @@ export default function InstallPrompt() {
     return () => window.removeEventListener('beforeinstallprompt', onPrompt)
   }, [ios])
 
-  const dismiss = () => {
-    setShow(false)
-    try { localStorage.setItem(SEEN_KEY, '1') } catch (_) {}
-  }
+  // "Never mind" just closes for this load — the load counter drives whether it
+  // comes back (first two loads, then every fourth), so we don't set a flag.
+  const dismiss = () => setShow(false)
 
   const install = async () => {
     if (!deferred) return
