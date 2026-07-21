@@ -13,6 +13,7 @@ export default function Target() {
       <PageHead title="Targets" sub="Work backwards from a goal to the grades you actually need." />
       <div className="grid" style={{ gridTemplateColumns: '1fr', gap: 18 }}>
         <GpaGoal />
+        <ExamGoal />
         <ClassGoal />
       </div>
     </>
@@ -122,6 +123,51 @@ function NeedCell({ weight, grade }) {
   )
 }
 
+// ---- Final-exam calculator: what do I need on the exam? ----
+// final = current*(1 - w) + exam*w  ->  exam = (desired - current*(1 - w)) / w
+function ExamGoal() {
+  const [current, setCurrent] = useState('')
+  const [weight, setWeight] = useState('20')
+  const [desired, setDesired] = useState('')
+
+  const cur = parseFloat(current), w = parseFloat(weight) / 100, des = parseFloat(desired)
+  const valid = cur >= 0 && w > 0 && w <= 1 && des >= 0
+  const needed = valid ? (des - cur * (1 - w)) / w : null
+
+  return (
+    <div className="card card-pad">
+      <h3 className="mb-3">Final-exam goal</h3>
+      <p className="small faint" style={{ marginTop: 0 }}>
+        Know your average before the exam and how much the exam counts? See what you need on it.
+      </p>
+      <div className="flex flex-wrap mt-3" style={{ gap: 14, alignItems: 'flex-end' }}>
+        <Field label="Current average">
+          <input className="input" type="number" step="0.5" placeholder="e.g. 92" value={current}
+            onChange={(e) => setCurrent(e.target.value)} style={{ width: 130 }} />
+        </Field>
+        <Field label="Exam is worth (%)">
+          <input className="input" type="number" step="5" placeholder="e.g. 20" value={weight}
+            onChange={(e) => setWeight(e.target.value)} style={{ width: 130 }} />
+        </Field>
+        <Field label="Grade you want">
+          <input className="input" type="number" step="1" placeholder="e.g. 90" value={desired}
+            onChange={(e) => setDesired(e.target.value)} style={{ width: 130 }} />
+        </Field>
+      </div>
+
+      {needed != null && (
+        <div className="notice mt-3">
+          {needed > 100
+            ? `You'd need ${round2(needed)}% on the exam to finish with a ${des}% — not reachable if the exam maxes at 100.`
+            : needed <= 0
+              ? `You're set — even a 0 on the exam keeps you at or above ${des}%.`
+              : `Score ${round2(needed)}% on the final to finish the class with a ${des}%.`}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---- Class grade goal: what do I need on the next assignment? ----
 function ClassGoal() {
   const { peekData, dataVersion } = useAuth()
@@ -140,17 +186,26 @@ function ClassGoal() {
   const [pts, setPts] = useState('100')
   const course = classes[Math.min(idx, classes.length - 1)]
 
-  const { earned, possible, avg } = useMemo(() => {
-    if (!course) return { earned: 0, possible: 0, avg: null }
+  const { earned, possible, avg, cats } = useMemo(() => {
+    if (!course) return { earned: 0, possible: 0, avg: null, cats: null }
     let e = 0, p = 0
+    // per-category tallies so we can show Assessment (AOL) vs Progress averages
+    const acc = { assessment: { e: 0, p: 0, n: 0 }, progress: { e: 0, p: 0, n: 0 } }
     for (const a of course.assignments || []) {
       // real assignments have a real date; HAC's category-total rows don't
       if (!/\d{1,2}\/\d{1,2}\/\d{4}/.test(a.dateDue || '')) continue
       const s = parseGrade(a.grade), tp = parseGrade(a.totalPoints)
       if (s == null || tp == null || tp <= 0) continue
       e += s; p += tp
+      const cat = (a.category || '').toLowerCase()
+      const bucket = cat.includes('assessment') ? acc.assessment : cat.includes('progress') ? acc.progress : null
+      if (bucket) { bucket.e += s; bucket.p += tp; bucket.n += 1 }
     }
-    return { earned: e, possible: p, avg: parseGrade(course.overallAverage) }
+    const pct = (b) => (b.p > 0 ? (b.e / b.p) * 100 : null)
+    return {
+      earned: e, possible: p, avg: parseGrade(course.overallAverage),
+      cats: { assessment: { avg: pct(acc.assessment), n: acc.assessment.n }, progress: { avg: pct(acc.progress), n: acc.progress.n } },
+    }
   }, [course])
 
   const t = parseFloat(target), w = parseFloat(pts)
@@ -173,6 +228,12 @@ function ClassGoal() {
       <div className="flex flex-wrap mt-3" style={{ gap: 28 }}>
         <Stat label="Current average" value={avg != null ? avg + '%' : '—'} />
         <Stat label="Points so far" value={possible > 0 ? `${round2(earned)} / ${round2(possible)}` : '—'} />
+        {cats?.assessment?.avg != null && (
+          <Stat label={`Assessment avg (${cats.assessment.n})`} value={round2(cats.assessment.avg) + '%'} />
+        )}
+        {cats?.progress?.avg != null && (
+          <Stat label={`Progress avg (${cats.progress.n})`} value={round2(cats.progress.avg) + '%'} />
+        )}
       </div>
 
       <div className="flex flex-wrap mt-3" style={{ gap: 14, alignItems: 'flex-end' }}>
