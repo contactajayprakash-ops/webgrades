@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import { Icon } from './icons.jsx'
 
 function initials(name) {
@@ -18,6 +19,7 @@ export default function ProfileSwitcher() {
   const [error, setError] = useState(null)
 
   const close = () => { setOpen(false); setAdding(false); setError(null); setU(''); setP('') }
+  const trapRef = useFocusTrap(open, close)
 
   const submitAdd = async (e) => {
     e.preventDefault()
@@ -38,7 +40,7 @@ export default function ProfileSwitcher() {
       {open && <div className="profile-backdrop" onClick={close} />}
 
       {open && (
-        <div className="profile-pop card">
+        <div className="profile-pop card" ref={trapRef} role="dialog" aria-modal="true" aria-label="Accounts">
           <div className="profile-pop-label">Accounts</div>
           <div className="profile-list">
             {profiles.map((pr) => (

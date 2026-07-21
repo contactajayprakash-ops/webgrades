@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './icons.jsx'
+import { useFocusTrap } from '../hooks/useFocusTrap.js'
 
 // Load counter (new key = every existing user is reset and sees the prompt again).
 const LOADS_KEY = 'wg_pwa_loads'
@@ -61,12 +62,14 @@ export default function InstallPrompt() {
     dismiss()
   }
 
+  const trapRef = useFocusTrap(show, dismiss)
+
   if (!show) return null
 
   return (
     <>
       <div className="install-backdrop" onClick={dismiss} />
-      <div className="install-sheet card" role="dialog" aria-label="Add WebGrades to your home screen">
+      <div className="install-sheet card" ref={trapRef} role="dialog" aria-modal="true" aria-label="Add WebGrades to your home screen">
         <div className="install-head">
           <span className="install-logo">W</span>
           <div>

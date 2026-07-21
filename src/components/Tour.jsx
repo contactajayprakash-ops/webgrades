@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useFocusTrap } from '../hooks/useFocusTrap.js'
 
 // A tiny, dependency-free guided tour. Each step targets an element by CSS
 // selector; we spotlight it (dim everything else) and float a tooltip beside it.
@@ -10,6 +11,7 @@ export default function Tour({ steps, onClose }) {
   const [rect, setRect] = useState(null)
   const step = steps[i]
   const last = i === steps.length - 1
+  const trapRef = useFocusTrap(true, onClose)
 
   // Scroll the target into view when the step changes.
   useLayoutEffect(() => {
@@ -67,7 +69,7 @@ export default function Tour({ steps, onClose }) {
   return createPortal(
     <div className="tour-root">
       {spot ? <div className="tour-spot" style={spot} /> : <div className="tour-dim" />}
-      <div className="tour-pop" style={popStyle}>
+      <div className="tour-pop" style={popStyle} ref={trapRef} role="dialog" aria-modal="true" aria-label="Guided walkthrough">
         <button className="tour-x" onClick={onClose} aria-label="Close tour">✕</button>
         <div className="tour-step-n">Step {i + 1} of {steps.length}</div>
         <div className="tour-title">{step.title}</div>

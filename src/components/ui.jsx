@@ -30,7 +30,10 @@ export function GradeBadge({ value, showLetter = true }) {
   const [flash, setFlash] = useState(null)
   useEffect(() => {
     const p = prev.current
-    if (p != null && value != null && Math.abs(value - p) > 1e-9) {
+    const reduced = typeof window !== 'undefined' &&
+      (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ||
+       document.documentElement.getAttribute('data-reduce-motion') === '1')
+    if (!reduced && p != null && value != null && Math.abs(value - p) > 1e-9) {
       setFlash(value > p ? 'up' : 'down')
       const t = setTimeout(() => setFlash(null), 1800)
       prev.current = value

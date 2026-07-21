@@ -43,7 +43,7 @@ export default function Rank() {
               Top {Math.max(1, Math.round((Number(data.rank) / Number(data.outOf)) * 100))}%
             </span>
           </div>
-          <div style={{ height: 12, background: 'var(--bg)', borderRadius: 20, overflow: 'hidden', border: '1px solid var(--border)' }}>
+          <div style={{ height: 12, background: 'var(--glass-flat)', borderRadius: 20, overflow: 'hidden', border: '1px solid var(--glass-border)' }}>
             <div style={{
               height: '100%',
               width: `${100 - (Number(data.rank) / Number(data.outOf)) * 100}%`,

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useHacData } from '../hooks/useHacData.js'
 import { useGpaMetrics, GPA_METRICS, findMetric } from '../hooks/useGpaMetrics.js'
+import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import { PageHead, Loading, Empty, GradeBadge } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
@@ -70,6 +71,7 @@ function GpaCard() {
   const { activeUsername } = useAuth()
   const [metricId, setMetricId] = useState(() => loadPrefs(activeUsername).dashboard?.gpaMetric || null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const menuTrapRef = useFocusTrap(menuOpen, () => setMenuOpen(false))
   const metric = findMetric(metricId)
   const m = useGpaMetrics(metric?.period || 'year')
 
@@ -107,7 +109,7 @@ function GpaCard() {
         <span className="meta">{meta}</span>
       </Link>
 
-      <button className="card-edit" title="Choose what this shows"
+      <button className="card-edit" title="Choose what this shows" aria-label="Choose what this card shows"
         onClick={(e) => { e.preventDefault(); setMenuOpen((o) => !o) }}>
         <Icon.edit width={15} height={15} />
       </button>
@@ -115,7 +117,7 @@ function GpaCard() {
       {menuOpen && (
         <>
           <div className="profile-backdrop" onClick={() => setMenuOpen(false)} />
-          <div className="card card-menu">
+          <div className="card card-menu" ref={menuTrapRef} role="dialog" aria-modal="true" aria-label="Pick a GPA to show">
             <div className="menu-head">Show on this card</div>
             <button className={`menu-item ${!metricId ? 'active' : ''}`} onClick={() => choose(null)}>
               <span className="mi-text"><span className="mi-name">Just a link</span><span className="mi-sub">Opens the GPA page</span></span>
