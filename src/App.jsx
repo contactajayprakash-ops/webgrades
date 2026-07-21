@@ -3,6 +3,7 @@ import { useAuth } from './context/AuthContext.jsx'
 import Login from './components/Login.jsx'
 import Layout from './components/Layout.jsx'
 import SyncToast from './components/SyncToast.jsx'
+import InstallPrompt from './components/InstallPrompt.jsx'
 import Dashboard from './views/Dashboard.jsx'
 import Grades from './views/Grades.jsx'
 import Gpa from './views/Gpa.jsx'
@@ -35,6 +36,7 @@ export default function App() {
         </Route>
       </Routes>
       <SyncToast />
+      <InstallPrompt />
     </>
   )
 }

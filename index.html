@@ -4,8 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
     <link rel="mask-icon" href="/favicon.svg?v=3" color="#4aa9ff" />
-    <link rel="apple-touch-icon" href="/favicon.svg?v=3" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+
+    <!-- PWA: makes "Add to Home Screen" open a standalone, app-like window -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="WebGrades" />
     <meta name="theme-color" content="#eef0f5" />
     <script>
       // Apply the saved theme before first paint so there's no flash. Light is
