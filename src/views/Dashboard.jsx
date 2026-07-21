@@ -31,12 +31,12 @@ function greeting(name) {
   if (name.includes(',')) {
     const parts = name.split(',')
     const firstName = parts[1].trim().split(/\s+/)[0]
-    return `Hey, ${firstName} 👋`
+    return `Hey, ${firstName}`
   }
-  
+
   // Fallback for standard "First Last" formatting
   const first = name.trim().split(/\s+/)[0]
-  return first ? `Hey, ${first} 👋` : 'Dashboard'
+  return first ? `Hey, ${first}` : 'Dashboard'
 }
 
 // Shows a GPA shortcut (with an editable pinned number) + official rank/GPA.
