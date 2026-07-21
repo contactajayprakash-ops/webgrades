@@ -359,6 +359,9 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.994);
 .assignment-row .a-name { font-size: 14px; font-weight: 540; }
 .assignment-row .a-meta { font-size: 12px; color: var(--text-faint); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
 .pill { background: var(--glass-2); border: 1px solid var(--glass-border); padding: 2px 10px; border-radius: var(--pill); font-size: 11px; color: var(--text-dim); }
+.pill-new { margin-left: 8px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-text);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+tr.row-new { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 
 /* ---------- Table ---------- */
 .table { width: 100%; border-collapse: collapse; font-size: 14px; position: relative; z-index: 1; }

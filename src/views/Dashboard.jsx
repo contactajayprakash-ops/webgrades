@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useHacData } from '../hooks/useHacData.js'
@@ -9,6 +9,7 @@ import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
 import { cleanCourseName, QUARTERS } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
+import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
 
 export default function Dashboard() {
   const { userName } = useAuth()
@@ -138,7 +139,7 @@ function GpaCard() {
 }
 
 function CurrentClasses() {
-  const { peekData, dataVersion, sync, syncAll, syncedAt } = useAuth()
+  const { peekData, dataVersion, sync, syncAll, syncedAt, activeUsername } = useAuth()
   const updating = sync.phase === 'syncing'
 
   // Show the MOST RECENT quarter that actually has grades — the active quarter
@@ -153,6 +154,20 @@ function CurrentClasses() {
     return { quarter: null, classes: peekData('class', {})?.assignmentsData || [] }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peekData, dataVersion])
+
+  // "New since your last visit": diff current averages against the last-seen
+  // snapshot. First-ever visit seeds the snapshot silently (no noise).
+  const [seen, setSeen] = useState(() => loadSeen(activeUsername))
+  useEffect(() => {
+    if (classes.length && seen === null) {
+      const snap = snapshotOf(classes)
+      saveSeen(activeUsername, snap)
+      setSeen(snap)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classes.length])
+  const changed = useMemo(() => new Set(changedSince(seen, classes)), [seen, classes])
+  const markSeen = () => { const snap = snapshotOf(classes); saveSeen(activeUsername, snap); setSeen(snap) }
 
   const qLabel = quarter ? QUARTERS.find((x) => x.value === quarter)?.label : null
   const loading = classes.length === 0 && updating
@@ -175,6 +190,12 @@ function CurrentClasses() {
           <Link to="/grades" className="btn ghost sm">View all <Icon.chevron width={14} height={14} /></Link>
         </div>
       </div>
+      {changed.size > 0 && (
+        <div className="notice row-between" style={{ margin: '0 20px 8px', gap: 12 }}>
+          <span>{changed.size} grade{changed.size > 1 ? 's' : ''} changed since your last visit.</span>
+          <button className="btn ghost sm" onClick={markSeen}>Mark seen</button>
+        </div>
+      )}
       {loading && <Loading label="Loading classes…" />}
       {!loading && classes.length === 0 && <Empty>No current classes found.</Empty>}
       {classes.length > 0 && (
@@ -184,8 +205,8 @@ function CurrentClasses() {
           </thead>
           <tbody>
             {classes.map((c, i) => (
-              <tr key={i}>
-                <td>{cleanCourseName(c.courseName)}</td>
+              <tr key={i} className={changed.has(c.courseName) ? 'row-new' : ''}>
+                <td>{cleanCourseName(c.courseName)}{changed.has(c.courseName) && <span className="pill pill-new">new</span>}</td>
                 <td className="faint small">{(c.assignments?.length || 0)} assignments</td>
                 <td className="num"><GradeBadge value={parseGrade(c.overallAverage)} /></td>
               </tr>
