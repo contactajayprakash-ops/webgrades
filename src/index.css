@@ -556,6 +556,15 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   .cal-num { font-size: 12px; top: 5px; right: 7px; }
 }
 
+/* ---------- Schedule (A-day / B-day) ---------- */
+.sched-list { display: flex; flex-direction: column; }
+.sched-row { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-top: 1px solid var(--hairline); }
+.sched-row:first-child { border-top: none; }
+.sched-period { min-width: 30px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 740; font-size: 19px;
+  color: var(--accent-text); flex-shrink: 0; }
+.sched-body { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.sched-class { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---------- Offline banner ---------- */
 .offline-banner { display: flex; align-items: center; justify-content: center; gap: 8px;
   background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange-text);
