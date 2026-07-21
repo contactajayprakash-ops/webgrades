@@ -1,6 +1,7 @@
 import { useHacData } from '../hooks/useHacData.js'
 import { PageHead, Loading, ErrorBox, Empty } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
+import { courseNameFromCode } from '../lib/courseCatalog.js'
 
 // Frisco runs an A-day / B-day block schedule, and HAC lists every class up to
 // FOUR times: once per A/B day AND once per semester section (course code ends
@@ -35,9 +36,12 @@ function buildDay(rows, day) {
   const groups = new Map()
   for (const r of rows) {
     if (day && !dayHas(r.days, day)) continue
-    const label = stripSem(r.className)
+    const code = stripSem(r.className)
+    // Prefer the friendly catalog name ("Spanish 2"); fall back to the code.
+    const name = courseNameFromCode(r.className)
+    const label = name || code
     const key = `${r.period}|${label}`
-    if (!groups.has(key)) groups.set(key, { period: r.period, label, room: r.room, teacher: r.teacher, mps: new Set() })
+    if (!groups.has(key)) groups.set(key, { period: r.period, label, code: name ? code : null, room: r.room, teacher: r.teacher, mps: new Set() })
     if (r.markingPeriod) groups.get(key).mps.add(r.markingPeriod)
   }
   return [...groups.values()].sort((a, b) => periodRank(a.period) - periodRank(b.period))
@@ -89,7 +93,7 @@ function DayCard({ title, entries }) {
               <span className="sched-period">{e.period || '·'}</span>
               <span className="sched-body">
                 <span className="sched-class">{e.label}</span>
-                <span className="small faint">{[e.room && `Room ${e.room}`, e.teacher].filter(Boolean).join(' · ') || '—'}</span>
+                <span className="small faint">{[e.code, e.room && `Room ${e.room}`, e.teacher].filter(Boolean).join(' · ') || '—'}</span>
               </span>
               {sem && <span className="pill">{sem}</span>}
             </div>
