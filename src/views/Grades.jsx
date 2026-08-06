@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
 import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner, Sparkline } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
+import Segmented from '../components/Segmented.jsx'
 import {
   parseGrade, detectWeight, weightedGpa, unweightedGpa, roundGrade, liveSemesterAverage,
   fmtGpa, weightLabel, weightTagClass,
@@ -82,12 +83,13 @@ export default function Grades() {
       <WhatIfBanner />
 
       <div className="row-between mb-3" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <div className="seg" style={{ flexWrap: 'wrap' }}>
-          {QUARTERS.map((q) => (
-            <button key={q.value} className={tab === q.value ? 'active' : ''} onClick={() => setTab(q.value)}>{q.label}</button>
-          ))}
-          <button className={tab === 'all' ? 'active' : ''} onClick={() => setTab('all')}>All quarters</button>
-        </div>
+        <Segmented
+          style={{ flexWrap: 'wrap' }}
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Quarter"
+          options={[...QUARTERS.map((q) => ({ value: q.value, label: q.label })), { value: 'all', label: 'All quarters' }]}
+        />
         <div className="flex" style={{ gap: 8 }}>
           <input className="input" type="search" placeholder="Search classes…" value={query}
             onChange={(e) => setQuery(e.target.value)} aria-label="Search classes" style={{ width: 180, height: 38 }} />
