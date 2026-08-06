@@ -259,7 +259,9 @@ input, select { font-family: inherit; }
 .sidebar-search input::placeholder { color: var(--text-faint); }
 
 /* ----- Nav rows ----- */
-.nav-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; margin: 0 -4px; padding: 0 4px; }
+/* min-height:0 lets this flex child actually shrink + scroll, so the profile
+   switcher pinned below it never gets pushed off-screen (mobile sheet). */
+.nav-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: 0 -4px; padding: 0 4px; }
 .nav-scroll::-webkit-scrollbar { width: 0; }
 .nav-link {
   display: flex; align-items: center; gap: 11px;
@@ -614,6 +616,10 @@ html[data-theme="light"] .seg-indicator { background: #ffffff; }
   .main { padding: 8px 18px 120px; }
   .page-head { padding: 8px 2px 16px; }
   .page-head h1 { font-size: var(--t-title1); }
+
+  /* Lift the sync toast clear of the floating tab bar (tab bar sits at
+     14px + safe-area and is ~62px tall) so it never hides behind it. */
+  .sync-toast { left: 14px; right: 14px; bottom: calc(92px + env(safe-area-inset-bottom)); max-width: none; }
 
   /* Floating Liquid Glass tab bar */
   .tab-bar {
