@@ -279,9 +279,9 @@ input, select { font-family: inherit; }
 
 /* ----- Collapsed "slim" rail (iPad-style) ----- */
 .sidebar.slim { width: 76px; padding-left: 10px; padding-right: 10px; }
-.sidebar.slim .sidebar-head { justify-content: center; }
+/* stack logo + the expand button so there's always a way back out */
+.sidebar.slim .sidebar-head { flex-direction: column; justify-content: center; gap: 10px; }
 .sidebar.slim .brand { padding: 0; }
-.sidebar.slim .s-actions { display: none; }
 .sidebar.slim .nav-link { justify-content: center; padding: 10px 0; }
 .sidebar.slim .nav-link.active { background: var(--fill-2); }
 .sidebar { transition: width .3s var(--ease); }
