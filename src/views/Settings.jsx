@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { PageHead } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
+import Segmented from '../components/Segmented.jsx'
 import { ACCENTS, loadTheme, saveTheme } from '../lib/theme.js'
 
 export default function Settings() {
@@ -26,10 +27,13 @@ export default function Settings() {
 
           <div className="field">
             <label>Theme</label>
-            <div className="seg" style={{ marginTop: 4, alignSelf: 'flex-start' }}>
-              <button className={theme.theme === 'dark' ? 'active' : ''} onClick={() => update({ theme: 'dark' })}>Dark</button>
-              <button className={theme.theme === 'light' ? 'active' : ''} onClick={() => update({ theme: 'light' })}>Light</button>
-            </div>
+            <Segmented
+              style={{ marginTop: 4, alignSelf: 'flex-start' }}
+              value={theme.theme}
+              onChange={(v) => update({ theme: v })}
+              ariaLabel="Theme"
+              options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]}
+            />
           </div>
 
           <div className="field mt-3">

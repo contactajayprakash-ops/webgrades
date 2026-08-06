@@ -4,6 +4,7 @@ import { useWhatIf } from '../context/WhatIfContext.jsx'
 import { PageHead, Loading, ErrorBox, Empty, WhatIfBanner } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Tour from '../components/Tour.jsx'
+import Segmented from '../components/Segmented.jsx'
 import {
   detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
   WEIGHT_OPTIONS, weightTagClass, weightLabel,
@@ -181,11 +182,13 @@ export default function Gpa() {
       <WhatIfBanner />
 
       {/* time-period axis */}
-      <div className="seg mb-3">
-        {PERIODS.map((p) => (
-          <button key={p.id} className={period === p.id ? 'active' : ''} onClick={() => setPeriod(p.id)}>{p.label}</button>
-        ))}
-      </div>
+      <Segmented
+        className="mb-3"
+        value={period}
+        onChange={setPeriod}
+        ariaLabel="Time period"
+        options={PERIODS.map((p) => ({ value: p.id, label: p.label }))}
+      />
 
       {/* dual headline cards — click to choose which breakdown shows */}
       <div className="grid grid-2 mb-3">
