@@ -752,3 +752,10 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .profile-add { display: flex; flex-direction: column; gap: 8px; padding: 6px 6px 4px; }
 .profile-add .input { padding: 9px 11px; font-size: var(--t-footnote); border-radius: 10px; }
 .profile-err { background: color-mix(in srgb, var(--red) 12%, transparent); border: 0.5px solid color-mix(in srgb, var(--red) 30%, transparent); color: var(--red-text); padding: 7px 10px; border-radius: 9px; font-size: var(--t-caption); }
+
+/* Focus: the default outline clipped weirdly inside the scrolling account list
+   (that stray L-shape on the first row when the menu auto-focuses it). Drop it
+   for mouse/programmatic focus; keep a clean Apple ring for keyboard users. */
+.profile-row-main, .profile-remove, .profile-action, .menu-item { outline: none; }
+.profile-row:has(.profile-row-main:focus-visible) { box-shadow: inset 0 0 0 2px var(--accent); }
+.profile-remove:focus-visible, .profile-action:focus-visible, .menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
