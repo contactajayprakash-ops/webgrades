@@ -32,6 +32,7 @@
   --mat-regular: rgba(30, 30, 32, 0.58);
   --mat-thin: rgba(40, 40, 44, 0.40);
   --mat-chrome: rgba(22, 22, 24, 0.62);
+  --menu-bg: rgba(38, 38, 40, 0.97);   /* popovers/menus: frosted but content-hiding */
   --glass: var(--mat-regular);
   --glass-2: rgba(58, 58, 62, 0.55);
   --glass-flat: rgba(255, 255, 255, 0.06);
@@ -110,6 +111,7 @@ html[data-theme="light"] {
   --mat-regular: rgba(255, 255, 255, 0.68);
   --mat-thin: rgba(255, 255, 255, 0.52);
   --mat-chrome: rgba(246, 246, 248, 0.72);
+  --menu-bg: rgba(250, 250, 251, 0.97);
   --glass: var(--mat-regular);
   --glass-2: rgba(255, 255, 255, 0.86);
   --glass-flat: rgba(0, 0, 0, 0.04);
@@ -333,8 +335,8 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.992);
 .stat-pick:hover .card-edit { opacity: 1; }
 .card-edit:hover { color: var(--text); background: var(--fill-1); }
 .card-menu { position: absolute; z-index: 57; top: 48px; right: 0; width: 264px; padding: 6px;
-  background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
-  border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--rim), var(--drop-lg);
+  background: var(--menu-bg); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
+  border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--drop-lg);
   display: flex; flex-direction: column; gap: 1px; animation: popin .28s var(--spring) backwards; max-height: 340px; overflow-y: auto; }
 .card-menu .menu-head { font-size: var(--t-caption2); text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); font-weight: 600; padding: 8px 10px 5px; }
 .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 9px;
@@ -724,12 +726,13 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .profile-caret.open { transform: rotate(-90deg); }
 .profile-backdrop { position: fixed; inset: 0; z-index: 55; }
 .profile-switch .profile-pop { position: absolute; z-index: 56; bottom: calc(100% + 10px); left: 0; right: 0; padding: 7px;
-  background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
-  border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--rim), var(--drop-lg);
+  background: var(--menu-bg); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
+  border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--drop-lg);
   display: flex; flex-direction: column; gap: 2px; animation: popin .28s var(--spring) backwards; max-height: min(76vh, 620px); }
-.profile-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1 1 auto; margin: 0 -2px; padding: 0 2px; }
-.profile-list::-webkit-scrollbar { width: 8px; }
-.profile-list::-webkit-scrollbar-thumb { background: var(--fill-2); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+.profile-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1 1 auto; margin: 0 -2px; padding: 0 2px;
+  scrollbar-width: thin; scrollbar-color: var(--fill-3) transparent; }
+.profile-list::-webkit-scrollbar { width: 7px; }
+.profile-list::-webkit-scrollbar-thumb { background: var(--fill-3); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
 .profile-pop-label { font-size: var(--t-caption2); text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); font-weight: 600; padding: 6px 10px 4px; }
 .profile-row { display: flex; align-items: center; border-radius: 11px; transition: background .15s; }
 .profile-row:hover { background: var(--fill-4); }
