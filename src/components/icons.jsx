@@ -31,6 +31,7 @@ export const Icon = {
   target: (p) => (<svg {...base} {...p}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>),
   clipboard: (p) => (<svg {...base} {...p}><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>),
   agenda: (p) => (<svg {...base} {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/></svg>),
+  checklist: (p) => (<svg {...base} {...p}><path d="M10 6h10"/><path d="M10 12h10"/><path d="M10 18h10"/><path d="m3 6 1.4 1.4L7.2 4.6"/><path d="m3 12 1.4 1.4L7.2 10.6"/><path d="m3 18 1.4 1.4L7.2 16.6"/></svg>),
   search: (p) => (<svg {...base} {...p}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>),
   sidebar: (p) => (<svg {...base} {...p}><rect x="3" y="4" width="18" height="16" rx="2.5"/><line x1="9" y1="4" x2="9" y2="20"/></svg>),
   more: (p) => (<svg {...base} {...p}><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>),

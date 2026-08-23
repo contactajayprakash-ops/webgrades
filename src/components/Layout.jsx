@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Icon } from './icons.jsx'
@@ -10,6 +10,7 @@ const NAV = [
   { to: '/grades', label: 'Grades', icon: 'book' },
   { to: '/gpa', label: 'GPA', icon: 'calc' },
   { to: '/target', label: 'Targets', icon: 'target' },
+  { to: '/agenda', label: 'Agenda', icon: 'checklist', badge: 'New' },
   { section: 'Records' },
   { to: '/schedule', label: 'Schedule', icon: 'clock' },
   { to: '/week', label: 'This Week', icon: 'agenda' },
@@ -38,6 +39,19 @@ export default function Layout() {
   const [slim, setSlim] = useState(false)   // desktop collapsed rail
   const [q, setQ] = useState('')            // sidebar search filter
   const loc = useLocation()
+
+  // The "New" nav badge retires itself once the page has been opened once.
+  const [seenBadges, setSeenBadges] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('wg_nav_seen')) || {} } catch (_) { return {} }
+  })
+  useEffect(() => {
+    const hit = NAV.find((n) => n.to && n.badge && (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))
+    if (hit && !seenBadges[hit.to]) {
+      const next = { ...seenBadges, [hit.to]: true }
+      setSeenBadges(next)
+      try { localStorage.setItem('wg_nav_seen', JSON.stringify(next)) } catch (_) {}
+    }
+  }, [loc.pathname, seenBadges])
 
   const query = q.trim().toLowerCase()
   const links = NAV.filter((it) => it.to)
@@ -84,6 +98,7 @@ export default function Layout() {
             >
               {(() => { const C = Icon[item.icon]; return <C className="ico" width={22} height={22} /> })()}
               {!slim && <span className="nav-label">{item.label}</span>}
+              {!slim && item.badge && !seenBadges[item.to] && <span className="nav-badge">{item.badge}</span>}
             </NavLink>
           )
         )}
