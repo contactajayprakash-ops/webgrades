@@ -9,11 +9,16 @@
 // type ∈ class | schedule | rank | transcript | week | attendance | ipr
 // ============================================================
 
-// All requests go to a SAME-ORIGIN path ("/api/…"); Vercel (prod) and Vite
-// (dev) proxy it to the real HAC backend server-side. This keeps the backend
-// URL out of the client bundle, the UI, and the browser's network tab — users
-// only ever see this app's own domain.
-const BASE = '/api';
+// Requests go to a SAME-ORIGIN path ("/api/…") by default: the CloudFront
+// deploy has a /api/* behavior that proxies to the HAC backend server-side,
+// and Vite's dev proxy does the same locally. That keeps the backend URL out
+// of the client bundle entirely.
+//
+// Firebase Hosting can't proxy to an arbitrary external origin, so that build
+// sets VITE_API_BASE to CloudFront's absolute /api URL (see `build:firebase`)
+// and the calls go cross-origin. The backend answers preflights with
+// `Access-Control-Allow-Origin: *`, so this needs no server change.
+const BASE = import.meta.env.VITE_API_BASE || '/api';
 
 // The API logs into HAC fresh on every request. Hitting it concurrently makes
 // HAC reject the simultaneous logins ("Login failed"), so we funnel every call
