@@ -9,7 +9,7 @@ import {
   parseGrade, detectWeight, weightedGpa, unweightedGpa, roundGrade, liveSemesterAverage,
   fmtGpa, weightLabel, weightTagClass,
 } from '../lib/gpa.js'
-import { cleanCourseName, courseKey, QUARTERS, SEMESTERS, semesterOfQuarter } from '../lib/courses.js'
+import { cleanCourseName, courseKey, QUARTERS, SEMESTERS, semesterOfQuarter, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { editKey, classRows, effectiveAverage } from '../lib/whatif.js'
 import { loadPrefs } from '../lib/prefs.js'
 import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
@@ -77,14 +77,16 @@ export default function Grades() {
   // per-account snapshot the Dashboard also uses, so "Mark seen" stays in sync
   // between the two pages. Badges only apply to the most-recent quarter that has
   // grades (the grade-drop signal); older quarters rarely move.
+  // Enrolled-course whitelist from the schedule — drops dropped/phantom classes.
+  const schedWl = useMemo(() => scheduleWhitelist(peekData('schedule')?.scheduleData), [peekData, dataVersion])
   const { quarter: liveQuarter, classes: liveClasses } = useMemo(() => {
     for (const q of ['4', '3', '2', '1']) {
-      const list = peekData('class', { quarter: q })?.assignmentsData || []
+      const list = filterPhantomClasses(peekData('class', { quarter: q })?.assignmentsData || [], schedWl)
       if (list.some((c) => parseGrade(c.overallAverage) != null)) return { quarter: q, classes: list }
     }
     return { quarter: null, classes: [] }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [peekData, dataVersion])
+  }, [peekData, dataVersion, schedWl])
 
   const [seen, setSeen] = useState(() => loadSeen(activeUsername))
   useEffect(() => { setSeen(loadSeen(activeUsername)) }, [activeUsername])
@@ -139,12 +141,13 @@ export default function Grades() {
       </div>
 
       {tab === 'all'
-        ? <Overview byQuarter={byQuarter} loading={loading} prefs={prefs} edits={edits} query={query} sort={sort} newSet={changed} />
+        ? <Overview byQuarter={byQuarter} loading={loading} prefs={prefs} edits={edits} query={query} sort={sort} newSet={changed} wl={schedWl} />
         : <QuarterView
             quarter={tab} byQuarter={byQuarter} loading={loading} prefs={prefs}
             edits={edits} setEdit={setEdit} whatIfCount={whatIfCount} query={query} sort={sort}
             onRetry={() => loadQuarter(tab, true)}
             newSet={tab === liveQuarter ? changed : EMPTY_SET}
+            wl={schedWl}
           />}
     </>
   )
@@ -174,11 +177,11 @@ function semesterGpa(byQuarter, semQuarters, edits, prefs) {
   return { w: weightedGpa(rows).gpa, u: unweightedGpa(rows).gpa }
 }
 
-function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry, query = '', sort = 'name', newSet = EMPTY_SET }) {
+function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry, query = '', sort = 'name', newSet = EMPTY_SET, wl = null }) {
   const state = byQuarter[quarter]
   if (loading[quarter] || state === undefined) return <Loading label={`Loading ${QUARTERS.find((q) => q.value === quarter)?.label}…`} />
   if (state.error) return <ErrorBox message={state.error} onRetry={onRetry} />
-  const allClasses = state.classes || []
+  const allClasses = filterPhantomClasses(state.classes || [], wl)
   if (!allClasses.length) return <Empty>No classes found for this quarter.</Empty>
 
   // search + sort applied to the class cards (GPA impact still uses all classes)
@@ -332,13 +335,13 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew 
 }
 
 // All-quarters matrix: class rows × Q1–Q4 averages (reflects what-if edits).
-function Overview({ byQuarter, loading, prefs, edits, query = '', sort = 'name', newSet = EMPTY_SET }) {
+function Overview({ byQuarter, loading, prefs, edits, query = '', sort = 'name', newSet = EMPTY_SET, wl = null }) {
   const anyLoading = QUARTERS.some((q) => loading[q] || byQuarter[q.value] === undefined)
 
   const courses = useMemo(() => {
     const map = new Map()
     for (const q of QUARTERS) {
-      for (const c of byQuarter[q.value]?.classes || []) {
+      for (const c of filterPhantomClasses(byQuarter[q.value]?.classes || [], wl)) {
         const k = courseKey(c.courseName)
         if (!map.has(k)) map.set(k, { key: k, name: cleanCourseName(c.courseName), raw: c.courseName, perQ: {} })
         map.get(k).perQ[q.value] = roundGrade(effectiveAverage(q.value, c, edits).avg)
@@ -351,7 +354,7 @@ function Overview({ byQuarter, loading, prefs, edits, query = '', sort = 'name',
       .filter((c) => !qq || c.name.toLowerCase().includes(qq))
       .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name)
         : sort === 'high' ? latest(b) - latest(a) : latest(a) - latest(b))
-  }, [byQuarter, edits, query, sort])
+  }, [byQuarter, edits, query, sort, wl])
 
   if (anyLoading && courses.length === 0) return <Loading label="Loading all four quarters…" />
 

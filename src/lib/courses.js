@@ -25,6 +25,47 @@ export function courseKey(raw) {
     .trim()
 }
 
+// The leading course code both the Schedule (Course column) and the Classwork
+// heading start with, e.g. "FLG23200A" from "FLG23200A - 1 Spanish 3 Adv S1".
+// S1 and S2 of a year-long course carry different codes (…A vs …B), so this is a
+// precise per-semester key — and matching the code base (not the section number)
+// is robust to the two pages formatting the section slightly differently.
+export function courseCode(raw) {
+  const m = (raw || '').replace(/\s+/g, ' ').trim().match(/^([A-Za-z]+\d+[A-Za-z]?)\b/)
+  return m ? m[1].toUpperCase() : null
+}
+
+// Build the enrolled-course whitelist from the Schedule (the authoritative list;
+// dropped classes aren't on it). Keyed BOTH by code and by name so it matches
+// whether the schedule row exposes the code or just the description. Returns null
+// until the schedule has loaded, so callers skip filtering rather than hide data.
+export function scheduleWhitelist(scheduleData) {
+  if (!Array.isArray(scheduleData) || !scheduleData.length) return null
+  const codes = new Set(), keys = new Set()
+  for (const row of scheduleData) {
+    for (const field of [row?.className, row?.description]) {
+      if (!field) continue
+      const code = courseCode(field); if (code) codes.add(code)
+      const key = courseKey(field); if (key) keys.add(key)
+    }
+  }
+  return codes.size || keys.size ? { codes, keys } : null
+}
+
+// Drop "phantom" classes HAC's classwork lists that the student isn't really in
+// (e.g. a dropped class). SAFE by design: a class is removed only when it's off
+// the schedule AND has no real grade — so a class with actual grades is never
+// hidden even if the whitelist momentarily disagrees.
+export function filterPhantomClasses(classes, wl) {
+  if (!wl) return classes || []
+  return (classes || []).filter((c) => {
+    const code = courseCode(c.courseName)
+    if (code && wl.codes.has(code)) return true
+    if (wl.keys.has(courseKey(c.courseName))) return true
+    return parseGrade(c.overallAverage) != null
+  })
+}
+
 // "Other Foreign Language" credit-by-exam courses (OTHR FL1–4) are pass/fail
 // LOTE credit and don't count toward the weighted GPA, so "Select all graded"
 // skips them even when one happens to post a number grade. (Still manually

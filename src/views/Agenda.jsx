@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { PageHead, Empty } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
-import { cleanCourseName } from '../lib/courses.js'
+import { cleanCourseName, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { parseGrade } from '../lib/gpa.js'
 import {
   loadAgenda, saveAgenda, uid, dateKey, todayKey, addDays,
@@ -12,19 +12,25 @@ import {
 const GENERAL = 'General'
 
 export default function Agenda() {
-  const { peekData, dataVersion, activeUsername } = useAuth()
+  const { peekData, dataVersion, activeUsername, sync } = useAuth()
 
   // Your current classes drive the course picker (most recent quarter that has
   // one). Falls back to the default class view; "General" is always available.
+  // De-duplicated because HAC can list a course more than once.
   const courses = useMemo(() => {
+    const wl = scheduleWhitelist(peekData('schedule')?.scheduleData)
+    let list = []
     for (const q of ['4', '3', '2', '1']) {
-      const list = peekData('class', { quarter: q })?.assignmentsData || []
-      if (list.some((c) => parseGrade(c.overallAverage) != null)) return list.map((c) => cleanCourseName(c.courseName))
+      const l = filterPhantomClasses(peekData('class', { quarter: q })?.assignmentsData || [], wl)
+      if (l.some((c) => parseGrade(c.overallAverage) != null)) { list = l; break }
     }
-    const list = peekData('class', {})?.assignmentsData || []
-    return list.map((c) => cleanCourseName(c.courseName))
+    if (!list.length) list = filterPhantomClasses(peekData('class', {})?.assignmentsData || [], wl)
+    return [...new Set(list.map((c) => cleanCourseName(c.courseName)))]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peekData, dataVersion])
+
+  // Classes haven't landed from HAC yet — the picker only has "General".
+  const classesLoading = courses.length === 0 && sync.phase !== 'done'
 
   const [tasks, setTasks] = useState(() => loadAgenda(activeUsername))
   useEffect(() => { setTasks(loadAgenda(activeUsername)) }, [activeUsername])
@@ -94,6 +100,7 @@ export default function Agenda() {
         <select className="select" value={course} onChange={(e) => setCourse(e.target.value)} aria-label="Class">
           <option value={GENERAL}>{GENERAL}</option>
           {courses.map((c) => <option key={c} value={c}>{c}</option>)}
+          {courses.length === 0 && <option disabled>{classesLoading ? 'Loading your classes…' : 'No classes found'}</option>}
         </select>
         <input
           ref={titleRef}
@@ -112,6 +119,12 @@ export default function Agenda() {
         </select>
         <button className="btn sm" onClick={add}><Icon.plus width={15} height={15} /> Add</button>
       </div>
+
+      {classesLoading && (
+        <div className="small faint" style={{ margin: '-6px 4px 14px' }}>
+          Your classes are still loading from HAC — add “General” items now, or wait a moment for the class list to fill in.
+        </div>
+      )}
 
       {/* The whole week at a glance — 7 day cells, tasks land in their day */}
       <div className="agenda-grid-wrap">
