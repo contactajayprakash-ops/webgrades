@@ -9,6 +9,7 @@ export const DEFAULT_THEME = {
   accentId: 'blue',    // see ACCENTS
   reduceBlur: false,   // lighter backdrop blur (faster on Chromebooks)
   reduceMotion: false, // kill animations/transitions
+  showRecent: false,   // dashboard "Recently posted" feed — off by default (no change)
 }
 
 // Each accent turns the two knobs (--accent, --accent-2); every other brand

@@ -9,6 +9,7 @@ const LOADS_KEY = 'wg_pwa_loads'
 let ranThisLoad = false
 
 const isIos = () => /iphone|ipod|ipad/i.test(navigator.userAgent || '')
+const isAndroid = () => /android/i.test(navigator.userAgent || '')
 // Already launched from the home screen? Then never prompt.
 const isStandalone = () =>
   window.navigator.standalone === true ||
@@ -26,6 +27,9 @@ export default function InstallPrompt() {
   const [show, setShow] = useState(false)
   const [deferred, setDeferred] = useState(null) // Android/Chrome install event
   const ios = isIos()
+  // Chromebook / Windows / Mac / Linux — has a taskbar or shelf you can pin to,
+  // so we say "install as an app" instead of the phone-only "Home Screen".
+  const desktop = !ios && !isAndroid()
 
   useEffect(() => {
     if (isStandalone()) return
@@ -69,12 +73,17 @@ export default function InstallPrompt() {
   return (
     <>
       <div className="install-backdrop" onClick={dismiss} />
-      <div className="install-sheet card" ref={trapRef} role="dialog" aria-modal="true" aria-label="Add WebGrades to your home screen">
+      <div className="install-sheet card" ref={trapRef} role="dialog" aria-modal="true"
+        aria-label={desktop ? 'Install WebGrades as an app' : 'Add WebGrades to your home screen'}>
         <div className="install-head">
           <span className="install-logo">W</span>
           <div>
-            <div className="install-title">Add WebGrades to your Home Screen</div>
-            <div className="install-sub">Opens like a real app — full screen, no address bar, one tap away.</div>
+            <div className="install-title">{desktop ? 'Install WebGrades as an app' : 'Add WebGrades to your Home Screen'}</div>
+            <div className="install-sub">
+              {desktop
+                ? 'Opens in its own window — no address bar, instant load, works offline.'
+                : 'Opens like a real app — full screen, no address bar, one tap away.'}
+            </div>
           </div>
         </div>
 
@@ -85,9 +94,14 @@ export default function InstallPrompt() {
             <li>Tap <b>Add</b> — you're done.</li>
           </ol>
         ) : (
-          <p className="install-steps" style={{ listStyle: 'none' }}>
-            Install it as an app for instant access and offline-friendly loading.
-          </p>
+          <div className="install-steps" style={{ listStyle: 'none' }}>
+            <p style={{ margin: 0 }}>Install it as an app for instant access and offline-friendly loading.</p>
+            {desktop && (
+              <p className="small faint" style={{ marginTop: 8 }}>
+                Tip: after installing, right-click WebGrades in your taskbar or Chromebook shelf and choose <b>Pin</b> so it's always one click away.
+              </p>
+            )}
+          </div>
         )}
 
         <div className="install-actions">

@@ -10,18 +10,122 @@ import { parseGrade } from '../lib/gpa.js'
 import { cleanCourseName, QUARTERS } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
+import { loadTheme } from '../lib/theme.js'
 
 export default function Dashboard() {
   const { userName } = useAuth()
+  const showRecent = loadTheme().showRecent
+  // One shared snapshot drives both the "Recently posted" feed and the grade
+  // badges below, so "Mark seen" in either place clears both at once.
+  const recent = useRecentGrades()
 
   return (
     <>
       <PageHead title={greeting(userName)} sub="Your grades at a glance." />
       <div className="grid" style={{ gridTemplateColumns: '1fr' }}>
         <TopStats />
-        <CurrentClasses />
+        {showRecent && <RecentlyPosted recent={recent} />}
+        <CurrentClasses recent={recent} />
       </div>
     </>
+  )
+}
+
+// Current-quarter grades + what changed since the last-seen snapshot, computed
+// once and shared. `feed` is the detailed "what posted" list (old% → new%).
+function useRecentGrades() {
+  const { peekData, dataVersion, activeUsername } = useAuth()
+
+  // The most recent quarter that actually has grades (see CurrentClasses note).
+  const { quarter, classes } = useMemo(() => {
+    for (const q of ['4', '3', '2', '1']) {
+      const list = peekData('class', { quarter: q })?.assignmentsData || []
+      if (list.some((c) => parseGrade(c.overallAverage) != null)) return { quarter: q, classes: list }
+    }
+    return { quarter: null, classes: peekData('class', {})?.assignmentsData || [] }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peekData, dataVersion])
+
+  const [seen, setSeen] = useState(() => loadSeen(activeUsername))
+  useEffect(() => { setSeen(loadSeen(activeUsername)) }, [activeUsername])
+  useEffect(() => {
+    if (classes.length && seen === null) { // first-ever visit seeds silently
+      const snap = snapshotOf(classes); saveSeen(activeUsername, snap); setSeen(snap)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classes.length, activeUsername])
+
+  const changed = useMemo(() => new Set(changedSince(seen, classes)), [seen, classes])
+  const markSeen = () => { const snap = snapshotOf(classes); saveSeen(activeUsername, snap); setSeen(snap) }
+
+  // Detailed feed for the "Recently posted" section: name, old% → new%, biggest
+  // movers first. Empty until there's a prior snapshot to compare against.
+  const feed = useMemo(() => {
+    if (!seen) return []
+    const out = []
+    for (const c of classes) {
+      if (!changed.has(c.courseName)) continue
+      const had = c.courseName in seen
+      out.push({
+        name: cleanCourseName(c.courseName),
+        from: had ? parseGrade(seen[c.courseName]) : null,
+        to: parseGrade(c.overallAverage),
+        isNew: !had,
+      })
+    }
+    const mag = (x) => (x.from == null || x.to == null ? -1 : Math.abs(x.to - x.from))
+    return out.sort((a, b) => mag(b) - mag(a))
+  }, [seen, classes, changed])
+
+  return { quarter, classes, seen, changed, markSeen, feed }
+}
+
+// The opt-in "what posted since last time" feed. Reuses the shared snapshot so it
+// never disagrees with the badges below.
+function RecentlyPosted({ recent }) {
+  const { syncedAt } = useAuth()
+  const { feed, markSeen } = recent
+  const fmt = (n) => (n == null ? '—' : n % 1 === 0 ? `${n}` : n.toFixed(2))
+
+  return (
+    <div className="card">
+      <div className="row-between" style={{ padding: '16px 20px' }}>
+        <div className="flex" style={{ alignItems: 'center', gap: 10 }}>
+          <h3>Recently posted</h3>
+          <LastUpdated at={syncedAt} />
+        </div>
+        {feed.length > 0 && <button className="btn ghost sm" onClick={markSeen}>Mark seen</button>}
+      </div>
+      {feed.length === 0 ? (
+        <div className="recent-empty">You're all caught up — no new grades since your last check.</div>
+      ) : (
+        <ul className="recent-list">
+          {feed.map((f, i) => {
+            const delta = f.from != null && f.to != null ? f.to - f.from : null
+            const dir = delta == null || Math.abs(delta) < 1e-9 ? 'flat' : delta > 0 ? 'up' : 'down'
+            return (
+              <li key={i} className="recent-item">
+                <span className={`recent-dot ${dir}`} aria-hidden="true" />
+                <div className="recent-main">
+                  <div className="recent-name">{f.name}</div>
+                  <div className="recent-sub">
+                    {f.isNew ? 'New — grade posted' : `${fmt(f.from)}% → ${fmt(f.to)}%`}
+                  </div>
+                </div>
+                <div className="recent-right">
+                  <GradeBadge value={f.to} showLetter={false} />
+                  {delta != null && Math.abs(delta) >= 0.005 && (
+                    <span className={`recent-delta ${dir}`}>
+                      {delta > 0 ? '↑' : '↓'} {fmt(Math.abs(delta))}
+                    </span>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
   )
 }
 
@@ -138,36 +242,14 @@ function GpaCard() {
   )
 }
 
-function CurrentClasses() {
-  const { peekData, dataVersion, sync, syncAll, syncedAt, activeUsername } = useAuth()
+function CurrentClasses({ recent }) {
+  const { sync, syncAll, syncedAt } = useAuth()
   const updating = sync.phase === 'syncing'
 
-  // Show the MOST RECENT quarter that actually has grades — the active quarter
-  // during the school year, or Q4 once the year's over. (HAC's default classwork
-  // view can't be trusted: over the summer it falls back to Q1.) Fall back to
-  // the default view only until the per-quarter data has synced in.
-  const { quarter, classes } = useMemo(() => {
-    for (const q of ['4', '3', '2', '1']) {
-      const list = peekData('class', { quarter: q })?.assignmentsData || []
-      if (list.some((c) => parseGrade(c.overallAverage) != null)) return { quarter: q, classes: list }
-    }
-    return { quarter: null, classes: peekData('class', {})?.assignmentsData || [] }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [peekData, dataVersion])
-
-  // "New since your last visit": diff current averages against the last-seen
-  // snapshot. First-ever visit seeds the snapshot silently (no noise).
-  const [seen, setSeen] = useState(() => loadSeen(activeUsername))
-  useEffect(() => {
-    if (classes.length && seen === null) {
-      const snap = snapshotOf(classes)
-      saveSeen(activeUsername, snap)
-      setSeen(snap)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classes.length])
-  const changed = useMemo(() => new Set(changedSince(seen, classes)), [seen, classes])
-  const markSeen = () => { const snap = snapshotOf(classes); saveSeen(activeUsername, snap); setSeen(snap) }
+  // The most-recent-quarter grades + change diff are computed once in the parent
+  // (see useRecentGrades) and shared, so "Mark seen" here and the "Recently
+  // posted" feed above never drift apart.
+  const { quarter, classes, changed, markSeen } = recent
 
   const qLabel = quarter ? QUARTERS.find((x) => x.value === quarter)?.label : null
   const loading = classes.length === 0 && updating
