@@ -45,6 +45,14 @@ export function detectWeight(name, code) {
   if (/\bALG(?:EBRA)?\.?\s*(?:2|II)\b/.test(n) || /^ALG(?:EBRA)?0?2\b/.test(nz)) return WEIGHTS.ADV;
   if (/\bGEOM(?:ETRY)?\b/.test(n) || /^GEOM/.test(nz)) return WEIGHTS.ADV;
 
+  // Courses most Frisco students take at the advanced/GT level, but whose
+  // transcript abbreviation ("CHEM", "ENG 1", "TACS1") carries no Adv/GT marker.
+  // Default them to 5.5 — still overridable per-class for the on-level section.
+  // (Explicit "AP …" names are already caught above, so those stay 6.0.)
+  if (/\bCHEM(?:ISTRY)?\b/.test(n) || /^CHEM/.test(nz)) return WEIGHTS.ADV;
+  if (/\bENG(?:LISH)?\.?\s*(?:1|I)\b/.test(n) || /^ENG(?:LISH)?0?(?:1|I)\b/.test(nz)) return WEIGHTS.ADV;
+  if (/^TACS1\b/.test(nz) || /\bCS\s*1\b/.test(n) || /COMPUTER\s*SCIENCE\s*1\b/.test(n)) return WEIGHTS.ADV;
+
   return WEIGHTS.REG;
 }
 
