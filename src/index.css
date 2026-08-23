@@ -434,9 +434,10 @@ tr.row-new { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 /* The week as a 7-column grid — each day is a cell, tasks land inside it, and
    busier days visibly stack taller (align-items:start keeps cells self-sized). */
 .agenda-grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px 4px; }
-.agenda-grid { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); gap: 10px; align-items: start; }
+/* Desktop: all 7 days share the width and shrink to fit — never overflows. */
+.agenda-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
 .wk-day { display: flex; flex-direction: column; background: var(--bg-elevated); border: 0.5px solid var(--separator);
-  border-radius: var(--radius-sm); padding: 10px; min-height: 150px; }
+  border-radius: var(--radius-sm); padding: 12px; min-height: min(64vh, 460px); }
 .wk-day.is-today { border-color: color-mix(in srgb, var(--accent) 55%, var(--separator)); box-shadow: inset 0 2px 0 var(--accent); }
 .wk-day.is-past { opacity: .68; }
 .wk-head { display: flex; align-items: baseline; gap: 6px; padding-bottom: 8px; border-bottom: 0.5px solid var(--separator); }
@@ -445,8 +446,8 @@ tr.row-new { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .wk-date { font-size: var(--t-caption); color: var(--text-faint); }
 .wk-count { margin-left: auto; font-size: var(--t-caption2); font-weight: 700; color: var(--text-dim);
   background: var(--fill-2); padding: 1px 7px; border-radius: var(--pill); }
-.wk-tasks { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; flex: 1; }
-.wk-task { position: relative; display: flex; gap: 7px; padding: 7px 8px; border-radius: 10px;
+.wk-tasks { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; flex: 1; }
+.wk-task { position: relative; display: flex; gap: 9px; padding: 10px 11px; border-radius: 11px;
   background: hsl(var(--h) 70% 52% / 0.16); border-left: 3px solid hsl(var(--h) 70% 55%); }
 .wk-task.general { background: var(--fill-2); border-left-color: var(--text-faint); }
 .wk-check { flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--separator);
@@ -456,7 +457,7 @@ tr.row-new { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .wk-course { font-size: var(--t-caption2); font-weight: 700; line-height: 1.25; color: hsl(var(--h) 72% 74%);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-theme="light"] .wk-course { color: hsl(var(--h) 60% 34%); }
-.wk-title { font-size: var(--t-footnote); line-height: 1.3; word-break: break-word; }
+.wk-title { font-size: var(--t-subhead); line-height: 1.35; word-break: break-word; }
 .wk-task.done .wk-title { text-decoration: line-through; color: var(--text-faint); }
 .wk-del { position: absolute; top: 4px; right: 4px; background: transparent; border: 0; color: var(--text-faint);
   cursor: pointer; padding: 2px; border-radius: 6px; opacity: 0; transition: opacity .15s, color .15s, background .15s; }
@@ -468,6 +469,12 @@ tr.row-new { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .wk-add:hover { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 45%, var(--separator));
   background: color-mix(in srgb, var(--accent) 8%, transparent); }
 @media (hover: none) { .wk-del { opacity: 1; } } /* touch: always show delete */
+/* Narrow screens: 7 slivers are unusable, so give each day a real width and let
+   the week scroll horizontally instead. */
+@media (max-width: 760px) {
+  .agenda-grid { grid-template-columns: repeat(7, minmax(150px, 1fr)); }
+  .wk-day { min-height: min(58vh, 380px); }
+}
 
 /* ============================================================================
    TABLE (grouped list feel)
