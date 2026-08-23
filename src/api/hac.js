@@ -49,16 +49,39 @@ function serialize(task) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// CloudFront edges intermittently fail to resolve the Tailscale origin and
+// answer with a 502/503/504 HTML error page - measured at roughly 1 request in
+// 14, on a fully-deployed distribution. The backend is fine; the edge just
+// needs asking again.
+//
+// This lives here rather than in post() for two reasons. A gateway error
+// returns HTML, so res.json() throws before post() could ever classify it as
+// transient. And /login passes retries = 0 on purpose - a wrong password must
+// not be retried - yet it still has to survive a dud edge.
+//
+// Only gateway statuses are retried. A genuine connection failure still fails
+// immediately, so going offline falls through to the cached-data path fast
+// instead of stalling on retries that cannot succeed.
+const GATEWAY_RETRIES = 2;
+const isGatewayError = (status) => status === 502 || status === 503 || status === 504;
+
 async function rawPost(path, body) {
   let res;
-  try {
-    res = await fetch(BASE + path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    throw new Error('Could not reach the API. Is the server awake and the URL correct?');
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(BASE + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      throw new Error('Could not reach the API. Is the server awake and the URL correct?');
+    }
+    if (isGatewayError(res.status) && attempt < GATEWAY_RETRIES) {
+      await sleep(400 * (attempt + 1));
+      continue;
+    }
+    break;
   }
   try {
     return await res.json();
