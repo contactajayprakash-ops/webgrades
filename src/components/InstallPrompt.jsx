@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './icons.jsx'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
+import { useInstall } from '../hooks/useInstall.js'
 
 // Load counter (new key = every existing user is reset and sees the prompt again).
 const LOADS_KEY = 'wg_pwa_loads'
@@ -8,63 +9,49 @@ const LOADS_KEY = 'wg_pwa_loads'
 // double-invoke and the login->authed remount; resets on a real reload).
 let ranThisLoad = false
 
-const isIos = () => /iphone|ipod|ipad/i.test(navigator.userAgent || '')
-const isAndroid = () => /android/i.test(navigator.userAgent || '')
-// Already launched from the home screen? Then never prompt.
-const isStandalone = () =>
-  window.navigator.standalone === true ||
-  window.matchMedia?.('(display-mode: standalone)')?.matches === true
-
 // Show on the 1st and 2nd load; if they keep not installing, re-nudge every
 // 4th load after that (6, 10, 14, …). Stops for good once launched standalone.
 const shouldShowOnLoad = (n) => n <= 2 || (n - 2) % 4 === 0
 
 // First-load nudge to install WebGrades as a home-screen app. On iOS Safari
 // there's no programmatic install, so we show the Share -> Add to Home Screen
-// steps. On Android/desktop Chrome we capture beforeinstallprompt for a real
-// one-tap install.
+// steps. On Android/desktop Chrome the shared install singleton captures the
+// browser's install event for a real one-tap install (also reused by Settings).
 export default function InstallPrompt() {
+  const { can, standalone, ios, desktop, promptInstall } = useInstall()
   const [show, setShow] = useState(false)
-  const [deferred, setDeferred] = useState(null) // Android/Chrome install event
-  const ios = isIos()
-  // Chromebook / Windows / Mac / Linux — has a taskbar or shelf you can pin to,
-  // so we say "install as an app" instead of the phone-only "Home Screen".
-  const desktop = !ios && !isAndroid()
+  const [eligible, setEligible] = useState(false) // this load's counter says show
 
   useEffect(() => {
-    if (isStandalone()) return
+    if (standalone) return
     if (ranThisLoad) return // count/decide exactly once per page load
     ranThisLoad = true
-
     let n = 1
     try {
       n = (parseInt(localStorage.getItem(LOADS_KEY) || '0', 10) || 0) + 1
       localStorage.setItem(LOADS_KEY, String(n))
     } catch (_) {}
-    if (!shouldShowOnLoad(n)) return
+    if (shouldShowOnLoad(n)) setEligible(true)
+  }, [standalone])
 
-    if (ios) {
-      // iOS gives no install event — show the instructional prompt shortly after load.
-      const t = setTimeout(() => setShow(true), 1200)
-      return () => clearTimeout(t)
-    }
-    // Android / desktop Chrome: wait for the browser's install signal.
-    const onPrompt = (e) => { e.preventDefault(); setDeferred(e); setShow(true) }
-    window.addEventListener('beforeinstallprompt', onPrompt)
-    return () => window.removeEventListener('beforeinstallprompt', onPrompt)
-  }, [ios])
+  // iOS gives no install event — show the instructional prompt shortly after load.
+  useEffect(() => {
+    if (!eligible || standalone || !ios) return
+    const t = setTimeout(() => setShow(true), 1200)
+    return () => clearTimeout(t)
+  }, [eligible, standalone, ios])
+
+  // Android / desktop: pop the prompt once the browser's install signal arrives.
+  useEffect(() => {
+    if (eligible && !ios && can) setShow(true)
+  }, [eligible, ios, can])
 
   // "Never mind" just closes for this load — the load counter drives whether it
-  // comes back (first two loads, then every fourth), so we don't set a flag.
+  // comes back (first two loads, then every fourth), and Settings keeps a manual
+  // "Install" button available regardless.
   const dismiss = () => setShow(false)
 
-  const install = async () => {
-    if (!deferred) return
-    deferred.prompt()
-    try { await deferred.userChoice } catch (_) {}
-    setDeferred(null)
-    dismiss()
-  }
+  const install = async () => { await promptInstall(); dismiss() }
 
   const trapRef = useFocusTrap(show, dismiss)
 
@@ -106,7 +93,7 @@ export default function InstallPrompt() {
 
         <div className="install-actions">
           <button className="btn ghost sm" onClick={dismiss}>Never mind</button>
-          {!ios && deferred && <button className="btn sm" onClick={install}>Install app</button>}
+          {!ios && can && <button className="btn sm" onClick={install}>Install app</button>}
         </div>
       </div>
     </>
