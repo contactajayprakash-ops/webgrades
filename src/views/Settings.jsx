@@ -4,6 +4,7 @@ import { PageHead } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import { ACCENTS, loadTheme, saveTheme } from '../lib/theme.js'
+import { useInstall } from '../hooks/useInstall.js'
 
 export default function Settings() {
   const { session, clearCache, logout } = useAuth()
@@ -85,6 +86,9 @@ export default function Settings() {
           />
         </div>
 
+        {/* Install */}
+        <InstallSection />
+
         {/* Session */}
         <div className="card card-pad">
           <h3 className="mb-3">Session</h3>
@@ -101,6 +105,43 @@ export default function Settings() {
         </div>
       </div>
     </>
+  )
+}
+
+// Install WebGrades as an app — always reachable here, even if the first-load
+// popup was dismissed. Adapts to the platform's install capabilities.
+function InstallSection() {
+  const { can, installed, ios, desktop, promptInstall } = useInstall()
+  return (
+    <div className="card card-pad">
+      <h3 className="mb-3">Install</h3>
+      {installed ? (
+        <div className="small muted">WebGrades is installed on this device — you're all set.</div>
+      ) : (
+        <div className="row-between" style={{ gap: 16 }}>
+          <div>
+            <div style={{ fontWeight: 600 }}>Install WebGrades as an app</div>
+            <div className="small faint">
+              Opens in its own window and works offline.{' '}
+              {desktop ? 'After installing, right-click it in your taskbar or shelf and Pin it.' : 'One tap from your home screen.'}
+            </div>
+          </div>
+          {ios ? (
+            <span className="small faint" style={{ textAlign: 'right', minWidth: 150 }}>
+              In Safari: tap <b>Share</b>, then <b>Add to Home Screen</b>.
+            </span>
+          ) : can ? (
+            <button className="btn sm" onClick={promptInstall} style={{ flexShrink: 0 }}>
+              <Icon.plus width={15} height={15} /> Install
+            </button>
+          ) : (
+            <span className="small faint" style={{ textAlign: 'right', minWidth: 150 }}>
+              Use your browser's <b>Install app</b> option in the address bar or menu.
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
