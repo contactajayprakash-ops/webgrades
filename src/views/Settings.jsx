@@ -56,6 +56,17 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Dashboard */}
+        <div className="card card-pad">
+          <h3 className="mb-3">Dashboard</h3>
+          <ToggleRow
+            label="Recently posted grades"
+            hint="Show a feed at the top of the dashboard of grades that changed since your last visit — so you can tell something posted without opening each class."
+            checked={theme.showRecent}
+            onChange={(v) => update({ showRecent: v })}
+          />
+        </div>
+
         {/* Performance */}
         <div className="card card-pad">
           <h3 className="mb-3">Performance</h3>

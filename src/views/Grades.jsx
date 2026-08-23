@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
-import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner, Sparkline } from '../components/ui.jsx'
+import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner, Sparkline, LastUpdated } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import {
@@ -12,11 +12,13 @@ import {
 import { cleanCourseName, courseKey, QUARTERS, SEMESTERS, semesterOfQuarter } from '../lib/courses.js'
 import { editKey, classRows, effectiveAverage } from '../lib/whatif.js'
 import { loadPrefs } from '../lib/prefs.js'
+import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
 
 const weightFor = (courseName, prefs) => prefs.weights[courseKey(courseName)] ?? detectWeight(courseName)
+const EMPTY_SET = new Set()
 
 export default function Grades() {
-  const { getData, peekData, dataVersion, activeUsername } = useAuth()
+  const { getData, peekData, dataVersion, activeUsername, syncedAt } = useAuth()
   const { edits, setEdit, reset: resetEdits, count: whatIfCount } = useWhatIf()
   const [tab, setTab] = useState('4') // current quarter
   const [byQuarter, setByQuarter] = useState(() => {
@@ -71,9 +73,37 @@ export default function Grades() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataVersion])
 
+  // "New since your last visit" — diff the current quarter's averages against the
+  // per-account snapshot the Dashboard also uses, so "Mark seen" stays in sync
+  // between the two pages. Badges only apply to the most-recent quarter that has
+  // grades (the grade-drop signal); older quarters rarely move.
+  const { quarter: liveQuarter, classes: liveClasses } = useMemo(() => {
+    for (const q of ['4', '3', '2', '1']) {
+      const list = peekData('class', { quarter: q })?.assignmentsData || []
+      if (list.some((c) => parseGrade(c.overallAverage) != null)) return { quarter: q, classes: list }
+    }
+    return { quarter: null, classes: [] }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peekData, dataVersion])
+
+  const [seen, setSeen] = useState(() => loadSeen(activeUsername))
+  useEffect(() => { setSeen(loadSeen(activeUsername)) }, [activeUsername])
+  useEffect(() => {
+    // First-ever visit seeds the snapshot silently (no noise).
+    if (liveClasses.length && seen === null) {
+      const snap = snapshotOf(liveClasses)
+      saveSeen(activeUsername, snap)
+      setSeen(snap)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveClasses.length, activeUsername])
+  const changed = useMemo(() => new Set(changedSince(seen, liveClasses)), [seen, liveClasses])
+  const markSeen = () => { const snap = snapshotOf(liveClasses); saveSeen(activeUsername, snap); setSeen(snap) }
+
   return (
     <>
       <PageHead title="Grades" sub="Browse each quarter and edit any assignment — every GPA updates live.">
+        <LastUpdated at={syncedAt} />
         {whatIfCount > 0 && <button className="btn ghost sm" onClick={resetEdits}>Reset edits</button>}
         <button className="btn ghost sm" onClick={() => loadQuarter(tab === 'all' ? '4' : tab, true)}>
           <Icon.refresh width={15} height={15} /> Refresh
@@ -81,6 +111,13 @@ export default function Grades() {
       </PageHead>
 
       <WhatIfBanner />
+
+      {changed.size > 0 && (
+        <div className="notice row-between mb-3" style={{ gap: 12 }}>
+          <span>{changed.size} grade{changed.size > 1 ? 's' : ''} changed since your last visit.</span>
+          <button className="btn ghost sm" onClick={markSeen}>Mark seen</button>
+        </div>
+      )}
 
       <div className="row-between mb-3" style={{ gap: 12, flexWrap: 'wrap' }}>
         <Segmented
@@ -102,11 +139,12 @@ export default function Grades() {
       </div>
 
       {tab === 'all'
-        ? <Overview byQuarter={byQuarter} loading={loading} prefs={prefs} edits={edits} query={query} sort={sort} />
+        ? <Overview byQuarter={byQuarter} loading={loading} prefs={prefs} edits={edits} query={query} sort={sort} newSet={changed} />
         : <QuarterView
             quarter={tab} byQuarter={byQuarter} loading={loading} prefs={prefs}
             edits={edits} setEdit={setEdit} whatIfCount={whatIfCount} query={query} sort={sort}
             onRetry={() => loadQuarter(tab, true)}
+            newSet={tab === liveQuarter ? changed : EMPTY_SET}
           />}
     </>
   )
@@ -136,7 +174,7 @@ function semesterGpa(byQuarter, semQuarters, edits, prefs) {
   return { w: weightedGpa(rows).gpa, u: unweightedGpa(rows).gpa }
 }
 
-function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry, query = '', sort = 'name' }) {
+function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry, query = '', sort = 'name', newSet = EMPTY_SET }) {
   const state = byQuarter[quarter]
   if (loading[quarter] || state === undefined) return <Loading label={`Loading ${QUARTERS.find((q) => q.value === quarter)?.label}…`} />
   if (state.error) return <ErrorBox message={state.error} onRetry={onRetry} />
@@ -180,7 +218,7 @@ function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatI
       {classes.length === 0
         ? <Empty>No classes match “{query}”.</Empty>
         : classes.map((c, i) => (
-            <ClassCard key={c.courseName || i} quarter={quarter} course={c} edits={edits} setEdit={setEdit} prefs={prefs} defaultOpen={classes.length <= 2} />
+            <ClassCard key={c.courseName || i} quarter={quarter} course={c} edits={edits} setEdit={setEdit} prefs={prefs} defaultOpen={classes.length <= 2} isNew={newSet.has(c.courseName)} />
           ))}
     </div>
   )
@@ -203,7 +241,7 @@ function ImpactCell({ label, cur, base, digits, active }) {
   )
 }
 
-function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
+function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew = false }) {
   const [open, setOpen] = useState(!!defaultOpen)
   const eff = effectiveAverage(quarter, course, edits)
   const weight = weightFor(course.courseName, prefs)
@@ -216,10 +254,10 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
   }
 
   return (
-    <div className="card class-card">
+    <div className={`card class-card${isNew ? ' row-new' : ''}`}>
       <div className="class-head" onClick={() => setOpen((o) => !o)}>
         <div>
-          <div className="ttl">{name}</div>
+          <div className="ttl">{name}{isNew && <span className="pill pill-new">new</span>}</div>
           <div className="meta">
             <span className={weightTagClass(weight)}>{weightLabel(weight)} · weight {weight}</span>
             {' · '}{course.assignments?.length || 0} assignments
@@ -294,7 +332,7 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen }) {
 }
 
 // All-quarters matrix: class rows × Q1–Q4 averages (reflects what-if edits).
-function Overview({ byQuarter, loading, prefs, edits, query = '', sort = 'name' }) {
+function Overview({ byQuarter, loading, prefs, edits, query = '', sort = 'name', newSet = EMPTY_SET }) {
   const anyLoading = QUARTERS.some((q) => loading[q] || byQuarter[q.value] === undefined)
 
   const courses = useMemo(() => {
@@ -336,9 +374,10 @@ function Overview({ byQuarter, loading, prefs, edits, query = '', sort = 'name' 
         <tbody>
           {courses.map((c) => {
             const w = prefs.weights[c.key] ?? detectWeight(c.raw)
+            const isNew = newSet.has(c.raw)
             return (
-              <tr key={c.key}>
-                <td>{c.name}</td>
+              <tr key={c.key} className={isNew ? 'row-new' : ''}>
+                <td>{c.name}{isNew && <span className="pill pill-new">new</span>}</td>
                 <td><span className={weightTagClass(w)}>{w}</span></td>
                 {QUARTERS.map((q) => (
                   <td key={q.value} className="num">
