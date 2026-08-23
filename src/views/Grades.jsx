@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
@@ -9,7 +9,7 @@ import {
   parseGrade, detectWeight, weightedGpa, unweightedGpa, roundGrade, liveSemesterAverage,
   fmtGpa, weightLabel, weightTagClass,
 } from '../lib/gpa.js'
-import { cleanCourseName, courseKey, QUARTERS, SEMESTERS, semesterOfQuarter, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
+import { cleanCourseName, courseKey, QUARTERS, SEMESTERS, semesterOfQuarter, scheduleWhitelist, filterPhantomClasses, guessCurrentQuarter } from '../lib/courses.js'
 import { editKey, classRows, effectiveAverage } from '../lib/whatif.js'
 import { loadPrefs } from '../lib/prefs.js'
 import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
@@ -20,7 +20,16 @@ const EMPTY_SET = new Set()
 export default function Grades() {
   const { getData, peekData, dataVersion, activeUsername, syncedAt } = useAuth()
   const { edits, setEdit, reset: resetEdits, count: whatIfCount } = useWhatIf()
-  const [tab, setTab] = useState('4') // current quarter
+  // Default to the current quarter: the most recent one that already has grades,
+  // else a calendar-based guess (so it's not stuck on Q4 at the start of Q1).
+  const [tab, setTab] = useState(() => {
+    for (const q of ['4', '3', '2', '1']) {
+      const list = peekData('class', { quarter: q })?.assignmentsData || []
+      if (list.some((c) => parseGrade(c.overallAverage) != null)) return q
+    }
+    return guessCurrentQuarter()
+  })
+  const tabPicked = useRef(false) // once the user clicks a quarter, stop auto-syncing it
   const [byQuarter, setByQuarter] = useState(() => {
     const init = {}
     for (const q of ['1', '2', '3', '4']) {
@@ -102,6 +111,13 @@ export default function Grades() {
   const changed = useMemo(() => new Set(changedSince(seen, liveClasses)), [seen, liveClasses])
   const markSeen = () => { const snap = snapshotOf(liveClasses); saveSeen(activeUsername, snap); setSeen(snap) }
 
+  // Once grades sync in, snap the default tab to the live quarter — unless the
+  // user has already chosen one themselves.
+  useEffect(() => {
+    if (!tabPicked.current && liveQuarter && liveQuarter !== tab) setTab(liveQuarter)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveQuarter])
+
   return (
     <>
       <PageHead title="Grades" sub="Browse each quarter and edit any assignment — every GPA updates live.">
@@ -125,7 +141,7 @@ export default function Grades() {
         <Segmented
           style={{ flexWrap: 'wrap' }}
           value={tab}
-          onChange={setTab}
+          onChange={(v) => { tabPicked.current = true; setTab(v) }}
           ariaLabel="Quarter"
           options={[...QUARTERS.map((q) => ({ value: q.value, label: q.label })), { value: 'all', label: 'All quarters' }]}
         />

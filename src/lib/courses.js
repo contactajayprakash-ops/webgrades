@@ -91,6 +91,17 @@ export function semesterOfQuarter(q) {
   return QUARTERS.find((x) => x.value === String(q))?.sem || 's2'
 }
 
+// A calendar-based guess at the current grading quarter, used only as a fallback
+// for the default tab before any grades exist (start of year). Frisco's quarters
+// run roughly Aug–Oct (Q1), Nov–Dec (Q2), Jan–Mar (Q3), Apr–Jul (Q4).
+export function guessCurrentQuarter(date = new Date()) {
+  const m = date.getMonth() // 0 = Jan
+  if (m >= 7 && m <= 9) return '1'
+  if (m === 10 || m === 11) return '2'
+  if (m >= 0 && m <= 2) return '3'
+  return '4'
+}
+
 // Estimate a class average from its assignment list (points-based).
 // APPROXIMATION — HAC weights by category, which the scrape doesn't expose.
 export function estimateAverage(rows) {
