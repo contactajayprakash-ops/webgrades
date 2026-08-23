@@ -122,16 +122,21 @@ export function buildPriorCourses(priorGroups) {
 
 export function buildCumRows({ currentLive, priorCourses, included, period, prefs, latestYear }) {
   const rows = []
-  // current year — official transcript grades when posted, else live estimate
+  const grades = prefs.cumulative.grades || {}
+  // current year — official transcript grades when posted, else live estimate.
+  // A manual grade override lets a class with no posted grade (a 0/F ungraded
+  // class) still count with a predicted grade, so cumulative "what-if" works.
   for (const c of currentLive) {
     if (!included[c.key]) continue
     const pg = resolvedPeriod(c, period)
-    if (!pg) continue
+    const grade = grades[c.key] != null ? grades[c.key] : pg?.grade
+    if (grade == null) continue
+    const credit = prefs.cumulative.credits?.[c.key] ?? pg?.credit ?? (period === 'year' ? 1 : 0.5)
     rows.push({
       key: c.key, name: c.name, year: latestYear,
-      grade: prefs.cumulative.grades?.[c.key] ?? pg.grade, autoGrade: pg.grade,
+      grade, autoGrade: pg?.grade ?? null,
       weight: prefs.cumulative.weights[c.key] ?? detectWeight(c.rawName),
-      credit: prefs.cumulative.credits?.[c.key] ?? pg.credit, include: true,
+      credit, include: true,
     })
   }
   // prior years — completed, so they ALWAYS count at their full-year grade
@@ -145,6 +150,21 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
       grade: prefs.cumulative.grades?.[c.code] ?? pg.grade, autoGrade: pg.grade,
       weight: prefs.cumulative.weights[c.code] ?? detectWeight(c.description, c.courseCode),
       credit: prefs.cumulative.credits?.[c.code] ?? pg.credit, include: true,
+    })
+  }
+  // manually-added courses (summer / not-yet-transcripted). Grade, weight, and
+  // credit live in the same override maps, keyed `manual:<id>`. Completed work,
+  // so they count in every period at their full grade + credit.
+  for (const m of prefs.cumulative.manual || []) {
+    const key = `manual:${m.id}`
+    if (!included[key]) continue
+    const grade = parseGrade(grades[key])
+    if (grade == null) continue
+    rows.push({
+      key, name: m.name || 'Added course', year: 'Added', manual: true,
+      grade, autoGrade: grade,
+      weight: prefs.cumulative.weights[key] ?? 5,
+      credit: prefs.cumulative.credits?.[key] ?? 1, include: true,
     })
   }
   return rows

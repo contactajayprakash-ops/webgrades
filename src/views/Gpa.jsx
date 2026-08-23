@@ -9,14 +9,15 @@ import {
   detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
   WEIGHT_OPTIONS, weightTagClass, weightLabel,
 } from '../lib/gpa.js'
-import { courseKey, transcriptGrade, isNonGpaCourse, PERIODS } from '../lib/courses.js'
+import { courseKey, transcriptGrade, isNonGpaCourse, PERIODS, guessCurrentQuarter, semesterOfQuarter } from '../lib/courses.js'
 import {
   PERIOD_QUARTERS, buildLiveRows, buildCurrentLiveRaw, buildCurrentLive,
-  buildPriorCourses, buildCumRows, splitTranscript,
+  buildPriorCourses, buildCumRows, splitTranscript, resolvedPeriod,
 } from '../lib/gpaCompute.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 
 const TOUR_SEEN_KEY = 'wg_tour_cumulative_seen'
+const mkId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2))
 
 // Walkthrough for first-time cumulative setup. The first step is the only real
 // action; the rest are quick double-checks. Targets are matched by selector.
@@ -56,7 +57,7 @@ const CUM_TOUR_STEPS = [
 export default function Gpa() {
   const { getData, peekData, dataVersion, activeUsername } = useAuth()
   const [prefs, setPrefsState] = useState(() => loadPrefs(activeUsername))
-  const [period, setPeriod] = useState('year')
+  const [period, setPeriod] = useState(() => semesterOfQuarter(guessCurrentQuarter())) // default to the current semester
   const [view, setView] = useState('live')
 
   // seed from the (prefetched/persisted) cache so it renders instantly
@@ -234,6 +235,7 @@ export default function Gpa() {
           priorGroups={priorGroups} latestYear={latestYear} period={period}
           confirmed={cumConfirmed} included={cumIncluded}
           weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
+          manual={prefs.cumulative.manual || []}
           rows={cumRows} result={cumResult}
           onToggle={toggleCum} updatePrefs={updatePrefs}
           onRetry={() => loadTranscript(true)}
@@ -265,7 +267,7 @@ function WeightSelect({ value, onChange }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, period, confirmed, included, weights, credits, grades, rows, result, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, period, confirmed, included, weights, credits, grades, manual = [], rows, result, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
 
@@ -300,7 +302,27 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const editSelection = () => updatePrefs((p) => { p.cumulative.confirmed = false })
   const setWeight = (key, w) => updatePrefs((p) => { p.cumulative.weights[key] = Number(w) })
   const setCredit = (key, v) => updatePrefs((p) => { p.cumulative.credits = p.cumulative.credits || {}; p.cumulative.credits[key] = v === '' ? null : Number(v) })
+  const setGrade = (key, v) => updatePrefs((p) => { p.cumulative.grades = p.cumulative.grades || {}; p.cumulative.grades[key] = v })
   const resetOverrides = () => updatePrefs((p) => { p.cumulative.weights = {}; p.cumulative.grades = {}; p.cumulative.credits = {} })
+
+  // Manually-added courses (summer / not-yet-transcripted). Auto-included on add.
+  const addManual = () => updatePrefs((p) => {
+    p.cumulative.manual = p.cumulative.manual || []
+    const id = mkId()
+    p.cumulative.manual.push({ id, name: '' })
+    p.cumulative.included[`manual:${id}`] = true
+  })
+  const setManualName = (id, name) => updatePrefs((p) => {
+    p.cumulative.manual = (p.cumulative.manual || []).map((m) => (m.id === id ? { ...m, name } : m))
+  })
+  const removeManual = (id) => updatePrefs((p) => {
+    const key = `manual:${id}`
+    p.cumulative.manual = (p.cumulative.manual || []).filter((m) => m.id !== id)
+    delete p.cumulative.included[key]
+    if (p.cumulative.grades) delete p.cumulative.grades[key]
+    if (p.cumulative.weights) delete p.cumulative.weights[key]
+    if (p.cumulative.credits) delete p.cumulative.credits[key]
+  })
   const hasOverrides = Object.keys(weights).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0
   const selectedCount = Object.keys(included).length
 
@@ -347,11 +369,60 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                   <td>{c.name}<span className="faint small"> · live</span></td>
                   <td><WeightSelect value={w} onChange={(e) => setWeight(c.key, e.target.value)} /></td>
                   <td className="num faint small">{c.sems}</td>
-                  <td className="num mono">{c.s1 != null && c.s2 != null ? ((c.s1 + c.s2) / 2) : (c.s1 ?? c.s2 ?? '—')}</td>
+                  <td className="num">
+                    {(() => {
+                      const rp = resolvedPeriod(c, period)
+                      const auto = rp?.grade != null ? Math.round(rp.grade * 100) / 100 : null
+                      const gv = grades[c.key] !== undefined ? grades[c.key] : auto
+                      return <input className="input mini" type="number" step="0.01" title="Grade (editable — enter a predicted grade)"
+                        placeholder={auto != null ? String(auto) : 'grade'}
+                        value={gv ?? ''} onChange={(e) => setGrade(c.key, e.target.value === '' ? null : Number(e.target.value))} />
+                    })()}
+                  </td>
                   <td className="num"><input className="input mini" type="number" step="0.5" min="0" title="Credit" value={cr} onChange={(e) => setCredit(c.key, e.target.value)} /></td>
                 </tr>
               )
             })}
+          </tbody>
+        </table>
+
+        {/* manually-added courses — summer / not-yet-transcripted outliers */}
+        <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
+          Added courses · summer / not yet on your transcript
+        </div>
+        <table className="table">
+          <tbody>
+            {manual.map((m) => {
+              const key = `manual:${m.id}`
+              return (
+                <tr key={m.id}>
+                  <td style={{ width: 40 }}>
+                    <input type="checkbox" checked={!!included[key]} onChange={() => onToggle(key)}
+                      style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+                  </td>
+                  <td>
+                    <input className="input mini" style={{ width: 150, textAlign: 'left' }} placeholder="Course name"
+                      value={m.name || ''} onChange={(e) => setManualName(m.id, e.target.value)} />
+                    <button onClick={() => removeManual(m.id)} title="Remove course"
+                      style={{ background: 'transparent', border: 0, color: 'var(--red-text)', cursor: 'pointer', marginLeft: 6, verticalAlign: 'middle' }}>
+                      <Icon.trash width={14} height={14} />
+                    </button>
+                  </td>
+                  <td><WeightSelect value={weights[key] ?? 5} onChange={(e) => setWeight(key, e.target.value)} /></td>
+                  <td className="num faint small">—</td>
+                  <td className="num"><input className="input mini" type="number" step="0.01" placeholder="grade"
+                    value={grades[key] ?? ''} onChange={(e) => setGrade(key, e.target.value === '' ? null : Number(e.target.value))} /></td>
+                  <td className="num"><input className="input mini" type="number" step="0.5" min="0" title="Credit"
+                    value={credits[key] ?? 1} onChange={(e) => setCredit(key, e.target.value)} /></td>
+                </tr>
+              )
+            })}
+            <tr>
+              <td colSpan={6} style={{ padding: '12px 20px' }}>
+                <button className="btn ghost sm" onClick={addManual}><Icon.plus width={14} height={14} /> Add course</button>
+                <span className="small faint" style={{ marginLeft: 10 }}>For summer or missing classes not yet on your transcript — not for a whole missing year.</span>
+              </td>
+            </tr>
           </tbody>
         </table>
 
