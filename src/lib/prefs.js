@@ -21,6 +21,7 @@ const DEFAULT = {
     weights: {},       // key -> weight
     grades: {},        // key -> grade override
     credits: {},       // key -> credit override
+    manual: [],        // manually-added courses [{ id, name }] (grade/weight/credit live in the maps above, keyed `manual:<id>`)
     confirmed: false,  // has the user picked courses at least once?
   },
 }
@@ -31,6 +32,8 @@ const normalize = (raw) => {
   if (!p.cumulative || p.cumulative.v !== CUMULATIVE_VERSION) {
     p.cumulative = structuredClone(DEFAULT.cumulative)
   }
+  // Additive fields introduced after v2 — backfill without wiping selections.
+  if (!Array.isArray(p.cumulative.manual)) p.cumulative.manual = []
   return p
 }
 
