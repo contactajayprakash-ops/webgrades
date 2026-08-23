@@ -1,4 +1,14 @@
-# Deploying WebGrades to S3 + CloudFront
+# Deploying WebGrades
+
+Two hosts, one push. `main` deploys to both:
+
+| Host | URL | API path |
+|---|---|---|
+| CloudFront + S3 | `diatjuqtrbl82.cloudfront.net` | same-origin `/api`, proxied server-side |
+| Firebase Hosting | `webgrades.firebaseapp.com` | cross-origin to CloudFront's `/api` |
+
+Firebase also serves the same site at `webgrades.web.app`, but that domain is
+blocked on the school network - use `firebaseapp.com` there.
 
 ## Why CloudFront is required (not just S3)
 
@@ -100,3 +110,32 @@ Hashed assets get `max-age=31536000,immutable`. `index.html`, `sw.js`,
 `registerSW.js` and `manifest.webmanifest` get `no-store` and are invalidated
 on every deploy — without that the PWA service worker keeps serving the old
 build after a push.
+
+## Firebase Hosting
+
+Firebase Hosting rewrites can only target a file, a Cloud Function, or Cloud
+Run - never an arbitrary external origin. So it cannot proxy `/api` the way
+CloudFront's cache behavior does. Instead `npm run build:firebase` sets
+`VITE_API_BASE` to CloudFront's absolute `/api` URL and the calls go
+cross-origin; the HAC backend answers preflights with
+`Access-Control-Allow-Origin: *`, so no server change was needed.
+
+That means **CloudFront stays load-bearing even for the Firebase site** - it is
+the API proxy. Don't delete the distribution.
+
+### CI credential
+
+The `firebase` job needs one repo secret:
+
+| Secret | How to create |
+|---|---|
+| `FIREBASE_SERVICE_ACCOUNT_WEBGRADES` | `firebase init hosting:github` - creates the service account and uploads the secret for you |
+
+### Deploying by hand
+
+```bash
+npm run deploy:firebase
+```
+
+Note this is `firebase-tools`, not `firebase` - the latter is the JS SDK and
+ships no executable.

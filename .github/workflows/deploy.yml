@@ -1,4 +1,4 @@
-name: Deploy to S3 + CloudFront
+name: Deploy
 
 on:
   push:
@@ -10,7 +10,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  # ---------------------------------------------------------------
+  # CloudFront: same-origin /api, proxied to the HAC backend by a
+  # cache behavior. Uses the plain build.
+  # ---------------------------------------------------------------
+  cloudfront:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,3 +61,31 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" \
             --paths "/index.html" "/sw.js" "/registerSW.js" "/manifest.webmanifest"
+
+  # ---------------------------------------------------------------
+  # Firebase Hosting: webgrades.firebaseapp.com. Firebase can't proxy
+  # to an external origin, so this build points at CloudFront's
+  # absolute /api URL and goes cross-origin.
+  #
+  # Independent of the cloudfront job on purpose - if one host fails
+  # to deploy, the other still updates.
+  # ---------------------------------------------------------------
+  firebase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build:firebase
+
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WEBGRADES }}
+          channelId: live
+          projectId: webgrades
