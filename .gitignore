@@ -9,3 +9,12 @@ dist-ssr
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Firebase CLI
+.firebase/
+.trash-firebase-init/
+
+# Firebase "agent skills" - docs the CLI drops in, not part of this project
+.agents/
+.claude/skills/
+skills-lock.json
