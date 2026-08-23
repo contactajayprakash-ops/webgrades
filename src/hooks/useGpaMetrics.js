@@ -67,8 +67,8 @@ export function useGpaMetrics(period = 'year') {
     const liveW = weightedGpa(live.rows)
     const liveU = unweightedGpa(live.rows)
 
-    const { latestYear, currentGroup, priorGroups } = splitTranscript(transcript)
     const currentLiveRaw = buildCurrentLiveRaw({ quarters, edits })
+    const { latestYear, currentGroup, priorGroups } = splitTranscript(transcript, currentLiveRaw)
     const currentLive = buildCurrentLive({ currentLiveRaw, currentGroup, latestYear })
     const priorCourses = buildPriorCourses(priorGroups)
     const cumRows = buildCumRows({

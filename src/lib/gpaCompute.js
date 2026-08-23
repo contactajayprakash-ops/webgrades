@@ -171,10 +171,38 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
 }
 
 // Derive the transcript year groupings the cumulative views need.
-export function splitTranscript(transcript) {
+//
+// The latest transcript group is the CURRENT year only if the live classwork
+// matches it. HAC posts a finished year under the current calendar year (e.g.
+// 9th-grade finals show up labeled "2025-2026 · Grade 09") while the actually-
+// current classes (10th grade) haven't been transcripted yet. In that case the
+// latest group is completed PRIOR work and the live classwork is the current
+// year — otherwise those courses get orphaned (counted nowhere) and the current
+// year is mislabeled with the wrong grade level.
+export function splitTranscript(transcript, currentLiveRaw = null) {
   const txGroups = Array.isArray(transcript) ? transcript : []
   const latestYear = txGroups.reduce((m, g) => (g.year > m ? g.year : m), '')
-  const currentGroup = txGroups.find((g) => g.year === latestYear)
-  const priorGroups = txGroups.filter((g) => g.year !== latestYear)
-  return { txGroups, latestYear, currentGroup, priorGroups }
+  const latestGroup = txGroups.find((g) => g.year === latestYear) || null
+
+  let currentGroup = latestGroup
+  if (latestGroup && currentLiveRaw && currentLiveRaw.length) {
+    const txCur = (latestGroup.courses || []).map((c) => ({ ...c, code: c.courseCode || `${latestYear}-${c.description}` }))
+    // The latest group is the current year only if a real chunk of the live
+    // classwork lines up with it (not just one coincidental grade match). If
+    // barely anything matches, it's a completed year posted under this label.
+    const matched = Object.keys(matchOfficial(currentLiveRaw, txCur)).length
+    const need = Math.max(2, Math.ceil((txCur.length || 0) / 3))
+    if (matched < need) currentGroup = null
+  }
+
+  const priorGroups = currentGroup ? txGroups.filter((g) => g.year !== latestYear) : txGroups
+
+  // Grade level to show for the live (current) year. When the current year isn't
+  // on the transcript yet, guess it as one past the highest completed grade.
+  const gradeNums = txGroups.map((g) => parseInt(g.grade, 10)).filter(Number.isFinite)
+  const currentGrade = currentGroup
+    ? currentGroup.grade
+    : (gradeNums.length ? String(Math.max(...gradeNums) + 1).padStart(2, '0') : null)
+
+  return { txGroups, latestYear, currentGroup, priorGroups, currentGrade }
 }
