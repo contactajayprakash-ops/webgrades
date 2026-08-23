@@ -131,8 +131,8 @@ export default function Grades() {
         />
         <div className="flex" style={{ gap: 8 }}>
           <input className="input" type="search" placeholder="Search classes…" value={query}
-            onChange={(e) => setQuery(e.target.value)} aria-label="Search classes" style={{ width: 180, height: 38 }} />
-          <select className="select" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort classes" style={{ height: 38 }}>
+            onChange={(e) => setQuery(e.target.value)} aria-label="Search classes" style={{ width: 180, height: 38, paddingTop: 0, paddingBottom: 0 }} />
+          <select className="select" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort classes" style={{ height: 38, paddingTop: 0, paddingBottom: 0 }}>
             <option value="name">Sort: Name</option>
             <option value="high">Sort: Grade ↓</option>
             <option value="low">Sort: Grade ↑</option>
