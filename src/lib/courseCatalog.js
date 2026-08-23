@@ -20,3 +20,32 @@ export function courseNameFromCode(code) {
   if (!code) return null
   return COURSE_CATALOG[coreCode(code)] || null
 }
+
+// The TRANSCRIPT uses its own terse abbreviations ("TACS1", "APPRECAL", "ENG 1")
+// and state/PEIMS course numbers rather than the FISD catalog codes the schedule
+// uses — so they can't be looked up in COURSE_CATALOG. This maps the common
+// transcript abbreviations to friendly names. DISPLAY ONLY: weight detection
+// still runs on the raw abbreviation, so accuracy is unaffected. Unknown
+// abbreviations fall through to the raw text.
+const TRANSCRIPT_NAMES = {
+  ALG1: 'Algebra I', ALG2: 'Algebra II', GEOM: 'Geometry',
+  PRECAL: 'PreCalculus', APPRECAL: 'AP Pre Calculus', APCALCAB: 'AP Calculus AB', APCALCBC: 'AP Calculus BC', APSTAT: 'AP Statistics',
+  ENG1: 'English I', ENG2: 'English II', ENG3: 'English III', ENG4: 'English IV',
+  SPAN1: 'Spanish 1', SPAN2: 'Spanish 2', SPAN3: 'Spanish 3 Advanced', SPAN4: 'Spanish 4 AP',
+  BIO: 'Biology', CHEM: 'Chemistry', APCHEM: 'AP Chemistry', APBIO: 'AP Biology', APPHYS1: 'AP Physics 1',
+  HLTHED1: 'Health Education',
+  APHUMGEOW: 'AP Human Geography', APWH: 'AP World History', APUSH: 'AP US History',
+  TACS1: 'Computer Science 1 Adv', APCSPRIN: 'AP Computer Science Principles', APCSA: 'AP Computer Science A', TA3DMA: '3D Modeling & Animation',
+  MEDTERM: 'Medical Terminology', DEBATE1: 'Debate I', DEBATE2: 'Debate II',
+  TH1: 'Theatre Arts I', TH2: 'Theatre Arts II',
+  OTHRFL1: 'Other Foreign Language 1', OTHRFL2: 'Other Foreign Language 2', OTHRFL3: 'Other Foreign Language 3', OTHRFL4: 'Other Foreign Language 4',
+  SUBATH1: 'Athletics', LIFEFIT: 'Lifetime Fitness & Wellness', LIFEROP: 'Lifetime Recreation & Outdoor Ed',
+  MUS1ORCH: 'Orchestra', MUS1INEN: 'Instrumental Ensemble',
+  PRINARC: 'Principles of Architecture', PRINBMF: 'Principles of Business, Marketing & Finance', FDNBUSI: 'Foundations of Business',
+}
+
+// Friendly display name for a transcript course. Falls back to the raw text.
+export function transcriptCourseName(description) {
+  const key = String(description || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  return TRANSCRIPT_NAMES[key] || description || null
+}
