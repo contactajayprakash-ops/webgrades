@@ -146,9 +146,11 @@ export default function Gpa() {
   // since the transcript only posts sem1 mid-year). PRIOR years come from the
   // transcript. Live semester grades use HAC's rounding so sem1 matches the
   // transcript exactly. Period: s1 -> sem1, s2 -> sem2, year -> avg(sem1, sem2).
-  const { latestYear, currentGroup, priorGroups } = useMemo(() => splitTranscript(transcript), [transcript])
-
   const currentLiveRaw = useMemo(() => buildCurrentLiveRaw({ quarters, edits }), [quarters, edits])
+  const { latestYear, currentGroup, priorGroups, currentGrade } = useMemo(
+    () => splitTranscript(transcript, currentLiveRaw), [transcript, currentLiveRaw]
+  )
+
   const currentLive = useMemo(
     () => buildCurrentLive({ currentLiveRaw, currentGroup, latestYear }),
     [currentLiveRaw, currentGroup, latestYear]
@@ -232,7 +234,7 @@ export default function Gpa() {
       ) : (
         <CumulativeView
           transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
-          priorGroups={priorGroups} latestYear={latestYear} period={period}
+          priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade} period={period}
           confirmed={cumConfirmed} included={cumIncluded}
           weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
           manual={prefs.cumulative.manual || []}
@@ -267,7 +269,7 @@ function WeightSelect({ value, onChange }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, period, confirmed, included, weights, credits, grades, manual = [], rows, result, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, manual = [], rows, result, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
 
@@ -350,7 +352,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
 
         {/* current year — from live classwork */}
         <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
-          {latestYear || 'Current year'}{currentGroup ? ` · Grade ${currentGroup.grade} · ${currentGroup.building}` : ''} · from live grades
+          {currentGroup ? `${latestYear} · Grade ${currentGroup.grade} · ${currentGroup.building}` : `Current year${currentGrade ? ` · Grade ${currentGrade}` : ''}`} · from live grades
         </div>
         <table className="table">
           <tbody>
