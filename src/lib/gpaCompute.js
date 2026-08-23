@@ -4,6 +4,7 @@
 import { effectiveAverage } from './whatif.js'
 import { detectWeight, parseGrade, semesterGrade, liveSemesterAverage } from './gpa.js'
 import { cleanCourseName, courseKey, transcriptPeriod } from './courses.js'
+import { transcriptCourseName } from './courseCatalog.js'
 
 export const PERIOD_QUARTERS = { s1: ['1', '2'], s2: ['3', '4'], year: ['1', '2', '3', '4'] }
 
@@ -146,7 +147,7 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
     const pg = transcriptPeriod(c, 'year')
     if (!pg) continue
     rows.push({
-      key: c.code, name: c.description || c.code, year: c.year,
+      key: c.code, name: transcriptCourseName(c.description) || c.code, year: c.year,
       grade: prefs.cumulative.grades?.[c.code] ?? pg.grade, autoGrade: pg.grade,
       weight: prefs.cumulative.weights[c.code] ?? detectWeight(c.description, c.courseCode),
       credit: prefs.cumulative.credits?.[c.code] ?? pg.credit, include: true,

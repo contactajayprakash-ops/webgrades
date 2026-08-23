@@ -15,6 +15,7 @@ import {
   buildPriorCourses, buildCumRows, splitTranscript, resolvedPeriod,
 } from '../lib/gpaCompute.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
+import { transcriptCourseName } from '../lib/courseCatalog.js'
 
 const TOUR_SEEN_KEY = 'wg_tour_cumulative_seen'
 const mkId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2))
@@ -448,7 +449,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                         <input type="checkbox" disabled={!numeric} checked={!!included[code]} onChange={() => onToggle(code)}
                           style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
                       </td>
-                      <td>{c.description}<span className="faint small"> · {c.courseCode}</span></td>
+                      <td>{transcriptCourseName(c.description)}<span className="faint small"> · {c.description}</span></td>
                       <td>{numeric && <WeightSelect value={w} onChange={(e) => setWeight(code, e.target.value)} />}</td>
                       <td className="num faint small">{[c.sem1, c.sem2].filter((v) => v).join(' / ') || '—'}</td>
                       <td className="num mono">{numeric ? grade : (c.sem1 || '—')}</td>
