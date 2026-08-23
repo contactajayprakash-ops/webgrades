@@ -20,6 +20,23 @@
 // `Access-Control-Allow-Origin: *`, so this needs no server change.
 const BASE = import.meta.env.VITE_API_BASE || '/api';
 
+// HAC's Classwork page can list the SAME course more than once — the S1 and S2
+// sections of a year-long class, or an old + new section after a schedule change
+// — which surfaces as duplicate rows (one real, one empty). Collapse them by the
+// stable course key, keeping the richer entry (more assignments / a real grade).
+import { courseKey } from '../lib/courses.js';
+function dedupeClasses(data) {
+  if (!data || !Array.isArray(data.assignmentsData)) return data;
+  const rank = (c) => (c.assignments?.length || 0) * 10 + (/\d/.test(c.overallAverage || '') ? 1 : 0);
+  const byKey = new Map();
+  for (const c of data.assignmentsData) {
+    const k = courseKey(c.courseName);
+    const prev = byKey.get(k);
+    if (!prev || rank(c) > rank(prev)) byKey.set(k, c);
+  }
+  return { ...data, assignmentsData: [...byKey.values()] };
+}
+
 // The API logs into HAC fresh on every request. Hitting it concurrently makes
 // HAC reject the simultaneous logins ("Login failed"), so we funnel every call
 // through a single serial queue — one request to HAC at a time, app-wide.
@@ -75,7 +92,7 @@ export async function login(username, password) {
 export async function fetchData(creds, type, extra = {}) {
   const j = await post('/data', { ...creds, type, ...extra }, 2);
   if (!j.success) throw new Error(j.message || `Failed to load ${type}.`);
-  return { data: j.data, userName: j.userName };
+  return { data: type === 'class' ? dedupeClasses(j.data) : j.data, userName: j.userName };
 }
 
 export async function fetchIprDates(creds) {
@@ -90,7 +107,9 @@ export async function fetchIprDates(creds) {
 export async function fetchBatch(creds, requests) {
   const j = await post('/batch', { ...creds, requests }, 1);
   if (!j.success) throw new Error(j.message || 'Batch request failed.');
-  return { userName: j.userName, results: j.results || [] };
+  const results = (j.results || []).map((r) =>
+    r.type === 'class' && r.success ? { ...r, data: dedupeClasses(r.data) } : r);
+  return { userName: j.userName, results };
 }
 
 // Best-effort wake of a sleeping (Replit) server so the first real request

@@ -7,7 +7,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import { PageHead, Loading, Empty, GradeBadge, LastUpdated } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
-import { cleanCourseName, QUARTERS } from '../lib/courses.js'
+import { cleanCourseName, QUARTERS, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
 import { loadTheme } from '../lib/theme.js'
@@ -36,13 +36,15 @@ export default function Dashboard() {
 function useRecentGrades() {
   const { peekData, dataVersion, activeUsername } = useAuth()
 
-  // The most recent quarter that actually has grades (see CurrentClasses note).
+  // The most recent quarter that actually has grades (see CurrentClasses note),
+  // with dropped/phantom classes filtered against the schedule whitelist.
   const { quarter, classes } = useMemo(() => {
+    const wl = scheduleWhitelist(peekData('schedule')?.scheduleData)
     for (const q of ['4', '3', '2', '1']) {
-      const list = peekData('class', { quarter: q })?.assignmentsData || []
+      const list = filterPhantomClasses(peekData('class', { quarter: q })?.assignmentsData || [], wl)
       if (list.some((c) => parseGrade(c.overallAverage) != null)) return { quarter: q, classes: list }
     }
-    return { quarter: null, classes: peekData('class', {})?.assignmentsData || [] }
+    return { quarter: null, classes: filterPhantomClasses(peekData('class', {})?.assignmentsData || [], wl) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peekData, dataVersion])
 
