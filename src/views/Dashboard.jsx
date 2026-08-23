@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useHacData } from '../hooks/useHacData.js'
 import { useGpaMetrics, GPA_METRICS, findMetric } from '../hooks/useGpaMetrics.js'
@@ -7,7 +7,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import { PageHead, Loading, Empty, GradeBadge, LastUpdated } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
-import { cleanCourseName, QUARTERS, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
+import { cleanCourseName, courseKey, QUARTERS, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
 import { loadTheme } from '../lib/theme.js'
@@ -246,7 +246,9 @@ function GpaCard() {
 
 function CurrentClasses({ recent }) {
   const { sync, syncAll, syncedAt } = useAuth()
+  const navigate = useNavigate()
   const updating = sync.phase === 'syncing'
+  const openClass = (courseName) => navigate(`/grades?c=${encodeURIComponent(courseKey(courseName))}`)
 
   // The most-recent-quarter grades + change diff are computed once in the parent
   // (see useRecentGrades) and shared, so "Mark seen" here and the "Recently
@@ -289,10 +291,17 @@ function CurrentClasses({ recent }) {
           </thead>
           <tbody>
             {classes.map((c, i) => (
-              <tr key={i} className={changed.has(c.courseName) ? 'row-new' : ''}>
+              <tr key={i} className={`row-link ${changed.has(c.courseName) ? 'row-new' : ''}`}
+                onClick={() => openClass(c.courseName)}
+                title={`Open ${cleanCourseName(c.courseName)}`}>
                 <td>{cleanCourseName(c.courseName)}{changed.has(c.courseName) && <span className="pill pill-new">new</span>}</td>
                 <td className="faint small">{(c.assignments?.length || 0)} assignments</td>
-                <td className="num"><GradeBadge value={parseGrade(c.overallAverage)} /></td>
+                <td className="num">
+                  <span className="flex" style={{ gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <GradeBadge value={parseGrade(c.overallAverage)} />
+                    <Icon.chevron className="row-link-chev" width={16} height={16} />
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

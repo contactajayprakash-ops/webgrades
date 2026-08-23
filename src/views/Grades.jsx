@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
 import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner, Sparkline, LastUpdated } from '../components/ui.jsx'
@@ -30,6 +30,8 @@ export default function Grades() {
     return guessCurrentQuarter()
   })
   const tabPicked = useRef(false) // once the user clicks a quarter, stop auto-syncing it
+  const [sp] = useSearchParams()
+  const focusKey = sp.get('c') // deep-link from the dashboard: courseKey to open + scroll to
   const [byQuarter, setByQuarter] = useState(() => {
     const init = {}
     for (const q of ['1', '2', '3', '4']) {
@@ -163,7 +165,7 @@ export default function Grades() {
             edits={edits} setEdit={setEdit} whatIfCount={whatIfCount} query={query} sort={sort}
             onRetry={() => loadQuarter(tab, true)}
             newSet={tab === liveQuarter ? changed : EMPTY_SET}
-            wl={schedWl}
+            wl={schedWl} focusKey={focusKey}
           />}
     </>
   )
@@ -193,7 +195,7 @@ function semesterGpa(byQuarter, semQuarters, edits, prefs) {
   return { w: weightedGpa(rows).gpa, u: unweightedGpa(rows).gpa }
 }
 
-function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry, query = '', sort = 'name', newSet = EMPTY_SET, wl = null }) {
+function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry, query = '', sort = 'name', newSet = EMPTY_SET, wl = null, focusKey = null }) {
   const state = byQuarter[quarter]
   if (loading[quarter] || state === undefined) return <Loading label={`Loading ${QUARTERS.find((q) => q.value === quarter)?.label}…`} />
   if (state.error) return <ErrorBox message={state.error} onRetry={onRetry} />
@@ -237,7 +239,9 @@ function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatI
       {classes.length === 0
         ? <Empty>No classes match “{query}”.</Empty>
         : classes.map((c, i) => (
-            <ClassCard key={c.courseName || i} quarter={quarter} course={c} edits={edits} setEdit={setEdit} prefs={prefs} defaultOpen={classes.length <= 2} isNew={newSet.has(c.courseName)} />
+            <ClassCard key={c.courseName || i} quarter={quarter} course={c} edits={edits} setEdit={setEdit} prefs={prefs}
+              defaultOpen={classes.length <= 2} isNew={newSet.has(c.courseName)}
+              focus={!!focusKey && courseKey(c.courseName) === focusKey} />
           ))}
     </div>
   )
@@ -260,8 +264,16 @@ function ImpactCell({ label, cur, base, digits, active }) {
   )
 }
 
-function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew = false }) {
-  const [open, setOpen] = useState(!!defaultOpen)
+function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew = false, focus = false }) {
+  const [open, setOpen] = useState(!!defaultOpen || focus)
+  const cardRef = useRef(null)
+  // Deep-linked from the dashboard — open this card and scroll it into view.
+  useEffect(() => {
+    if (!focus) return
+    setOpen(true)
+    const t = setTimeout(() => cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+    return () => clearTimeout(t)
+  }, [focus])
   const eff = effectiveAverage(quarter, course, edits)
   const weight = weightFor(course.courseName, prefs)
   const name = cleanCourseName(course.courseName)
@@ -273,7 +285,7 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew 
   }
 
   return (
-    <div className={`card class-card${isNew ? ' row-new' : ''}`}>
+    <div ref={cardRef} className={`card class-card${isNew ? ' row-new' : ''}${focus ? ' card-focus' : ''}`}>
       <div className="class-head" onClick={() => setOpen((o) => !o)}>
         <div>
           <div className="ttl">{name}{isNew && <span className="pill pill-new">new</span>}</div>
