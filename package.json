@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "build:firebase": "VITE_API_BASE=https://diatjuqtrbl82.cloudfront.net/api vite build",
-    "deploy:firebase": "npm run build:firebase && npx firebase deploy --only hosting"
+    "deploy:firebase": "npm run build:firebase && npx firebase-tools deploy --only hosting --project webgrades"
   },
   "dependencies": {
     "react": "^18.3.1",
