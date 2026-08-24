@@ -410,6 +410,16 @@ tr.row-new { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .class-card.card-focus { animation: cardFocus 2s var(--ease); }
 @keyframes cardFocus { 0%, 60% { box-shadow: 0 0 0 2px var(--accent), var(--drop); } 100% { box-shadow: var(--drop); } }
 
+/* Dashboard: blur the rank number for privacy — tap/hover to peek. */
+.value.rank-blur { filter: blur(11px); cursor: pointer; user-select: none; transition: filter .25s var(--ease); }
+.value.rank-blur:hover, .value.rank-blur.revealed { filter: blur(0); }
+
+/* Dashboard "Upcoming" card (replaces the rank card). */
+.upcoming-list { list-style: none; margin: 8px 0 10px; padding: 0; display: flex; flex-direction: column; gap: 7px; width: 100%; }
+.upcoming-item { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.up-day { flex: none; min-width: 34px; font-size: var(--t-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--accent-text); }
+.up-text { font-size: var(--t-subhead); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* Dashboard "Recently posted" feed (opt-in). */
 .recent-empty { padding: 4px 20px 20px; color: var(--text-faint); font-size: var(--t-subhead); }
 .recent-list { list-style: none; margin: 0; padding: 0 8px 8px; }
