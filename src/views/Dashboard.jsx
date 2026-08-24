@@ -11,6 +11,7 @@ import { cleanCourseName, courseKey, QUARTERS, scheduleWhitelist, filterPhantomC
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
 import { loadTheme } from '../lib/theme.js'
+import { loadAgenda, todayKey, startOfWeek, addDays, dateKey, labelFor } from '../lib/agenda.js'
 
 export default function Dashboard() {
   const { userName } = useAuth()
@@ -150,6 +151,7 @@ function greeting(name) {
 // Shows a GPA shortcut (with an editable pinned number) + official rank/GPA.
 function TopStats() {
   const { data: rankData, loading: rankLoading } = useHacData('rank', null)
+  const rankCard = loadTheme().rankCard || 'show'
 
   return (
     <div className="grid grid-3">
@@ -162,13 +164,80 @@ function TopStats() {
         <span className="meta">from HAC transcript</span>
       </div>
 
-      <div className="card stat">
-        <span className="label">Class Rank</span>
-        {rankLoading ? <span className="value skeleton" style={{ height: 34, width: 100 }} />
-          : <span className="value">{rankData?.rank ? `#${rankData.rank}` : '—'}</span>}
-        <span className="meta">{rankData?.outOf ? `out of ${rankData.outOf}` : 'rank in class'}</span>
-      </div>
+      {rankCard === 'upcoming'
+        ? <UpcomingCard />
+        : <RankCard rankData={rankData} rankLoading={rankLoading} blurred={rankCard === 'blur'} />}
     </div>
+  )
+}
+
+// Class rank — optionally blurred for privacy (tap/hover to peek).
+function RankCard({ rankData, rankLoading, blurred }) {
+  const [revealed, setRevealed] = useState(false)
+  return (
+    <div className="card stat">
+      <span className="label">Class Rank</span>
+      {rankLoading ? <span className="value skeleton" style={{ height: 34, width: 100 }} />
+        : <span
+            className={`value${blurred ? ' rank-blur' : ''}${revealed ? ' revealed' : ''}`}
+            onClick={blurred ? () => setRevealed((r) => !r) : undefined}
+            title={blurred ? (revealed ? 'Tap to hide' : 'Tap to reveal') : undefined}
+          >{rankData?.rank ? `#${rankData.rank}` : '—'}</span>}
+      <span className="meta">{rankData?.outOf ? `out of ${rankData.outOf}` : 'rank in class'}</span>
+    </div>
+  )
+}
+
+// Replaces the rank card: the next things due, merged from your agenda (manual)
+// and this week's ungraded HAC assignments.
+function UpcomingCard() {
+  const { activeUsername } = useAuth()
+  const { data } = useHacData('week', null)
+
+  const items = useMemo(() => {
+    const today = todayKey()
+    const weekStart = startOfWeek(new Date())
+    const out = []
+    for (const t of loadAgenda(activeUsername)) {
+      if (t.done || !t.date || t.date < today) continue
+      out.push({ date: t.date, course: t.course, title: t.title || 'Task' })
+    }
+    for (const c of data?.classes || []) {
+      for (const a of c.assignments || []) {
+        if (parseGrade(a.grade) != null) continue // graded = done
+        const di = Number(a.dayIndex)
+        if (!(di >= 0 && di <= 4)) continue
+        const date = dateKey(addDays(weekStart, di))
+        if (date < today) continue
+        out.push({ date, course: cleanCourseName(c.course), title: a.title || 'Assignment' })
+      }
+    }
+    out.sort((a, b) => a.date.localeCompare(b.date))
+    return out
+  }, [data, activeUsername])
+
+  const rel = (key) => (key === todayKey() ? 'Today' : labelFor(key).weekday)
+
+  return (
+    <Link to="/agenda" className="card stat card-link" style={{ flexDirection: 'column', alignItems: 'stretch', textAlign: 'left', gap: 0 }}>
+      <span className="label">Upcoming</span>
+      {items.length === 0 ? (
+        <span className="value" style={{ fontSize: 22 }}>All clear</span>
+      ) : (
+        <ul className="upcoming-list">
+          {items.slice(0, 3).map((it, i) => (
+            <li key={i} className="upcoming-item">
+              <span className="up-day">{rel(it.date)}</span>
+              <span className="up-text">{it.title}{it.course ? <span className="faint"> · {cleanCourseName(it.course)}</span> : null}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <span className="meta">
+        {items.length === 0 ? 'nothing due — agenda + this week'
+          : `${items.length} due${items.length > 3 ? ` · +${items.length - 3} more` : ''} · agenda + this week`}
+      </span>
+    </Link>
   )
 }
 

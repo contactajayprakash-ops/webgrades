@@ -66,6 +66,20 @@ export default function Settings() {
             checked={theme.showRecent}
             onChange={(v) => update({ showRecent: v })}
           />
+
+          <div className="field mt-3">
+            <label>Class rank card</label>
+            <Segmented
+              style={{ marginTop: 4, alignSelf: 'flex-start' }}
+              value={theme.rankCard || 'show'}
+              onChange={(v) => update({ rankCard: v })}
+              ariaLabel="Class rank card"
+              options={[{ value: 'show', label: 'Show' }, { value: 'blur', label: 'Hide rank' }, { value: 'upcoming', label: 'Upcoming' }]}
+            />
+            <span className="small faint">
+              <b>Hide rank</b> blurs your rank number (tap it to peek). <b>Upcoming</b> replaces the card with what's due, from your agenda and this week.
+            </span>
+          </div>
         </div>
 
         {/* Performance */}
