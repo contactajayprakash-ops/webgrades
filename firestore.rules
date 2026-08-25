@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Agenda sync. The document id is a SHA-256 of the student's HAC
+    // username+password, so it can't be reached without the login. The app has
+    // no Firebase Auth, so we permit get/write on a *known* id but forbid
+    // enumeration (list) and constrain the document to the expected shape/size.
+    match /agendas/{id} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if request.resource.data.keys().hasOnly(['tasks', 'updatedAt', 'v'])
+                   && request.resource.data.tasks is list
+                   && request.resource.data.tasks.size() <= 1000
+                   && request.resource.data.updatedAt is number;
+    }
+
+    // Nothing else is accessible.
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { PageHead, Empty } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
@@ -6,15 +6,18 @@ import Segmented from '../components/Segmented.jsx'
 import { cleanCourseName, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { parseGrade } from '../lib/gpa.js'
 import {
-  loadAgenda, saveAgenda, uid, dateKey, todayKey, addDays,
+  loadAgenda, loadAgendaMeta, saveAgenda, uid, dateKey, todayKey, addDays,
   startOfWeek, weekDays, labelFor, weekRangeLabel, dayLabel, courseHue,
   loadAgendaView, saveAgendaView,
 } from '../lib/agenda.js'
 
+// Lazy so Firebase isn't in the main bundle — it loads only when the agenda syncs.
+const syncMod = () => import('../lib/agendaSync.js')
+
 const GENERAL = 'General'
 
 export default function Agenda() {
-  const { peekData, dataVersion, activeUsername, sync } = useAuth()
+  const { peekData, dataVersion, activeUsername, sync, session } = useAuth()
 
   // Your current classes drive the course picker (most recent quarter that has
   // one). Falls back to the default class view; "General" is always available.
@@ -35,8 +38,57 @@ export default function Agenda() {
   const classesLoading = courses.length === 0 && sync.phase !== 'done'
 
   const [tasks, setTasks] = useState(() => loadAgenda(activeUsername))
-  useEffect(() => { setTasks(loadAgenda(activeUsername)) }, [activeUsername])
-  useEffect(() => { saveAgenda(activeUsername, tasks) }, [activeUsername, tasks])
+  const sessionRef = useRef(session); sessionRef.current = session
+  const localUpdatedAt = useRef(loadAgendaMeta(activeUsername).updatedAt)
+  const pushTimer = useRef(null)
+
+  // Persist locally, and (debounced) push to the cloud so the agenda follows you
+  // across devices. `push: false` when we're just adopting what the cloud sent.
+  const commit = useCallback((nextTasks, opts = {}) => {
+    const updatedAt = opts.updatedAt ?? Date.now()
+    localUpdatedAt.current = updatedAt
+    setTasks(nextTasks)
+    saveAgenda(activeUsername, nextTasks, updatedAt)
+    if (opts.push === false) return
+    const s = sessionRef.current
+    if (!s?.username || !s?.password) return
+    clearTimeout(pushTimer.current)
+    pushTimer.current = setTimeout(async () => {
+      try { const { pushAgenda } = await syncMod(); await pushAgenda(s.username, s.password, nextTasks, updatedAt) } catch (_) {}
+    }, 800)
+  }, [activeUsername])
+
+  // Load the active account's local agenda when the profile changes.
+  useEffect(() => {
+    const meta = loadAgendaMeta(activeUsername)
+    localUpdatedAt.current = meta.updatedAt
+    setTasks(meta.tasks)
+  }, [activeUsername])
+
+  // Cross-device sync: pull on open, reconcile by last-write-wins. Silently
+  // stays local if offline / Firestore not reachable.
+  useEffect(() => {
+    const s = session
+    if (!s?.username || !s?.password) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { pullAgenda, pushAgenda } = await syncMod()
+        const cloud = await pullAgenda(s.username, s.password)
+        if (cancelled) return
+        const local = loadAgendaMeta(activeUsername)
+        if (!cloud) {
+          if (local.tasks.length) pushAgenda(s.username, s.password, local.tasks, local.updatedAt || Date.now()).catch(() => {})
+        } else if ((cloud.updatedAt || 0) > (local.updatedAt || 0)) {
+          commit(cloud.tasks || [], { push: false, updatedAt: cloud.updatedAt })
+        } else if ((local.updatedAt || 0) > (cloud.updatedAt || 0)) {
+          pushAgenda(s.username, s.password, local.tasks, local.updatedAt).catch(() => {})
+        }
+      } catch (_) { /* stay local */ }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.username, activeUsername])
 
   // Week or day view (remembered). One `anchor` date drives both: a week is the
   // 7 days around it; a day is just it.
@@ -65,12 +117,12 @@ export default function Agenda() {
   const add = () => {
     const t = title.trim()
     if (!t) { titleRef.current?.focus(); return }
-    setTasks((prev) => [...prev, { id: uid(), course, title: t, date: day, done: false }])
+    commit([...tasks, { id: uid(), course, title: t, date: day, done: false }])
     setTitle('')
     titleRef.current?.focus()
   }
-  const toggle = (id) => setTasks((prev) => prev.map((x) => (x.id === id ? { ...x, done: !x.done } : x)))
-  const remove = (id) => setTasks((prev) => prev.filter((x) => x.id !== id))
+  const toggle = (id) => commit(tasks.map((x) => (x.id === id ? { ...x, done: !x.done } : x)))
+  const remove = (id) => commit(tasks.filter((x) => x.id !== id))
 
   const quickAddTo = (d) => { setDay(d); titleRef.current?.focus() }
 

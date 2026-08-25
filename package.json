@@ -12,6 +12,7 @@
     "deploy:firebase": "npm run build:firebase && npx firebase-tools deploy --only hosting --project webgrades"
   },
   "dependencies": {
+    "firebase": "^12.18.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2"
