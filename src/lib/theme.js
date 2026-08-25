@@ -12,7 +12,7 @@ export const DEFAULT_THEME = {
   reduceBlur: false,   // lighter backdrop blur (faster on Chromebooks)
   reduceMotion: false, // kill animations/transitions
   showRecent: false,   // dashboard "Recently posted" feed — off by default (no change)
-  rankCard: 'show',    // dashboard Class Rank card: 'show' | 'blur' | 'upcoming'
+  rankCard: 'upcoming', // dashboard 3rd card: 'upcoming' (default) | 'show' rank | 'blur' rank
 }
 
 // Each accent turns the two knobs (--accent, --accent-2); every other brand

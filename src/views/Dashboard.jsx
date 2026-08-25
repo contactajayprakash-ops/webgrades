@@ -126,10 +126,10 @@ function greeting(name) {
 // Shows a GPA shortcut (with an editable pinned number) + official rank/GPA.
 function TopStats() {
   const { data: rankData, loading: rankLoading } = useHacData('rank', null)
-  const rankCard = loadTheme().rankCard || 'show'
+  const rankCard = loadTheme().rankCard || 'upcoming'
 
   return (
-    <div className="grid grid-3">
+    <div className="grid grid-3 top-stats">
       <GpaCard />
 
       <div className="card stat">

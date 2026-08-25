@@ -355,6 +355,12 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.992);
    STAT CARDS
    ============================================================================ */
 .stat { padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; position: relative; overflow: hidden; }
+/* Top dashboard row: the Upcoming card (a list) is taller than the GPA cards, so
+   center each card's content vertically — no empty gap at the bottom of the
+   shorter ones. The GPA card's inner card also fills its wrapper cell. */
+.top-stats .stat { justify-content: center; }
+.top-stats .stat-pick { display: flex; }
+.top-stats .stat-pick > .card { flex: 1; }
 .stat .label { font-size: var(--t-footnote); color: var(--text-dim); font-weight: 500; letter-spacing: -0.005em; }
 .stat .value { font-size: 40px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
 .stat .meta { font-size: var(--t-footnote); color: var(--text-faint); }
