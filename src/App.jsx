@@ -16,9 +16,14 @@ import Rank from './views/Rank.jsx'
 import Transcript from './views/Transcript.jsx'
 import Attendance from './views/Attendance.jsx'
 import Settings from './views/Settings.jsx'
+import MovedNotice, { isRetiredHost } from './components/MovedNotice.jsx'
 
 export default function App() {
   const { isAuthed } = useAuth()
+
+  // Old Vercel deployment: send everyone to the new Firebase link before anything
+  // else (no data loads on the dead host anyway).
+  if (isRetiredHost()) return <MovedNotice />
 
   // The install prompt shows for everyone — signed in or on the login screen.
   if (!isAuthed) return (<><Login /><InstallPrompt /></>)
