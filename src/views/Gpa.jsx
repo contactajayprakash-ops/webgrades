@@ -377,7 +377,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                       const rp = resolvedPeriod(c, period)
                       const auto = rp?.grade != null ? Math.round(rp.grade * 100) / 100 : null
                       const gv = grades[c.key] !== undefined ? grades[c.key] : auto
-                      return <input className="input mini" type="number" step="0.01" title="Grade (editable — enter a predicted grade)"
+                      return <input className="input mini" type="number" step="1" title="Grade (editable — enter a predicted grade)"
                         placeholder={auto != null ? String(auto) : 'grade'}
                         value={gv ?? ''} onChange={(e) => setGrade(c.key, e.target.value === '' ? null : Number(e.target.value))} />
                     })()}
@@ -413,7 +413,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                   </td>
                   <td><WeightSelect value={weights[key] ?? 5} onChange={(e) => setWeight(key, e.target.value)} /></td>
                   <td className="num faint small">—</td>
-                  <td className="num"><input className="input mini" type="number" step="0.01" placeholder="grade"
+                  <td className="num"><input className="input mini" type="number" step="1" placeholder="grade"
                     value={grades[key] ?? ''} onChange={(e) => setGrade(key, e.target.value === '' ? null : Number(e.target.value))} /></td>
                   <td className="num"><input className="input mini" type="number" step="0.5" min="0" title="Credit"
                     value={credits[key] ?? 1} onChange={(e) => setCredit(key, e.target.value)} /></td>
@@ -547,7 +547,7 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, onGrade, onWe
                   {showYear && <td className="faint small">{r.year}</td>}
                   <td className="num">
                     {editableGrade
-                      ? <input className="input mini" type="number" step="0.01" value={r.grade ?? ''} onChange={(e) => onGrade?.(r.key, e.target.value === '' ? null : Number(e.target.value))} />
+                      ? <input className="input mini" type="number" step="1" value={r.grade ?? ''} onChange={(e) => onGrade?.(r.key, e.target.value === '' ? null : Number(e.target.value))} />
                       : <span className="mono">{r.grade ?? '—'}</span>}
                   </td>
                   <td>
