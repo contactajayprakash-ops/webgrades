@@ -9,7 +9,8 @@ import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
 import { cleanCourseName, courseKey, QUARTERS, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
-import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
+import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince } from '../lib/seen.js'
+import { officialAverage } from '../lib/whatif.js'
 import { loadTheme } from '../lib/theme.js'
 import { loadAgenda, todayKey, startOfWeek, addDays, dateKey, labelFor } from '../lib/agenda.js'
 
@@ -61,24 +62,10 @@ function useRecentGrades() {
   const changed = useMemo(() => new Set(changedSince(seen, classes)), [seen, classes])
   const markSeen = () => { const snap = snapshotOf(classes); saveSeen(activeUsername, snap); setSeen(snap) }
 
-  // Detailed feed for the "Recently posted" section: name, old% → new%, biggest
-  // movers first. Empty until there's a prior snapshot to compare against.
-  const feed = useMemo(() => {
-    if (!seen) return []
-    const out = []
-    for (const c of classes) {
-      if (!changed.has(c.courseName)) continue
-      const had = c.courseName in seen
-      out.push({
-        name: cleanCourseName(c.courseName),
-        from: had ? parseGrade(seen[c.courseName]) : null,
-        to: parseGrade(c.overallAverage),
-        isNew: !had,
-      })
-    }
-    const mag = (x) => (x.from == null || x.to == null ? -1 : Math.abs(x.to - x.from))
-    return out.sort((a, b) => mag(b) - mag(a))
-  }, [seen, classes, changed])
+  // Assignment-level feed for "Recently posted": the exact assignments that were
+  // graded since last visit (class · assignment · grade), newest first. Empty
+  // until there's a snapshot to compare against.
+  const feed = useMemo(() => postedSince(seen, classes), [seen, classes])
 
   return { quarter, classes, seen, changed, markSeen, feed }
 }
@@ -88,7 +75,6 @@ function useRecentGrades() {
 function RecentlyPosted({ recent }) {
   const { syncedAt } = useAuth()
   const { feed, markSeen } = recent
-  const fmt = (n) => (n == null ? '—' : n % 1 === 0 ? `${n}` : n.toFixed(2))
 
   return (
     <div className="card">
@@ -103,29 +89,18 @@ function RecentlyPosted({ recent }) {
         <div className="recent-empty">You're all caught up — no new grades since your last check.</div>
       ) : (
         <ul className="recent-list">
-          {feed.map((f, i) => {
-            const delta = f.from != null && f.to != null ? f.to - f.from : null
-            const dir = delta == null || Math.abs(delta) < 1e-9 ? 'flat' : delta > 0 ? 'up' : 'down'
-            return (
-              <li key={i} className="recent-item">
-                <span className={`recent-dot ${dir}`} aria-hidden="true" />
-                <div className="recent-main">
-                  <div className="recent-name">{f.name}</div>
-                  <div className="recent-sub">
-                    {f.isNew ? 'New — grade posted' : `${fmt(f.from)}% → ${fmt(f.to)}%`}
-                  </div>
-                </div>
-                <div className="recent-right">
-                  <GradeBadge value={f.to} showLetter={false} />
-                  {delta != null && Math.abs(delta) >= 0.005 && (
-                    <span className={`recent-delta ${dir}`}>
-                      {delta > 0 ? '↑' : '↓'} {fmt(Math.abs(delta))}
-                    </span>
-                  )}
-                </div>
-              </li>
-            )
-          })}
+          {feed.map((f, i) => (
+            <li key={i} className="recent-item">
+              <span className={`recent-dot ${f.isNew ? 'up' : 'flat'}`} aria-hidden="true" />
+              <div className="recent-main">
+                <div className="recent-name">{f.name}</div>
+                <div className="recent-sub">{f.course}{f.isNew ? '' : ' · updated'}</div>
+              </div>
+              <div className="recent-right">
+                <GradeBadge value={parseGrade(f.grade)} showLetter={false} />
+              </div>
+            </li>
+          ))}
         </ul>
       )}
     </div>
@@ -367,7 +342,7 @@ function CurrentClasses({ recent }) {
                 <td className="faint small">{(c.assignments?.length || 0)} assignments</td>
                 <td className="num">
                   <span className="flex" style={{ gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-                    <GradeBadge value={parseGrade(c.overallAverage)} />
+                    <GradeBadge value={officialAverage(c)} />
                     <Icon.chevron className="row-link-chev" width={16} height={16} />
                   </span>
                 </td>
