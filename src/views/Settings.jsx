@@ -63,7 +63,7 @@ export default function Settings() {
           <h3 className="mb-3">Dashboard</h3>
           <ToggleRow
             label="Show GPA on dashboard"
-            hint="Off by default for privacy — your cumulative and official GPA stay hidden behind quick-access buttons (Agenda, Targets) until you turn this on, so opening the app in front of others reveals nothing."
+            hint="Off by default for privacy — your cumulative and official GPA stay hidden behind quick-access buttons (Agenda, Schedule) until you turn this on, so opening the app in front of others reveals nothing."
             checked={theme.showGpa}
             onChange={(v) => update({ showGpa: v })}
           />

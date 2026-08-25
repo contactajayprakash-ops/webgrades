@@ -159,7 +159,7 @@ function TopStats() {
           <span className="meta">from HAC transcript</span>
         </div>
       ) : (
-        <NavTile to="/target" label="Goals" title="Targets" sub="What you need for an A" accent="var(--accent-2)" />
+        <NavTile to="/schedule" label="Classes" title="Schedule" sub="Your A/B-day classes" accent="var(--accent-2)" />
       )}
 
       {rankCard === 'upcoming'
