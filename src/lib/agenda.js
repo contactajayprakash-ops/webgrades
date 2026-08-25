@@ -4,15 +4,23 @@
 // so each profile keeps its own agenda.
 const keyFor = (u) => `wg_agenda_${u || '_anon'}`
 
-export function loadAgenda(username) {
+// Stored as { tasks, updatedAt } so cross-device sync can pick the newer copy.
+// Legacy plain-array saves are still read (as updatedAt 0).
+export function loadAgendaMeta(username) {
   try {
-    const a = JSON.parse(localStorage.getItem(keyFor(username)))
-    return Array.isArray(a) ? a : []
-  } catch (_) { return [] }
+    const raw = JSON.parse(localStorage.getItem(keyFor(username)))
+    if (Array.isArray(raw)) return { tasks: raw, updatedAt: 0 }
+    if (raw && Array.isArray(raw.tasks)) return { tasks: raw.tasks, updatedAt: raw.updatedAt || 0 }
+  } catch (_) {}
+  return { tasks: [], updatedAt: 0 }
 }
 
-export function saveAgenda(username, tasks) {
-  try { localStorage.setItem(keyFor(username), JSON.stringify(tasks)) } catch (_) {}
+export function loadAgenda(username) {
+  return loadAgendaMeta(username).tasks
+}
+
+export function saveAgenda(username, tasks, updatedAt = Date.now()) {
+  try { localStorage.setItem(keyFor(username), JSON.stringify({ tasks: tasks || [], updatedAt })) } catch (_) {}
 }
 
 export const uid = () =>
