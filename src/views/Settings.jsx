@@ -62,6 +62,13 @@ export default function Settings() {
         <div className="card card-pad">
           <h3 className="mb-3">Dashboard</h3>
           <ToggleRow
+            label="Show GPA on dashboard"
+            hint="Off by default for privacy — your cumulative and official GPA stay hidden behind quick-access buttons (Agenda, Targets) until you turn this on, so opening the app in front of others reveals nothing."
+            checked={theme.showGpa}
+            onChange={(v) => update({ showGpa: v })}
+          />
+          <div style={{ height: 14 }} />
+          <ToggleRow
             label="Recently posted grades"
             hint="Show a feed at the top of the dashboard of grades that changed since your last visit — so you can tell something posted without opening each class."
             checked={theme.showRecent}

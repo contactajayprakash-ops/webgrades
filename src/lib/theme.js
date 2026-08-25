@@ -13,6 +13,7 @@ export const DEFAULT_THEME = {
   reduceMotion: false, // kill animations/transitions
   showRecent: false,   // dashboard "Recently posted" feed — off by default (no change)
   rankCard: 'upcoming', // dashboard 3rd card: 'upcoming' (default) | 'show' rank | 'blur' rank
+  showGpa: false,      // show the two GPA cards on the dashboard (off = private, buttons instead)
 }
 
 // Each accent turns the two knobs (--accent, --accent-2); every other brand
