@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { applyTheme, loadTheme } from '../lib/theme.js'
 import { SETTINGS_META_KEY as META_KEY } from '../lib/settingsMeta.js'
+import { syncAllowedFor } from '../lib/syncPolicy.js'
 
 // Logical name -> localStorage key that syncs across a user's devices. `wg_theme`
 // is one JSON blob holding EVERY appearance/dashboard setting, so any future
@@ -56,6 +57,7 @@ export function useSettingsSync(session) {
     const isSwitch = didInitial.current
     didInitial.current = true
     clearTimeout(pushTimer.current) // drop any push queued by the previous profile
+    if (!syncAllowedFor(s.username)) return // dev-browser lock: this account doesn't sync here
     let cancelled = false
     ;(async () => {
       try {
@@ -85,7 +87,7 @@ export function useSettingsSync(session) {
   useEffect(() => {
     const onChange = () => {
       const s = sessionRef.current
-      if (!s?.username || !s?.password) return
+      if (!s?.username || !s?.password || !syncAllowedFor(s.username)) return
       clearTimeout(pushTimer.current)
       pushTimer.current = setTimeout(async () => {
         try {
