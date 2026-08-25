@@ -454,6 +454,8 @@ tr.row-new { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .agenda-grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px 4px; }
 /* Desktop: all 7 days share the width and shrink to fit — never overflows. */
 .agenda-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+/* Day view: one full-width cell (higher specificity beats the mobile override). */
+.agenda-grid.single { grid-template-columns: 1fr; }
 .wk-day { display: flex; flex-direction: column; background: var(--bg-elevated); border: 0.5px solid var(--separator);
   border-radius: var(--radius-sm); padding: 12px; min-height: min(64vh, 460px); }
 .wk-day.is-today { border-color: color-mix(in srgb, var(--accent) 55%, var(--separator)); box-shadow: inset 0 2px 0 var(--accent); }
