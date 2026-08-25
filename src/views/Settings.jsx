@@ -72,10 +72,10 @@ export default function Settings() {
             <label>Class rank card</label>
             <Segmented
               style={{ marginTop: 4, alignSelf: 'flex-start' }}
-              value={theme.rankCard || 'show'}
+              value={theme.rankCard || 'upcoming'}
               onChange={(v) => update({ rankCard: v })}
               ariaLabel="Class rank card"
-              options={[{ value: 'show', label: 'Show' }, { value: 'blur', label: 'Hide rank' }, { value: 'upcoming', label: 'Upcoming' }]}
+              options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'show', label: 'Show rank' }, { value: 'blur', label: 'Hide rank' }]}
             />
             <span className="small faint">
               <b>Hide rank</b> blurs your rank number (tap it to peek). <b>Upcoming</b> replaces the card with what's due, from your agenda and this week.
