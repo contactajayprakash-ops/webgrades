@@ -124,20 +124,43 @@ function greeting(name) {
 }
 
 // Shows a GPA shortcut (with an editable pinned number) + official rank/GPA.
+// A dashboard tile that's just a link to another page — used in place of the GPA
+// cards when GPA is hidden, so opening the app in front of others reveals nothing.
+function NavTile({ to, label, title, sub, accent = 'var(--accent)' }) {
+  return (
+    <Link to={to} className="card stat card-link" style={{ flexDirection: 'column' }}>
+      <span className="glow" style={{ background: accent }} />
+      <span className="label">{label}</span>
+      <span className="value" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 28 }}>
+        {title} <Icon.chevron width={22} height={22} />
+      </span>
+      <span className="meta">{sub}</span>
+    </Link>
+  )
+}
+
 function TopStats() {
   const { data: rankData, loading: rankLoading } = useHacData('rank', null)
-  const rankCard = loadTheme().rankCard || 'upcoming'
+  const theme = loadTheme()
+  const rankCard = theme.rankCard || 'upcoming'
+  const showGpa = !!theme.showGpa // off by default — GPA stays private behind buttons
 
   return (
     <div className="grid grid-3 top-stats">
-      <GpaCard />
+      {showGpa
+        ? <GpaCard />
+        : <NavTile to="/agenda" label="Planner" title="Agenda" sub="Homework & due dates" />}
 
-      <div className="card stat">
-        <span className="label">Official GPA</span>
-        {rankLoading ? <span className="value skeleton" style={{ height: 34, width: 100 }} />
-          : <span className="value">{rankData?.gpa || '—'}</span>}
-        <span className="meta">from HAC transcript</span>
-      </div>
+      {showGpa ? (
+        <div className="card stat">
+          <span className="label">Official GPA</span>
+          {rankLoading ? <span className="value skeleton" style={{ height: 34, width: 100 }} />
+            : <span className="value">{rankData?.gpa || '—'}</span>}
+          <span className="meta">from HAC transcript</span>
+        </div>
+      ) : (
+        <NavTile to="/target" label="Goals" title="Targets" sub="What you need for an A" accent="var(--accent-2)" />
+      )}
 
       {rankCard === 'upcoming'
         ? <UpcomingCard />
