@@ -2,6 +2,8 @@
 // student agenda. Tasks are the student's OWN notes ("read ch. 4", "p.32 #1-20")
 // pinned to a class and a day; nothing here comes from HAC. Stored per username
 // so each profile keeps its own agenda.
+import { markSettingsChanged } from './settingsMeta.js'
+
 const keyFor = (u) => `wg_agenda_${u || '_anon'}`
 
 // Stored as { tasks, updatedAt } so cross-device sync can pick the newer copy.
@@ -73,6 +75,7 @@ export function loadAgendaView() {
 }
 export function saveAgendaView(v) {
   try { localStorage.setItem(VIEW_KEY, v) } catch (_) {}
+  markSettingsChanged()
 }
 export function weekRangeLabel(weekStart) {
   const a = weekStart, b = addDays(weekStart, 6)

@@ -15,6 +15,15 @@ service cloud.firestore {
                    && request.resource.data.updatedAt is number;
     }
 
+    // Settings sync (appearance + GPA setup). Same doc-id-as-secret model.
+    match /settings/{id} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if request.resource.data.keys().hasOnly(['data', 'updatedAt', 'v'])
+                   && request.resource.data.updatedAt is number
+                   && request.resource.data.data is map;
+    }
+
     // Nothing else is accessible.
     match /{document=**} { allow read, write: if false; }
   }

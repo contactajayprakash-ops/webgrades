@@ -2,6 +2,8 @@
 // localStorage key — separate from per-account data — and applied by mutating
 // CSS custom properties / <html> attributes that index.css reads. Defaults match
 // the original look exactly, so an untouched install renders identically.
+import { markSettingsChanged } from './settingsMeta.js'
+
 const KEY = 'wg_theme'
 
 export const DEFAULT_THEME = {
@@ -37,6 +39,7 @@ export function loadTheme() {
 
 export function saveTheme(state) {
   try { localStorage.setItem(KEY, JSON.stringify(state)) } catch (_) {}
+  markSettingsChanged() // bump the sync stamp before the reload so it pushes after
   applyTheme(state)
   window.location.reload();
 
