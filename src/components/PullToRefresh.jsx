@@ -85,39 +85,22 @@ export default function PullToRefresh({ onRefresh, children }) {
     }
   }, [])
 
-  const ratio = Math.min(1, pull / THRESHOLD)
-  const armed = ratio >= 1
-  const R = 15, CIRC = 2 * Math.PI * R
   const show = pull > 1 || refreshing
 
   return (
     <>
       <div
-        className={`ptr-ind${armed ? ' armed' : ''}${refreshing ? ' refreshing' : ''}`}
+        className="ptr-ind"
         aria-hidden="true"
         style={{
-          opacity: show ? Math.min(1, pull / 26) : 0,
-          transform: `translateX(-50%) translateY(${Math.min(pull, THRESHOLD)}px) scale(${0.55 + 0.45 * ratio})`,
+          opacity: show ? Math.min(1, pull / 22) : 0,
+          transform: `translateX(-50%) translateY(${Math.min(pull, THRESHOLD) + 4}px)`,
         }}
       >
-        <div className="ptr-orb">
-          <svg width="42" height="42" viewBox="0 0 42 42" style={{ transform: refreshing ? undefined : `rotate(${pull * 2.2}deg)` }}>
-            <defs>
-              <linearGradient id="ptr-grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stopColor="var(--accent)" />
-                <stop offset="1" stopColor="var(--accent-2)" />
-              </linearGradient>
-            </defs>
-            <circle cx="21" cy="21" r={R} fill="none" stroke="var(--fill-3)" strokeWidth="3" />
-            <circle
-              cx="21" cy="21" r={R} fill="none" stroke="url(#ptr-grad)" strokeWidth="3" strokeLinecap="round"
-              strokeDasharray={CIRC}
-              strokeDashoffset={refreshing ? CIRC * 0.72 : CIRC * (1 - ratio)}
-              transform="rotate(-90 21 21)"
-            />
-          </svg>
-          <span className="ptr-core" />
-        </div>
+        <span
+          className={`ptr-ring${refreshing ? ' spin' : ''}`}
+          style={refreshing ? undefined : { transform: `rotate(${pull * 3}deg)` }}
+        />
       </div>
 
       <div
