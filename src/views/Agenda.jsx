@@ -39,9 +39,29 @@ export default function Agenda() {
   const classesLoading = courses.length === 0 && sync.phase !== 'done'
 
   const [tasks, setTasks] = useState(() => loadAgenda(activeUsername))
+  const [syncState, setSyncState] = useState('idle') // idle | syncing | done | off | error
   const sessionRef = useRef(session); sessionRef.current = session
   const localUpdatedAt = useRef(loadAgendaMeta(activeUsername).updatedAt)
   const pushTimer = useRef(null)
+
+  // Force this device's agenda to be the cloud copy, so future logins get it.
+  const forceSync = async () => {
+    const s = sessionRef.current
+    if (!s?.username || !s?.password || !syncAllowedFor(s.username)) { setSyncState('off'); setTimeout(() => setSyncState('idle'), 2500); return }
+    setSyncState('syncing')
+    const ts = Date.now()
+    localUpdatedAt.current = ts
+    saveAgenda(activeUsername, tasks, ts) // keep local authoritative for reconciles
+    try {
+      const { pushAgenda } = await syncMod()
+      await pushAgenda(s.username, s.password, tasks, ts)
+      setSyncState('done')
+      setTimeout(() => setSyncState('idle'), 2000)
+    } catch (_) {
+      setSyncState('error')
+      setTimeout(() => setSyncState('idle'), 2500)
+    }
+  }
 
   // Persist locally, and (debounced) push to the cloud so the agenda follows you
   // across devices. `push: false` when we're just adopting what the cloud sent.
@@ -145,6 +165,15 @@ export default function Agenda() {
           ariaLabel="Agenda view"
           options={[{ value: 'week', label: 'Week' }, { value: 'day', label: 'Day' }]}
         />
+        <button className="btn ghost sm" onClick={forceSync} disabled={syncState === 'syncing'}
+          title="Save this device's agenda to the cloud as the current copy (future logins get this)">
+          {syncState === 'syncing'
+            ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+            : syncState === 'done'
+              ? <Icon.check width={15} height={15} />
+              : <Icon.refresh width={15} height={15} />}
+          {syncState === 'done' ? 'Synced' : syncState === 'off' ? 'Local only' : syncState === 'error' ? 'Retry' : 'Sync'}
+        </button>
       </PageHead>
 
       {/* Week / day navigation */}
