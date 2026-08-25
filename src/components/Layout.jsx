@@ -5,6 +5,7 @@ import { useSettingsSync } from '../hooks/useSettingsSync.js'
 import { Icon } from './icons.jsx'
 import { OfflineBanner } from './ui.jsx'
 import ProfileSwitcher from './ProfileSwitcher.jsx'
+import PullToRefresh from './PullToRefresh.jsx'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: 'home', end: true },
@@ -35,7 +36,7 @@ const TABS = [
 const titleFor = (path) => NAV.find((n) => n.to && (n.end ? path === n.to : path.startsWith(n.to)))?.label || 'WebGrades'
 
 export default function Layout() {
-  const { activeUsername, session } = useAuth()
+  const { activeUsername, session, syncAll } = useAuth()
   useSettingsSync(session) // keep appearance + GPA setup synced across devices
   const [open, setOpen] = useState(false)   // mobile sidebar sheet
   const [slim, setSlim] = useState(false)   // desktop collapsed rail
@@ -136,8 +137,10 @@ export default function Layout() {
 
         {/* key by account so switching profiles remounts the views with fresh state */}
         <main className="main" key={activeUsername}>
-          <OfflineBanner />
-          <Outlet />
+          <PullToRefresh onRefresh={syncAll}>
+            <OfflineBanner />
+            <Outlet />
+          </PullToRefresh>
         </main>
       </div>
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { syncAllowedFor } from '../lib/syncPolicy.js'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import { Icon } from './icons.jsx'
 
@@ -90,7 +91,11 @@ export default function ProfileSwitcher() {
         <span className="avatar">{initials(userName)}</span>
         <span className="profile-trigger-text">
           <span className="name">{userName || 'Student'}</span>
-          <span className="sub">{profiles.length > 1 ? `${profiles.length} accounts` : 'HAC connected'}</span>
+          <span className="sub">
+            {syncAllowedFor(activeUsername)
+              ? (profiles.length > 1 ? `${profiles.length} accounts` : 'HAC connected')
+              : 'Local only · not syncing'}
+          </span>
         </span>
         <Icon.chevron className={`profile-caret ${open ? 'open' : ''}`} width={16} height={16} />
       </button>
