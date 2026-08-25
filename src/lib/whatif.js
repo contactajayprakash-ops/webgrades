@@ -30,16 +30,45 @@ export function classRows(quarter, course, edits) {
   return rows
 }
 
+export const isAssessment = (cat) => /assess|aol/i.test(cat || '')
+export const isProgress = (cat) => /progress|prog|\bpc\b/i.test(cat || '')
+
+// Frisco's overall grade is Assessment-driven: a class reads N/A until an
+// Assessment (AOL) grade is posted, even if Progress (PC) grades exist. Honor
+// that so (a) an ungraded class isn't counted as a 0 that drags the GPA negative,
+// and (b) a what-if edit to a PC doesn't fabricate an overall grade. Rules:
+//   - nothing graded            -> N/A
+//   - uses AOL/PC categories but no graded Assessment -> N/A
+//   - not an AOL/PC-graded class -> leave it alone (use estimate/official)
+// A hypothetical added row counts as an assessment, so projecting a future grade
+// still works.
+export function categoryNA(rows) {
+  const graded = (rows || []).filter((r) => r.score != null)
+  if (!graded.length) return true
+  const usesCategories = rows.some((r) => isAssessment(r.category) || isProgress(r.category))
+  if (!usesCategories) return false
+  return !graded.some((r) => isAssessment(r.category) || r.hypo)
+}
+
+// N/A-aware official average for a raw course (no what-if edits) — for display
+// where 0% would otherwise show for a not-yet-really-graded class.
+export function officialAverage(course) {
+  const rows = (course.assignments || []).map((a) => ({ category: a.category, score: parseGrade(a.grade) }))
+  return categoryNA(rows) ? null : parseGrade(course.overallAverage)
+}
+
 // Effective average for a class in a quarter: the points-based estimate when
-// the student has edited something, otherwise HAC's official average.
+// the student has edited something, otherwise HAC's official average — but N/A
+// until the class is really graded (see categoryNA).
 export function effectiveAverage(quarter, course, edits) {
   const rows = classRows(quarter, course, edits)
   const anyEdit = rows.some((r) => r.edited)
   const official = parseGrade(course.overallAverage)
+  const na = categoryNA(rows)
   return {
     rows,
-    official,
+    official: na ? null : official,
     edited: anyEdit,
-    avg: anyEdit ? estimateAverage(rows) : official,
+    avg: na ? null : (anyEdit ? estimateAverage(rows) : official),
   }
 }

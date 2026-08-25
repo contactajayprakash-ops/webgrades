@@ -93,16 +93,22 @@ function diffResource(type, extra, oldData, newData) {
     if (type === 'class') {
       const q = extra.quarter ? `Q${extra.quarter}` : 'Current'
       const oldMap = new Map((oldData.assignmentsData || []).map((c) => [c.courseName, c]))
+      const graded = (g) => g != null && String(g).trim() !== '' && /\d/.test(String(g))
       const out = []
       for (const c of newData.assignmentsData || []) {
         const o = oldMap.get(c.courseName)
         if (!o) continue
         const name = cleanCourseName(c.courseName)
-        if (o.overallAverage !== c.overallAverage) {
+        // Name the exact assignment(s) that were graded/changed, not just the avg.
+        const oldA = new Map((o.assignments || []).map((a) => [a.assignmentName, a.grade]))
+        let listed = 0
+        for (const a of c.assignments || []) {
+          if (!graded(a.grade) || oldA.get(a.assignmentName) === a.grade) continue
+          out.push(`${name} — ${a.assignmentName || 'Assignment'}: ${String(a.grade).trim()}`)
+          listed++
+        }
+        if (!listed && o.overallAverage !== c.overallAverage) {
           out.push(`${name} ${o.overallAverage} → ${c.overallAverage} (${q})`)
-        } else {
-          const d = (c.assignments?.length || 0) - (o.assignments?.length || 0)
-          if (d > 0) out.push(`${name} +${d} new assignment${d > 1 ? 's' : ''} (${q})`)
         }
       }
       return out
