@@ -2,6 +2,8 @@
 // pinned dashboard metric). Each profile gets its own setup — they used to share
 // one key, which let one student's cumulative setup bleed onto another's.
 // Stored as `wg_prefs_<username>` so switching profiles loads the right setup.
+import { markSettingsChanged } from './settingsMeta.js'
+
 const LEGACY_KEY = 'wg_prefs' // old single shared key (migrated once, then removed)
 const keyFor = (username) => `wg_prefs_${username || '_anon'}`
 
@@ -61,6 +63,7 @@ export function savePrefs(username, prefs) {
   try {
     localStorage.setItem(keyFor(username), JSON.stringify(prefs))
   } catch (_) {}
+  markSettingsChanged()
 }
 
 // Drop a profile's saved setup (called when the profile is removed).

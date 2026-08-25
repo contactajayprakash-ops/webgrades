@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useSettingsSync } from '../hooks/useSettingsSync.js'
 import { Icon } from './icons.jsx'
 import { OfflineBanner } from './ui.jsx'
 import ProfileSwitcher from './ProfileSwitcher.jsx'
@@ -34,7 +35,8 @@ const TABS = [
 const titleFor = (path) => NAV.find((n) => n.to && (n.end ? path === n.to : path.startsWith(n.to)))?.label || 'WebGrades'
 
 export default function Layout() {
-  const { activeUsername } = useAuth()
+  const { activeUsername, session } = useAuth()
+  useSettingsSync(session) // keep appearance + GPA setup synced across devices
   const [open, setOpen] = useState(false)   // mobile sidebar sheet
   const [slim, setSlim] = useState(false)   // desktop collapsed rail
   const [q, setQ] = useState('')            // sidebar search filter
