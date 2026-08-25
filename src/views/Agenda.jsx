@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { PageHead, Empty } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
+import Segmented from '../components/Segmented.jsx'
 import { cleanCourseName, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { parseGrade } from '../lib/gpa.js'
 import {
   loadAgenda, saveAgenda, uid, dateKey, todayKey, addDays,
-  startOfWeek, weekDays, labelFor, weekRangeLabel, courseHue,
+  startOfWeek, weekDays, labelFor, weekRangeLabel, dayLabel, courseHue,
+  loadAgendaView, saveAgendaView,
 } from '../lib/agenda.js'
 
 const GENERAL = 'General'
@@ -36,22 +38,29 @@ export default function Agenda() {
   useEffect(() => { setTasks(loadAgenda(activeUsername)) }, [activeUsername])
   useEffect(() => { saveAgenda(activeUsername, tasks) }, [activeUsername, tasks])
 
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
-  const days = useMemo(() => weekDays(weekStart), [weekStart])
-  const today = todayKey()
-  const thisWeek = days.includes(today)
+  // Week or day view (remembered). One `anchor` date drives both: a week is the
+  // 7 days around it; a day is just it.
+  const [view, setView] = useState(loadAgendaView)
+  const [anchor, setAnchor] = useState(() => new Date())
+  const changeView = (v) => { setView(v); saveAgendaView(v) }
 
-  // Composer state. Default the day to today when it's in view, else the Monday.
+  const weekStart = useMemo(() => startOfWeek(anchor), [anchor])
+  const days = useMemo(() => (view === 'day' ? [dateKey(anchor)] : weekDays(weekStart)), [view, anchor, weekStart])
+  const today = todayKey()
+  const inView = days.includes(today)
+  const step = view === 'day' ? 1 : 7
+
+  // Composer state. Default the day to today when it's in view, else the first.
   const [course, setCourse] = useState(GENERAL)
   const [title, setTitle] = useState('')
-  const [day, setDay] = useState(() => (weekDays(startOfWeek(new Date())).includes(todayKey()) ? todayKey() : dateKey(startOfWeek(new Date()))))
+  const [day, setDay] = useState(todayKey)
   const titleRef = useRef(null)
 
-  // Keep the composer's day valid for the visible week.
+  // Keep the composer's day valid for the visible range (week or single day).
   useEffect(() => {
-    if (!days.includes(day)) setDay(days.includes(today) ? today : days[0])
+    if (!days.includes(day)) setDay(inView ? today : days[0])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekStart])
+  }, [view, anchor])
 
   const add = () => {
     const t = title.trim()
@@ -76,22 +85,31 @@ export default function Agenda() {
 
   return (
     <>
-      <PageHead title="Agenda" sub="Your weekly planner — jot homework and due dates for your classes, one place, on any device." />
+      <PageHead title="Agenda" sub="Your planner — jot homework and due dates for your classes, one place, on any device.">
+        <Segmented
+          value={view}
+          onChange={changeView}
+          ariaLabel="Agenda view"
+          options={[{ value: 'week', label: 'Week' }, { value: 'day', label: 'Day' }]}
+        />
+      </PageHead>
 
-      {/* Week navigation */}
+      {/* Week / day navigation */}
       <div className="agenda-weekbar card">
-        <button className="circle-btn" aria-label="Previous week" onClick={() => setWeekStart((w) => addDays(w, -7))}>
+        <button className="circle-btn" aria-label={view === 'day' ? 'Previous day' : 'Previous week'} onClick={() => setAnchor((a) => addDays(a, -step))}>
           <Icon.chevron width={18} height={18} style={{ transform: 'rotate(180deg)' }} />
         </button>
         <div className="agenda-weeklabel">
-          <div className="wl-range">{weekRangeLabel(weekStart)}</div>
-          <div className="wl-sub small faint">{thisWeek ? `${remaining} left this week` : 'Other week'}</div>
+          <div className="wl-range">{view === 'day' ? dayLabel(dateKey(anchor)) : weekRangeLabel(weekStart)}</div>
+          <div className="wl-sub small faint">
+            {inView ? `${remaining} left ${view === 'day' ? 'today' : 'this week'}` : (view === 'day' ? 'Another day' : 'Other week')}
+          </div>
         </div>
-        <button className="circle-btn" aria-label="Next week" onClick={() => setWeekStart((w) => addDays(w, 7))}>
+        <button className="circle-btn" aria-label={view === 'day' ? 'Next day' : 'Next week'} onClick={() => setAnchor((a) => addDays(a, step))}>
           <Icon.chevron width={18} height={18} />
         </button>
-        {!thisWeek && (
-          <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => setWeekStart(startOfWeek(new Date()))}>Today</button>
+        {!inView && (
+          <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => setAnchor(new Date())}>Today</button>
         )}
       </div>
 
@@ -126,9 +144,9 @@ export default function Agenda() {
         </div>
       )}
 
-      {/* The whole week at a glance — 7 day cells, tasks land in their day */}
+      {/* Week: 7 day cells side by side. Day: one full-width cell. */}
       <div className="agenda-grid-wrap">
-        <div className="agenda-grid">
+        <div className={`agenda-grid${view === 'day' ? ' single' : ''}`}>
           {days.map((k) => {
             const l = labelFor(k)
             const isToday = k === today

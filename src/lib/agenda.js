@@ -46,10 +46,25 @@ export function weekDays(weekStart) {
 }
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export function labelFor(key) {
   const d = parseKey(key)
   return { weekday: WEEKDAY[d.getDay()], day: d.getDate(), month: MONTH[d.getMonth()] }
+}
+// Full single-day label, e.g. "Monday, Aug 25" — used by the daily view header.
+export function dayLabel(key) {
+  const d = parseKey(key)
+  return `${WEEKDAY_FULL[d.getDay()]}, ${MONTH[d.getMonth()]} ${d.getDate()}`
+}
+
+// Remembered device-wide preference for the agenda view ('week' | 'day').
+const VIEW_KEY = 'wg_agenda_view'
+export function loadAgendaView() {
+  try { return localStorage.getItem(VIEW_KEY) === 'day' ? 'day' : 'week' } catch (_) { return 'week' }
+}
+export function saveAgendaView(v) {
+  try { localStorage.setItem(VIEW_KEY, v) } catch (_) {}
 }
 export function weekRangeLabel(weekStart) {
   const a = weekStart, b = addDays(weekStart, 6)
