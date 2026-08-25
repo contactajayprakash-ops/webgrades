@@ -407,19 +407,12 @@ tr.row-new { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .row-link-chev { color: var(--text-faint); transition: color .12s, transform .12s; }
 .table tr.row-link:hover .row-link-chev { color: var(--accent-text); transform: translateX(2px); }
 
-/* ---- Pull-to-refresh (mobile) ---- */
+/* ---- Pull-to-refresh (mobile) — minimal spinner ---- */
 body { overscroll-behavior-y: contain; } /* replace the browser's native pull-to-refresh */
-.ptr-ind { position: fixed; top: calc(env(safe-area-inset-top, 0px) - 4px); left: 50%; z-index: 300; pointer-events: none; will-change: transform, opacity; }
-.ptr-orb { position: relative; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%;
-  background: var(--menu-bg); box-shadow: var(--drop-lg); border: 0.5px solid var(--glass-border); }
-.ptr-orb svg { display: block; will-change: transform; }
-.ptr-core { position: absolute; width: 7px; height: 7px; border-radius: 50%;
-  background: linear-gradient(150deg, var(--accent), var(--accent-2)); box-shadow: 0 0 10px var(--accent); }
-.ptr-ind.armed .ptr-orb { box-shadow: 0 0 0 4px var(--accent-soft), var(--drop-lg); }
-.ptr-ind.armed .ptr-core { animation: ptr-pulse .55s var(--ease) infinite alternate; }
-.ptr-ind.refreshing .ptr-orb svg { animation: ptr-spin .8s linear infinite; }
-@keyframes ptr-spin { to { transform: rotate(360deg); } }
-@keyframes ptr-pulse { from { transform: scale(1); opacity: .85; } to { transform: scale(1.7); opacity: 1; } }
+.ptr-ind { position: fixed; top: env(safe-area-inset-top, 0px); left: 50%; z-index: 300; pointer-events: none; will-change: transform, opacity; }
+.ptr-ring { display: block; width: 22px; height: 22px; border: 2.5px solid var(--fill-2); border-top-color: var(--accent);
+  border-radius: 50%; will-change: transform; }
+.ptr-ind.refreshing .ptr-ring, .ptr-ring.spin { animation: spin .7s linear infinite; }
 .class-card.row-new { border-color: color-mix(in srgb, var(--accent) 45%, var(--separator)); box-shadow: inset 3px 0 0 var(--accent); }
 .class-card.card-focus { animation: cardFocus 2s var(--ease); }
 @keyframes cardFocus { 0%, 60% { box-shadow: 0 0 0 2px var(--accent), var(--drop); } 100% { box-shadow: var(--drop); } }
