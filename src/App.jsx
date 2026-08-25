@@ -7,7 +7,6 @@ import InstallPrompt from './components/InstallPrompt.jsx'
 import Dashboard from './views/Dashboard.jsx'
 import Grades from './views/Grades.jsx'
 import Gpa from './views/Gpa.jsx'
-import Target from './views/Target.jsx'
 import Agenda from './views/Agenda.jsx'
 import Schedule from './views/Schedule.jsx'
 import Week from './views/Week.jsx'
@@ -35,7 +34,6 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/grades" element={<Grades />} />
           <Route path="/gpa" element={<Gpa />} />
-          <Route path="/target" element={<Target />} />
           <Route path="/agenda" element={<Agenda />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/week" element={<Week />} />

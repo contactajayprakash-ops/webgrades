@@ -11,7 +11,6 @@ const NAV = [
   { to: '/', label: 'Dashboard', icon: 'home', end: true },
   { to: '/grades', label: 'Grades', icon: 'book' },
   { to: '/gpa', label: 'GPA', icon: 'calc' },
-  { to: '/target', label: 'Targets', icon: 'target' },
   { to: '/agenda', label: 'Agenda', icon: 'checklist', badge: 'New' },
   { section: 'Records' },
   { to: '/schedule', label: 'Schedule', icon: 'clock' },
