@@ -5,6 +5,7 @@ import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import { cleanCourseName, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { parseGrade } from '../lib/gpa.js'
+import { syncAllowedFor } from '../lib/syncPolicy.js'
 import {
   loadAgenda, loadAgendaMeta, saveAgenda, uid, dateKey, todayKey, addDays,
   startOfWeek, weekDays, labelFor, weekRangeLabel, dayLabel, courseHue,
@@ -51,7 +52,7 @@ export default function Agenda() {
     saveAgenda(activeUsername, nextTasks, updatedAt)
     if (opts.push === false) return
     const s = sessionRef.current
-    if (!s?.username || !s?.password) return
+    if (!s?.username || !s?.password || !syncAllowedFor(s.username)) return
     clearTimeout(pushTimer.current)
     pushTimer.current = setTimeout(async () => {
       try { const { pushAgenda } = await syncMod(); await pushAgenda(s.username, s.password, nextTasks, updatedAt) } catch (_) {}
@@ -69,7 +70,7 @@ export default function Agenda() {
   // stays local if offline / Firestore not reachable.
   useEffect(() => {
     const s = session
-    if (!s?.username || !s?.password) return
+    if (!s?.username || !s?.password || !syncAllowedFor(s.username)) return
     let cancelled = false
     ;(async () => {
       try {

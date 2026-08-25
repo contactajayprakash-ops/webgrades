@@ -5,6 +5,7 @@ import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import { ACCENTS, loadTheme, saveTheme } from '../lib/theme.js'
 import { useInstall } from '../hooks/useInstall.js'
+import { syncLock, setSyncLock } from '../lib/syncPolicy.js'
 
 export default function Settings() {
   const { session, clearCache, logout } = useAuth()
@@ -103,6 +104,9 @@ export default function Settings() {
         {/* Install */}
         <InstallSection />
 
+        {/* This device (sync lock) */}
+        <DeviceSyncSection username={session?.username} />
+
         {/* Session */}
         <div className="card card-pad">
           <h3 className="mb-3">Session</h3>
@@ -155,6 +159,28 @@ function InstallSection() {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// Dev-browser sync lock: on this browser, limit cloud sync to the current
+// account so test-account logins here never touch the cloud. Stored locally, so
+// it applies to THIS browser only.
+function DeviceSyncSection({ username }) {
+  const [lock, setLock] = useState(syncLock)
+  const on = !!lock
+  const toggle = (next) => { const v = next ? (username || '') : ''; setSyncLock(v); setLock(v) }
+  return (
+    <div className="card card-pad">
+      <h3 className="mb-3">This device</h3>
+      <ToggleRow
+        label="Only sync this account here"
+        hint={on
+          ? `Cloud sync on this browser is limited to “${lock}”. Any other profile you sign into here stays local (not synced) — good for a testing browser.`
+          : 'Make this a testing browser: only your current account syncs to the cloud; any other profiles you sign in here stay local. Applies to this browser only.'}
+        checked={on}
+        onChange={toggle}
+      />
     </div>
   )
 }
