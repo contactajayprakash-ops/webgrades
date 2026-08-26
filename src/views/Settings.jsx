@@ -7,6 +7,20 @@ import { ACCENTS, loadTheme, saveTheme } from '../lib/theme.js'
 import { useInstall } from '../hooks/useInstall.js'
 import { syncLock, setSyncLock } from '../lib/syncPolicy.js'
 
+// Nuke the service worker + all caches, then hard-reload — the reliable escape
+// from a stuck stale build (plain reloads don't force Safari to swap the SW).
+async function forceUpdate() {
+  try {
+    const rs = (await navigator.serviceWorker?.getRegistrations?.()) || []
+    await Promise.all(rs.map((r) => r.unregister()))
+  } catch (_) {}
+  try {
+    const ks = (await window.caches?.keys?.()) || []
+    await Promise.all(ks.map((k) => caches.delete(k)))
+  } catch (_) {}
+  window.location.reload()
+}
+
 export default function Settings() {
   const { session, clearCache, logout } = useAuth()
   const [theme, setTheme] = useState(loadTheme)
@@ -123,10 +137,14 @@ export default function Settings() {
           </div>
           <div className="flex mt-3 flex-wrap">
             <button className="btn ghost sm" onClick={clearCache}>Clear cached data</button>
+            <button className="btn ghost sm" onClick={forceUpdate}>Force update</button>
             <button className="btn ghost sm" onClick={logout} style={{ borderColor: 'var(--red)', color: 'var(--red-text)' }}>
               Sign out
             </button>
           </div>
+          <span className="small faint" style={{ marginTop: 8, display: 'block' }}>
+            <b>Force update</b> clears the cached app and reloads — use if you're stuck on an old version.
+          </span>
         </div>
       </div>
     </>
