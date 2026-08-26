@@ -50,6 +50,18 @@ export function categoryNA(rows) {
   return !graded.some((r) => isAssessment(r.category) || r.hypo)
 }
 
+// The rows that actually count toward the overall estimate. In an AOL/PC-graded
+// class the overall is Assessment-driven, so only Assessments (AOL) count —
+// Progress checks (PC) are formative and don't move the class average. (Without
+// this, editing an AOL to 100 still averages in a graded PC and reads e.g. 88
+// instead of 100.) Hypothetical added rows count, so projecting still works. A
+// class that doesn't use AOL/PC categories pools all assignments as before.
+export function countingRows(rows) {
+  const usesCategories = (rows || []).some((r) => isAssessment(r.category) || isProgress(r.category))
+  if (!usesCategories) return rows || []
+  return (rows || []).filter((r) => isAssessment(r.category) || r.hypo)
+}
+
 // N/A-aware official average for a raw course (no what-if edits) — for display
 // where 0% would otherwise show for a not-yet-really-graded class.
 export function officialAverage(course) {
@@ -69,6 +81,6 @@ export function effectiveAverage(quarter, course, edits) {
     rows,
     official: na ? null : official,
     edited: anyEdit,
-    avg: na ? null : (anyEdit ? estimateAverage(rows) : official),
+    avg: na ? null : (anyEdit ? estimateAverage(countingRows(rows)) : official),
   }
 }
