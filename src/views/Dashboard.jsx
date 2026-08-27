@@ -10,7 +10,7 @@ import { parseGrade } from '../lib/gpa.js'
 import { cleanCourseName, courseKey, QUARTERS, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince } from '../lib/seen.js'
-import { officialAverage } from '../lib/whatif.js'
+import { officialAverage, isAssessment, isProgress } from '../lib/whatif.js'
 import { loadTheme } from '../lib/theme.js'
 import { loadAgenda, todayKey, startOfWeek, addDays, dateKey, labelFor } from '../lib/agenda.js'
 
@@ -89,18 +89,25 @@ function RecentlyPosted({ recent }) {
         <div className="recent-empty">You're all caught up — no new grades since your last check.</div>
       ) : (
         <ul className="recent-list">
-          {feed.map((f, i) => (
-            <li key={i} className="recent-item">
-              <span className={`recent-dot ${f.isNew ? 'up' : 'flat'}`} aria-hidden="true" />
-              <div className="recent-main">
-                <div className="recent-name">{f.name}</div>
-                <div className="recent-sub">{f.course}{f.isNew ? '' : ' · updated'}</div>
-              </div>
-              <div className="recent-right">
-                <GradeBadge value={parseGrade(f.grade)} showLetter={false} />
-              </div>
-            </li>
-          ))}
+          {feed.map((f, i) => {
+            const kind = isAssessment(f.category) ? 'aol' : isProgress(f.category) ? 'pc' : null
+            return (
+              <li key={i} className="recent-item">
+                <span className={`recent-dot ${f.isNew ? 'up' : 'flat'}`} aria-hidden="true" />
+                <div className="recent-main">
+                  <div className="recent-name">{f.name}</div>
+                  <div className="recent-sub">
+                    {f.course}
+                    {kind && <span className={`recent-cat ${kind}`}>{kind === 'aol' ? 'AOL' : 'PC'}</span>}
+                    {f.isNew ? '' : ' · updated'}
+                  </div>
+                </div>
+                <div className="recent-right">
+                  <GradeBadge value={parseGrade(f.grade)} showLetter={false} />
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

@@ -71,9 +71,11 @@ export function postedSince(seen, classes) {
   for (const c of classes || []) {
     const e = entryOf(seen, c.courseName)
     if (!e || !e.hadAssignments) continue
+    const catByName = {}
+    for (const a of c.assignments || []) if (a.assignmentName) catByName[a.assignmentName] = a.category
     const cur = assignmentsOf(c)
     for (const [name, grade] of Object.entries(cur)) {
-      if (e.a[name] !== grade) out.push({ course: cleanCourseName(c.courseName), name, grade, isNew: !(name in e.a) })
+      if (e.a[name] !== grade) out.push({ course: cleanCourseName(c.courseName), name, grade, isNew: !(name in e.a), category: catByName[name] })
     }
   }
   return out
