@@ -25,11 +25,26 @@ const BASE = import.meta.env.VITE_API_BASE || '/api';
 // — which surfaces as duplicate rows (one real, one empty). Collapse them by the
 // stable course key, keeping the richer entry (more assignments / a real grade).
 import { courseKey } from '../lib/courses.js';
+
+// HAC's Classwork table for each class ends with a "category averages" summary
+// section (e.g. "Assessment of Learning" / "Progress Check for Learning" rows
+// showing point totals). The scrape's row selector matches those too, so they
+// leak in as bogus assignments (a "100.0" and a "300.0" for Social Studies
+// Research, etc.). Real assignment rows always carry a due date; the summary
+// rows don't — drop anything without one.
+const DUE_DATE_RE = /\d{1,2}\/\d{1,2}\/\d{2,4}/;
+const cleanAssignments = (list) => (list || []).filter((a) => DUE_DATE_RE.test(a?.dateDue || ''));
+
+// HAC's Classwork page can list the SAME course more than once — the S1 and S2
+// sections of a year-long class, or an old + new section after a schedule change
+// — which surfaces as duplicate rows (one real, one empty). Collapse them by the
+// stable course key, keeping the richer entry (more assignments / a real grade).
 function dedupeClasses(data) {
   if (!data || !Array.isArray(data.assignmentsData)) return data;
+  const cleaned = data.assignmentsData.map((c) => ({ ...c, assignments: cleanAssignments(c.assignments) }));
   const rank = (c) => (c.assignments?.length || 0) * 10 + (/\d/.test(c.overallAverage || '') ? 1 : 0);
   const byKey = new Map();
-  for (const c of data.assignmentsData) {
+  for (const c of cleaned) {
     const k = courseKey(c.courseName);
     const prev = byKey.get(k);
     if (!prev || rank(c) > rank(prev)) byKey.set(k, c);
