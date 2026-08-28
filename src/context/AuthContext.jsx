@@ -373,6 +373,27 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // Background polling: keep pulling new grades on a timer even while the app is
+  // minimized / unfocused (but still open, e.g. a backgrounded Chromebook PWA on
+  // Wi‑Fi) — unlike `resync` above, this does NOT require the page to be visible.
+  // So grades are already fresh when the student reopens it instead of waiting on
+  // a cold sync. Browsers throttle background timers (~1/min), so an unfocused app
+  // effectively checks every couple minutes; a frozen/closed tab simply stops and
+  // resumes via `resync` on reopen. Skips when offline or a sync is in flight.
+  useEffect(() => {
+    const POLL_MS = 120_000 // ~2 min
+    const tick = () => {
+      if (!credsRef.current) return
+      if (syncing.current) return
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+      if (Date.now() - lastSyncAt.current < POLL_MS - 15_000) return // don't stack with a recent resync
+      lastSyncAt.current = Date.now()
+      ;(async () => { await apiWake(); syncAllRef.current() })()
+    }
+    const id = setInterval(tick, POLL_MS)
+    return () => clearInterval(id)
+  }, [])
+
   const getIprDates = useCallback(async () => {
     if (!creds) throw new Error('Not signed in.')
     return apiFetchIprDates(creds)
