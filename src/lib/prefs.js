@@ -24,6 +24,7 @@ const DEFAULT = {
     grades: {},        // key -> grade override
     credits: {},       // key -> credit override
     manual: [],        // manually-added courses [{ id, name }] (grade/weight/credit live in the maps above, keyed `manual:<id>`)
+    saves: [],         // named snapshots: [{ id, name, savedAt, config: { included, weights, grades, credits, manual } }]
     confirmed: false,  // has the user picked courses at least once?
   },
 }
@@ -36,6 +37,7 @@ const normalize = (raw) => {
   }
   // Additive fields introduced after v2 — backfill without wiping selections.
   if (!Array.isArray(p.cumulative.manual)) p.cumulative.manual = []
+  if (!Array.isArray(p.cumulative.saves)) p.cumulative.saves = []
   return p
 }
 

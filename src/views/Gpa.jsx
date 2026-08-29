@@ -239,6 +239,7 @@ export default function Gpa() {
           confirmed={cumConfirmed} included={cumIncluded}
           weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
           manual={prefs.cumulative.manual || []}
+          saves={prefs.cumulative.saves || []}
           rows={cumRows} result={cumResult}
           onToggle={toggleCum} updatePrefs={updatePrefs}
           onRetry={() => loadTranscript(true)}
@@ -270,7 +271,51 @@ function WeightSelect({ value, onChange }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, manual = [], rows, result, onToggle, updatePrefs, onRetry }) {
+// Saved cumulative setups: load / overwrite / delete + save-current. Snapshots
+// live in prefs (so they sync across devices with the rest of the GPA setup).
+function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <button className="btn ghost sm" onClick={() => setOpen((o) => !o)}>
+        <Icon.scroll width={14} height={14} /> Saved{saves.length ? ` (${saves.length})` : ''}
+        <Icon.chevron width={12} height={12} style={{ transform: 'rotate(90deg)' }} />
+      </button>
+      {open && (
+        <>
+          <div className="profile-backdrop" onClick={() => setOpen(false)} />
+          <div className="card card-menu" style={{ top: 38 }} role="menu">
+            <div className="menu-head">Saved setups</div>
+            {saves.length === 0 && <div className="menu-item" style={{ color: 'var(--text-faint)', cursor: 'default' }}>None saved yet.</div>}
+            {saves.map((s) => (
+              <div key={s.id} className="menu-item" style={{ gap: 6 }}>
+                <button className="mi-text" style={{ background: 'transparent', border: 0, textAlign: 'left', flex: 1, cursor: 'pointer' }}
+                  onClick={() => { onLoad(s); setOpen(false) }}>
+                  <span className="mi-name">{s.name}</span>
+                  <span className="mi-sub">Load this setup</span>
+                </button>
+                <button className="circle-btn" style={{ width: 26, height: 26 }} title="Overwrite with current setup" onClick={() => onOverwrite(s)}>
+                  <Icon.refresh width={13} height={13} />
+                </button>
+                <button className="circle-btn" style={{ width: 26, height: 26, color: 'var(--red-text)' }} title="Delete" onClick={() => onDelete(s)}>
+                  <Icon.trash width={13} height={13} />
+                </button>
+              </div>
+            ))}
+            <div className="menu-divider" />
+            <button className="menu-item" style={{ background: 'transparent', border: 0, cursor: 'pointer' }}
+              onClick={() => { onSave(); setOpen(false) }}>
+              <span className="mi-text"><span className="mi-name">Save current setup…</span></span>
+              <Icon.plus width={15} height={15} />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, manual = [], saves = [], rows, result, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
 
@@ -329,6 +374,34 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const hasOverrides = Object.keys(weights).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0
   const selectedCount = Object.keys(included).length
 
+  // Named saved setups — snapshot/restore the whole cumulative config, so a
+  // complex setup can be reused across scenarios or reverted after a mistake.
+  const snapConfig = (cum) => ({
+    included: { ...cum.included }, weights: { ...cum.weights },
+    grades: { ...(cum.grades || {}) }, credits: { ...(cum.credits || {}) }, manual: [...(cum.manual || [])],
+  })
+  const saveConfig = () => {
+    const name = (window.prompt('Name this GPA setup (e.g. "Real", "If I ace finals"):') || '').trim()
+    if (!name) return
+    updatePrefs((p) => { p.cumulative.saves = p.cumulative.saves || []; p.cumulative.saves.push({ id: mkId(), name, savedAt: Date.now(), config: snapConfig(p.cumulative) }) })
+  }
+  const loadConfig = (s) => {
+    if (!window.confirm(`Load “${s.name}”? This replaces your current selection, weights, grades, credits and added classes.`)) return
+    updatePrefs((p) => { Object.assign(p.cumulative, {
+      included: { ...s.config.included }, weights: { ...s.config.weights },
+      grades: { ...s.config.grades }, credits: { ...s.config.credits }, manual: [...(s.config.manual || [])],
+    }) })
+  }
+  const overwriteConfig = (s) => {
+    if (!window.confirm(`Overwrite “${s.name}” with the current setup?`)) return
+    updatePrefs((p) => { p.cumulative.saves = (p.cumulative.saves || []).map((x) => (x.id === s.id ? { ...x, config: snapConfig(p.cumulative), savedAt: Date.now() } : x)) })
+  }
+  const deleteConfig = (s) => {
+    if (!window.confirm(`Delete saved setup “${s.name}”?`)) return
+    updatePrefs((p) => { p.cumulative.saves = (p.cumulative.saves || []).filter((x) => x.id !== s.id) })
+  }
+  const savedMenu = <SavedConfigsMenu saves={saves} onSave={saveConfig} onLoad={loadConfig} onOverwrite={overwriteConfig} onDelete={deleteConfig} />
+
   if (!confirmed) {
     return (
       <div className="card cum-setup">
@@ -343,10 +416,11 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
             transcript. Check the ones that count toward class rank — pass/fail courses (grade “P”) can’t be averaged.
             Weights and the credit each course is worth (1.0 full-year, 0.5 single-semester) are editable here and remembered.
           </p>
-          <div className="flex mt-3">
+          <div className="flex mt-3" style={{ flexWrap: 'wrap' }}>
             <button className="btn ghost sm" data-tour="select-all" onClick={selectAllNumeric}>Select all graded</button>
             <button className="btn ghost sm" onClick={clearAll}>Clear</button>
             {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
+            {savedMenu}
             <span className="small faint">{selectedCount} selected</span>
           </div>
         </div>
@@ -477,6 +551,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
           {PERIODS.find((p) => p.id === period)?.label} · {rows.length} of your selected courses have a grade for this period.
         </div>
         <div className="flex">
+          {savedMenu}
           {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
           <button className="btn ghost sm" onClick={editSelection}>Edit selection</button>
           <button className="btn ghost sm" onClick={onRetry}><Icon.refresh width={15} height={15} /> Refresh</button>
