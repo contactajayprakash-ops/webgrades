@@ -32,8 +32,20 @@ import { courseKey } from '../lib/courses.js';
 // leak in as bogus assignments (a "100.0" and a "300.0" for Social Studies
 // Research, etc.). Real assignment rows always carry a due date; the summary
 // rows don't — drop anything without one.
+// HAC's Classwork table appends per-category SUBTOTAL rows after the real
+// assignments (e.g. "400.00 | 93.750%", "100.00 | 100.000%") — points earned and
+// the category percentage. They aren't assignments. The tell: their "category"
+// cell is a bare percentage (never a real category like Assessment/Progress), and
+// their "name" is a bare number. Drop those. (Real assignments with no due date
+// are kept — the old date-only filter both missed these and dropped real rows.)
 const DUE_DATE_RE = /\d{1,2}\/\d{1,2}\/\d{2,4}/;
-const cleanAssignments = (list) => (list || []).filter((a) => DUE_DATE_RE.test(a?.dateDue || ''));
+const SUBTOTAL_CAT_RE = /^\s*-?\d+(?:\.\d+)?\s*%\s*$/;   // category is just a percentage
+const BARE_NUMBER_RE = /^\s*-?\d+(?:\.\d+)?\s*$/;         // name is just a number
+const cleanAssignments = (list) => (list || []).filter((a) => {
+  if (SUBTOTAL_CAT_RE.test(String(a?.category ?? ''))) return false;
+  if (BARE_NUMBER_RE.test(String(a?.assignmentName ?? '')) && !DUE_DATE_RE.test(a?.dateDue || '')) return false;
+  return true;
+});
 
 // HAC's Classwork page can list the SAME course more than once — the S1 and S2
 // sections of a year-long class, or an old + new section after a schedule change
