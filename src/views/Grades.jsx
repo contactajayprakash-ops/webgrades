@@ -303,19 +303,20 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew 
         </div>
       </div>
 
-      {open && (
+      {open && (() => {
+        const rows = classRows(quarter, course, edits)
+        return (
         <div className="assignments">
-          {(course.assignments?.length || 0) === 0 ? (
+          {rows.length === 0 ? (
             <div className="empty" style={{ padding: 24 }}>No assignments posted.</div>
           ) : (
-            <>
-              <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto' }}>
                 <table className="table">
                   <thead>
                     <tr><th>Assignment</th><th>Category</th><th className="num">Score</th><th className="num">Out of</th><th className="num">%</th></tr>
                   </thead>
                   <tbody>
-                    {classRows(quarter, course, edits).map((r) => {
+                    {rows.map((r) => {
                       const pct = r.score != null && r.total > 0 ? (r.score / r.total) * 100 : null
                       const cat = (r.category || '').toLowerCase()
                       const isAOL = cat.includes('assessment')
@@ -343,21 +344,23 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew 
                   </tbody>
                 </table>
               </div>
-              <div className="row-between" style={{ padding: '12px 20px' }}>
-                <button className="btn ghost sm" onClick={addRow}><Icon.plus width={14} height={14} /> Add assignment</button>
-                <span className="small faint">
-                  Live average is a points-based estimate; HAC weights by category.
-                  {delta != null && (
-                    <span style={{ color: delta >= 0 ? 'var(--green-text)' : 'var(--red-text)' }}>
-                      {' '}({delta >= 0 ? '+' : ''}{delta.toFixed(2)} vs HAC)
-                    </span>
-                  )}
-                </span>
-              </div>
-            </>
           )}
+          <div className="row-between" style={{ padding: '12px 20px' }}>
+            <button className="btn ghost sm" onClick={addRow}><Icon.plus width={14} height={14} /> Add assignment</button>
+            {rows.length > 0 && (
+              <span className="small faint">
+                Live average is a points-based estimate; HAC weights by category.
+                {delta != null && (
+                  <span style={{ color: delta >= 0 ? 'var(--green-text)' : 'var(--red-text)' }}>
+                    {' '}({delta >= 0 ? '+' : ''}{delta.toFixed(2)} vs HAC)
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
