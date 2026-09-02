@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake } from '../api/hac.js'
 import { cleanCourseName, guessCurrentQuarter } from '../lib/courses.js'
 import { clearPrefs } from '../lib/prefs.js'
+import { bgProfilesEnabled } from '../lib/syncPolicy.js'
 
 const AuthContext = createContext(null)
 
@@ -460,7 +461,8 @@ export function AuthProvider({ children }) {
       const others = profilesRef.current.filter((p) => p.username !== userRef.current && p.password)
       // Spread the accounts across the window so two never fire back-to-back.
       const spacing = others.length ? Math.max(30_000, Math.round(PER_PROFILE_MS / others.length)) : PER_PROFILE_MS
-      const ok = document.visibilityState === 'visible'
+      const ok = bgProfilesEnabled() // per-browser opt-out (checked live)
+        && document.visibilityState === 'visible'
         && !(typeof navigator !== 'undefined' && navigator.onLine === false)
         && !syncing.current && !bgSyncing.current
       if (ok && others.length) {

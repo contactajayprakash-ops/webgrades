@@ -21,3 +21,20 @@ export function syncAllowedFor(username) {
   const lock = syncLock()
   return !lock || lock === username
 }
+
+// Per-BROWSER toggle for keeping OTHER signed-in profiles warm in the background.
+// Default ON; a dev/shared machine can turn it off so it doesn't quietly
+// re-scrape every account's grades on a timer. Browser-local like the lock above,
+// so it never follows you to another device.
+const BG_PROFILES_KEY = 'wg_bg_profiles' // 'off' disables; absent = on (default)
+
+export function bgProfilesEnabled() {
+  try { return localStorage.getItem(BG_PROFILES_KEY) !== 'off' } catch (_) { return true }
+}
+
+export function setBgProfilesEnabled(on) {
+  try {
+    if (on) localStorage.removeItem(BG_PROFILES_KEY)
+    else localStorage.setItem(BG_PROFILES_KEY, 'off')
+  } catch (_) {}
+}
