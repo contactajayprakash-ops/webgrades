@@ -5,7 +5,7 @@ import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import { ACCENTS, loadTheme, saveTheme } from '../lib/theme.js'
 import { useInstall } from '../hooks/useInstall.js'
-import { syncLock, setSyncLock } from '../lib/syncPolicy.js'
+import { syncLock, setSyncLock, bgProfilesEnabled, setBgProfilesEnabled } from '../lib/syncPolicy.js'
 
 // Nuke the service worker + all caches, then hard-reload — the reliable escape
 // from a stuck stale build (plain reloads don't force Safari to swap the SW).
@@ -195,6 +195,10 @@ function DeviceSyncSection({ username }) {
   const [lock, setLock] = useState(syncLock)
   const on = !!lock
   const toggle = (next) => { const v = next ? (username || '') : ''; setSyncLock(v); setLock(v) }
+
+  const [bgOn, setBgOn] = useState(bgProfilesEnabled)
+  const toggleBg = (next) => { setBgProfilesEnabled(next); setBgOn(next) }
+
   return (
     <div className="card card-pad">
       <h3 className="mb-3">This device</h3>
@@ -205,6 +209,15 @@ function DeviceSyncSection({ username }) {
           : 'Make this a testing browser: only your current account syncs to the cloud; any other profiles you sign in here stay local. Applies to this browser only.'}
         checked={on}
         onChange={toggle}
+      />
+      <div style={{ height: 16 }} />
+      <ToggleRow
+        label="Keep other profiles fresh in the background"
+        hint={bgOn
+          ? 'Your other signed-in profiles quietly refresh every few minutes so switching to them is instant. Turn off on a shared/dev machine to stop it re-checking every account. Applies to this browser only.'
+          : 'Off — only the account you’re using refreshes. Other profiles update when you switch to them. Applies to this browser only.'}
+        checked={bgOn}
+        onChange={toggleBg}
       />
     </div>
   )
