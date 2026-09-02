@@ -139,7 +139,8 @@ export function AuthProvider({ children }) {
   const caches = useRef(new Map())
   const inflight = useRef(new Map()) // `${username}|${key}` -> promise
   const syncGen = useRef(0) // bumped on every sync start; aborts superseded syncs
-  const syncing = useRef(false) // a full sync is currently running
+  const syncing = useRef(false) // a full (active-account) sync is currently running
+  const bgSyncing = useRef(false) // a quiet background-profile sync is running
   const lastSyncAt = useRef(0) // ms timestamp of the last sync start (resume throttle)
   const [dataVersion, setDataVersion] = useState(0) // bumped when cache changes -> consumers re-read
 
@@ -170,6 +171,8 @@ export function AuthProvider({ children }) {
   credsRef.current = creds
   const userRef = useRef(session?.username)
   userRef.current = session?.username
+  const profilesRef = useRef(profiles)
+  profilesRef.current = profiles
 
   // Synchronous read of the ACTIVE account's cache — instant render.
   const peekData = useCallback((type, extra) => cacheFor(userRef.current).get(keyOf(type, extra)), [cacheFor])
@@ -271,6 +274,47 @@ export function AuthProvider({ children }) {
   }, [cacheFor, persistCache, getData, bump])
 
   const dismissSync = useCallback(() => setSync((s) => ({ ...s, phase: 'idle' })), [])
+
+  // Quietly refresh ONE (usually non-active) profile's grades into ITS OWN cache,
+  // to keep background accounts warm so switching to them shows fresh data. No
+  // toast, no changes feed — writes are keyed by username, so they can never bleed
+  // into the active account. On a batch failure it just skips the wave (unlike the
+  // active sync it must NOT fall back to getData, which is scoped to active creds).
+  const syncProfileQuiet = useCallback(async (c) => {
+    if (!c || !c.username || !c.password) return
+    if (bgSyncing.current) return
+    bgSyncing.current = true
+    try {
+      const username = c.username
+      const acct = cacheFor(username)
+      const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(guessCurrentQuarter())
+      const coldNeeded = WAVE_COLD.filter(([t, e]) => acct.get(keyOf(t, e)) === undefined)
+      const waves = [WAVE_HOT, WAVE_GPA, coldNeeded].filter((w) => w.length)
+      let fetched = 0
+      for (const wave of waves) {
+        const gotByKey = {}
+        try {
+          const { results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          wave.forEach(([type, extra], i) => {
+            const r = results.find((x) => x.type === type && String(x.quarter ?? '') === String(extra.quarter ?? '')) || results[i]
+            if (r && r.success && r.data !== undefined) gotByKey[keyOf(type, extra)] = r.data
+          })
+        } catch (_) { continue } // let this profile wait for the next cycle
+        for (const [type, extra] of wave) {
+          const key = keyOf(type, extra)
+          if (gotByKey[key] !== undefined) { acct.set(key, gotByKey[key]); fetched++ }
+        }
+        persistCache(username)
+      }
+      if (fetched > 0) {
+        try { localStorage.setItem(syncedKeyFor(username), String(Date.now())) } catch (_) {}
+        // If this profile happens to be the active one, reflect its fresh data/time.
+        if (userRef.current === username) { setSyncedAt(Date.now()); bump() }
+      }
+    } finally {
+      bgSyncing.current = false
+    }
+  }, [cacheFor, persistCache, bump])
 
   const saveProfiles = useCallback((next) => {
     setProfiles(next)
@@ -402,6 +446,33 @@ export function AuthProvider({ children }) {
     const id = setInterval(tick, POLL_MS)
     return () => clearInterval(id)
   }, [])
+
+  // Keep OTHER signed-in profiles warm on a slow, staggered timer so switching
+  // accounts shows fresh grades instantly. Deliberately gentle on the Pi/HAC:
+  // visible + online only, ONE profile per tick (rotated), spaced so each account
+  // refreshes ~every 9 min, and never while the active account's sync is running.
+  useEffect(() => {
+    const PER_PROFILE_MS = 540_000 // each background profile refreshes ~every 9 min
+    let idx = 0
+    let timer
+    const schedule = (ms) => { timer = setTimeout(tick, ms) }
+    const tick = () => {
+      const others = profilesRef.current.filter((p) => p.username !== userRef.current && p.password)
+      // Spread the accounts across the window so two never fire back-to-back.
+      const spacing = others.length ? Math.max(30_000, Math.round(PER_PROFILE_MS / others.length)) : PER_PROFILE_MS
+      const ok = document.visibilityState === 'visible'
+        && !(typeof navigator !== 'undefined' && navigator.onLine === false)
+        && !syncing.current && !bgSyncing.current
+      if (ok && others.length) {
+        const p = others[idx % others.length]
+        idx++
+        syncProfileQuiet({ username: p.username, password: p.password })
+      }
+      schedule(spacing)
+    }
+    schedule(PER_PROFILE_MS) // wait one interval on load — let the active sync go first
+    return () => clearTimeout(timer)
+  }, [syncProfileQuiet])
 
   const getIprDates = useCallback(async () => {
     if (!creds) throw new Error('Not signed in.')
