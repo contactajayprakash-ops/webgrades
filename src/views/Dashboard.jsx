@@ -76,6 +76,11 @@ function RecentlyPosted({ recent }) {
   const { syncedAt } = useAuth()
   const { feed, markSeen } = recent
 
+  // Sort Assessments (AOL) first, then Progress (PC), then anything else —
+  // preserving recency order within each group (Array.sort is stable).
+  const rank = (f) => (isAssessment(f.category) ? 0 : isProgress(f.category) ? 1 : 2)
+  const sorted = [...feed].sort((a, b) => rank(a) - rank(b))
+
   return (
     <div className="card">
       <div className="row-between" style={{ padding: '16px 20px' }}>
@@ -89,7 +94,7 @@ function RecentlyPosted({ recent }) {
         <div className="recent-empty">You're all caught up — no new grades since your last check.</div>
       ) : (
         <ul className="recent-list">
-          {feed.map((f, i) => {
+          {sorted.map((f, i) => {
             const kind = isAssessment(f.category) ? 'aol' : isProgress(f.category) ? 'pc' : null
             return (
               <li key={i} className="recent-item">
