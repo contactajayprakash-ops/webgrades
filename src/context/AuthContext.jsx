@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake } from '../api/hac.js'
-import { cleanCourseName } from '../lib/courses.js'
+import { cleanCourseName, guessCurrentQuarter } from '../lib/courses.js'
 import { clearPrefs } from '../lib/prefs.js'
 
 const AuthContext = createContext(null)
@@ -32,18 +32,24 @@ function loadProfiles() {
 
 // Resources grouped into priority WAVES, each fetched as ONE batched round-trip
 // (server logs into HAC once per wave). The whole point: a grade-drop refresh
-// only needs wave 1 (current grades), so the new grade lands first instead of
-// 7th in a serial queue. GPA data follows; rarely-changing cold data is last
-// and only fetched when it's missing from the cache.
-const WAVE_HOT = [['class', {}]]
-const WAVE_GPA = [
-  ['rank', {}],
-  ['transcript', {}], // rank + transcript share one HAC page — merged server-side
-  ['class', { quarter: '4' }],
-  ['class', { quarter: '3' }],
-  ['class', { quarter: '2' }],
-  ['class', { quarter: '1' }],
-]
+// only needs wave 1 — the CURRENT quarter's grades, the one thing everyone opens
+// the app for — so it lands and paints FIRST, before the slower GPA wave (other
+// quarters + rank + transcript) even starts. GPA data follows; rarely-changing
+// cold data is last and only fetched when it's missing from the cache.
+//
+// The pages read grades keyed by quarter number (`class {quarter:N}`), so wave 1
+// MUST fetch that keyed current quarter — not just the generic `class {}` — or
+// the Dashboard/Grades keep showing stale data until the whole GPA wave finishes.
+const ALL_QUARTERS = ['4', '3', '2', '1']
+function buildHotGpaWaves(curQ) {
+  const hot = [['class', {}], ['class', { quarter: curQ }]]
+  const gpa = [
+    ['rank', {}],
+    ['transcript', {}], // rank + transcript share one HAC page — merged server-side
+    ...ALL_QUARTERS.filter((q) => q !== curQ).map((q) => ['class', { quarter: q }]),
+  ]
+  return [hot, gpa]
+}
 const WAVE_COLD = [
   ['schedule', {}],
   ['attendance', {}],
@@ -206,6 +212,9 @@ export function AuthProvider({ children }) {
     lastSyncAt.current = Date.now()
     const acct = cacheFor(username)
     const initial = acct.size === 0
+    // Wave 1 refreshes the current quarter (calendar guess) so its grades paint
+    // first; the remaining quarters ride along in the GPA wave.
+    const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(guessCurrentQuarter())
     // Cold resources rarely change — only refetch them when we have nothing cached.
     const coldNeeded = WAVE_COLD.filter(([t, e]) => acct.get(keyOf(t, e)) === undefined)
     const waves = [WAVE_HOT, WAVE_GPA, coldNeeded].filter((w) => w.length)
