@@ -281,7 +281,9 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew 
 
   const addRow = () => {
     const n = Object.keys(edits).filter((k) => k.startsWith(`${quarter}::${course.courseName}::extra`)).length
-    setEdit(editKey(quarter, course.courseName, `extra${n}`), { score: 100, total: 100, name: 'New assignment', hypo: true })
+    // Default to Assessment (AOL): in an AOL/PC class only Assessments move the
+    // overall grade, so a new row that's meant to project a grade has to be one.
+    setEdit(editKey(quarter, course.courseName, `extra${n}`), { score: 100, total: 100, name: 'New assignment', hypo: true, category: 'Assessment' })
   }
 
   return (
@@ -323,9 +325,21 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew 
                       const isPC = cat.includes('progress')
                       return (
                         <tr key={r.key} className={isAOL ? 'aol-row' : ''}>
-                          <td>{r.name}{r.edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow-text)' }}>{r.hypo ? 'added' : 'edited'}</span>}</td>
                           <td>
-                            {isAOL ? <span className="cat-tag aol">Assessment</span>
+                            {r.hypo
+                              ? <input className="input mini" type="text" style={{ minWidth: 150 }} value={r.name}
+                                  placeholder="New assignment" onChange={(e) => setEdit(r.key, { name: e.target.value })} />
+                              : r.name}
+                            {r.edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow-text)' }}>{r.hypo ? 'added' : 'edited'}</span>}
+                          </td>
+                          <td>
+                            {r.hypo
+                              ? <select className="input mini" value={isPC ? 'Progress' : 'Assessment'}
+                                  onChange={(e) => setEdit(r.key, { category: e.target.value })}>
+                                  <option value="Assessment">Assessment</option>
+                                  <option value="Progress">Progress</option>
+                                </select>
+                              : isAOL ? <span className="cat-tag aol">Assessment</span>
                               : isPC ? <span className="cat-tag pc">Progress</span>
                               : <span className="faint small">{r.category || '—'}</span>}
                           </td>

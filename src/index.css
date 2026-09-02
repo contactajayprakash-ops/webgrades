@@ -445,9 +445,9 @@ body { overscroll-behavior-y: contain; } /* replace the browser's native pull-to
 .recent-name { font-weight: 600; }
 .recent-sub { font-size: var(--t-footnote); color: var(--text-faint); margin-top: 1px; }
 /* Subtle AOL/PC hint — far quieter than the Grades page's colored tags. */
-.recent-cat { margin-left: 6px; font-size: var(--t-caption2); font-weight: 700; letter-spacing: .04em; }
-.recent-cat.aol { color: color-mix(in srgb, var(--accent-text) 75%, var(--text-faint)); }
-.recent-cat.pc { color: var(--text-faint); opacity: .8; }
+.recent-cat { margin-left: 6px; font-size: var(--t-caption2); font-weight: 700; letter-spacing: .04em; padding: 1px 6px; border-radius: var(--pill); }
+.recent-cat.aol { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.recent-cat.pc { color: var(--text-faint); background: var(--fill-4); }
 .recent-right { display: flex; align-items: center; gap: 10px; }
 .recent-delta { font-size: var(--t-caption); font-weight: 700; font-variant-numeric: tabular-nums; }
 .recent-delta.up { color: var(--green-text); }
