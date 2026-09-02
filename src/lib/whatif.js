@@ -25,7 +25,7 @@ export function classRows(quarter, course, edits) {
   for (const k of Object.keys(edits)) {
     if (!k.startsWith(prefix)) continue
     const e = edits[k]
-    rows.push({ key: k, name: e.name || 'New assignment', score: e.score ?? null, total: e.total ?? 100, edited: true, hypo: true })
+    rows.push({ key: k, name: e.name || 'New assignment', category: e.category, score: e.score ?? null, total: e.total ?? 100, edited: true, hypo: true })
   }
   return rows
 }
