@@ -1,8 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { ErrorBox } from './ui.jsx'
 
 export default function Login() {
+  // Short tab title for users. The full SEO title stays in index.html's <title>
+  // (what crawlers read from the served HTML); we only override the visible tab.
+  useEffect(() => { document.title = 'WebGrades - Login' }, [])
+
   const { login } = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
