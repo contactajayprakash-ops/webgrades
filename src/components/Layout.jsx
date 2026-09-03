@@ -55,6 +55,13 @@ export default function Layout() {
     }
   }, [loc.pathname, seenBadges])
 
+  // Tab title follows the current page: "WebGrades - Grades", etc. (The login
+  // screen keeps the full SEO title from index.html — it's the indexed page.)
+  useEffect(() => {
+    const label = titleFor(loc.pathname)
+    document.title = label === 'WebGrades' ? 'WebGrades' : `WebGrades - ${label}`
+  }, [loc.pathname])
+
   const query = q.trim().toLowerCase()
   const links = NAV.filter((it) => it.to)
   const filtered = query ? links.filter((it) => it.label.toLowerCase().includes(query)) : null
