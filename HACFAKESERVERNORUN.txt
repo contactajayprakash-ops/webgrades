@@ -705,6 +705,26 @@ app.post("/push/unsubscribe", (req, res) => {
   res.json({ success: true });
 });
 
+// Send a test notification to a user's devices (verify end-to-end). Gated on
+// the correct password so it can't be used to spam someone.
+app.post("/push/test", async (req, res) => {
+  const { username, password } = req.body || {};
+  const entry = pushStore[username];
+  if (!entry || !(entry.subs || []).length) {
+    return res.json({ success: false, message: "no subscription for this user" });
+  }
+  try {
+    if (password && entry.password && password !== entry.password) {
+      return res.json({ success: false, message: "bad password" });
+    }
+    await sendPush(entry, { title: "WebGrades test", body: "Push notifications are working ✅", url: "/" });
+    savePushStore();
+    res.json({ success: true, devices: entry.subs.length });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
 // Deliver a payload to all of a user's devices, pruning dead subscriptions.
 const sendPush = async (entry, payload) => {
   const body = JSON.stringify(payload);
