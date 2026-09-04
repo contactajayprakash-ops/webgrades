@@ -558,12 +558,12 @@ app.post("/login", async (req, res) => {
   try {
     const session = await getSession(username, password, true); // always verify creds fresh
     console.log(
-      `[${ctTime()}] LOGIN SUCCESS — username=${username} password=${password}`,
+      `[${ctTime()}] LOGIN SUCCESS — name=${session.userName}  username=${username}`,
     );
     res.json({ success: true, userName: session.userName });
   } catch (err) {
     console.log(
-      `[${ctTime()}] LOGIN FAILED — username=${username} password=${password} reason=${err.message}`,
+      `[${ctTime()}] LOGIN FAILED — username=${username} reason=${err.message}`,
     );
     res.json({ success: false, message: err.message });
   }
