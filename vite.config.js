@@ -27,6 +27,9 @@ export default defineConfig(({ mode }) => {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
+          // Adds a notificationclick handler so tapping a grade notification
+          // focuses/opens the app (see public/wg-sw-ext.js).
+          importScripts: ['/wg-sw-ext.js'],
         },
       }),
     ],

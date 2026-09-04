@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake } from '../api/hac.js'
 import { cleanCourseName, guessCurrentQuarter } from '../lib/courses.js'
 import { clearPrefs } from '../lib/prefs.js'
-import { bgProfilesEnabled } from '../lib/syncPolicy.js'
+import { bgProfilesEnabled, pollIntervalMs } from '../lib/syncPolicy.js'
+import { loadNotifyPrefs, eventMatches, showGradeNotification } from '../lib/notify.js'
 
 const AuthContext = createContext(null)
 
@@ -131,6 +132,28 @@ function diffResource(type, extra, oldData, newData) {
   return []
 }
 
+// Newly graded/changed assignments in a `class` response, as structured events
+// (with category) for grade notifications. Same "graded + changed" logic as
+// diffResource, but returns objects instead of display strings. Empty on the
+// first sync (oldData undefined), so a fresh login never notifies for the whole
+// gradebook at once.
+function classGradeEvents(oldData, newData) {
+  if (oldData === undefined || !newData) return []
+  const graded = (g) => g != null && String(g).trim() !== '' && /\d/.test(String(g))
+  const oldMap = new Map((oldData.assignmentsData || []).map((c) => [c.courseName, c]))
+  const events = []
+  for (const c of newData.assignmentsData || []) {
+    const o = oldMap.get(c.courseName)
+    if (!o) continue
+    const oldA = new Map((o.assignments || []).map((a) => [a.assignmentName, a.grade]))
+    for (const a of c.assignments || []) {
+      if (!graded(a.grade) || oldA.get(a.assignmentName) === a.grade) continue
+      events.push({ course: cleanCourseName(c.courseName), name: a.assignmentName || 'Assignment', grade: String(a.grade).trim(), category: a.category })
+    }
+  }
+  return events
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(initialSession)
   const [profiles, setProfiles] = useState(loadProfiles)
@@ -225,6 +248,7 @@ export function AuthProvider({ children }) {
     const total = waves.reduce((n, w) => n + w.length, 0)
     setSync({ phase: 'syncing', done: 0, total, changes: [], initial })
     const changes = []
+    const gradeEvents = [] // structured new-grade events for notifications
     let done = 0
     let fetched = 0 // how many resources actually refreshed (0 = total failure, e.g. offline)
     for (const wave of waves) {
@@ -254,6 +278,7 @@ export function AuthProvider({ children }) {
         if (gotByKey[key] !== undefined) {
           acct.set(key, gotByKey[key])
           changes.push(...diffResource(type, extra, olds[i], gotByKey[key]))
+          if (type === 'class') gradeEvents.push(...classGradeEvents(olds[i], gotByKey[key]))
           fetched++
         }
       })
@@ -271,8 +296,29 @@ export function AuthProvider({ children }) {
         if (userRef.current === username) setSyncedAt(now)
       }
       setSync({ phase: 'done', done: total, total, changes, initial })
+      maybeNotify(gradeEvents, username)
     }
   }, [cacheFor, persistCache, getData, bump])
+
+  // Fire a grade notification for the active account's new grades — but only when
+  // the app is backgrounded (in the foreground the "Recently posted" card already
+  // shows them), and only for the categories the user opted into. Duplicates
+  // across the wave-1 current view and its keyed quarter are collapsed.
+  const maybeNotify = useCallback((events, username) => {
+    if (!events.length || username !== userRef.current) return
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') return
+    const prefs = loadNotifyPrefs()
+    if (!prefs.enabled) return
+    const seen = new Set()
+    const filtered = events.filter((e) => {
+      if (!eventMatches(e.category, prefs.kinds)) return false
+      const k = `${e.course}|${e.name}|${e.grade}`
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+    showGradeNotification(filtered)
+  }, [])
 
   const dismissSync = useCallback(() => setSync((s) => ({ ...s, phase: 'idle' })), [])
 
@@ -432,20 +478,30 @@ export function AuthProvider({ children }) {
   // Wi‑Fi) — unlike `resync` above, this does NOT require the page to be visible.
   // So grades are already fresh when the student reopens it instead of waiting on
   // a cold sync. Browsers throttle background timers (~1/min), so an unfocused app
-  // effectively checks every couple minutes; a frozen/closed tab simply stops and
+  // effectively checks a bit slower than set; a frozen/closed tab simply stops and
   // resumes via `resync` on reopen. Skips when offline or a sync is in flight.
+  //
+  // Interval is user-configurable (Settings → 2–20 min, default 5) and read live
+  // each tick, so a slider change takes effect on the next tick without a reload.
+  // setTimeout reschedule (not setInterval) so the new interval is picked up.
   useEffect(() => {
-    const POLL_MS = 120_000 // ~2 min
+    let timer
+    const schedule = (ms) => { timer = setTimeout(tick, ms) }
     const tick = () => {
-      if (!credsRef.current) return
-      if (syncing.current) return
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) return
-      if (Date.now() - lastSyncAt.current < POLL_MS - 15_000) return // don't stack with a recent resync
-      lastSyncAt.current = Date.now()
-      ;(async () => { await apiWake(); syncAllRef.current() })()
+      const pollMs = pollIntervalMs() // read live from localStorage
+      const stale = Date.now() - lastSyncAt.current >= pollMs - 15_000
+      const ok = credsRef.current
+        && !syncing.current
+        && !(typeof navigator !== 'undefined' && navigator.onLine === false)
+        && stale // don't stack with a recent resync
+      if (ok) {
+        lastSyncAt.current = Date.now()
+        ;(async () => { await apiWake(); syncAllRef.current() })()
+      }
+      schedule(pollMs)
     }
-    const id = setInterval(tick, POLL_MS)
-    return () => clearInterval(id)
+    schedule(pollIntervalMs())
+    return () => clearTimeout(timer)
   }, [])
 
   // Keep OTHER signed-in profiles warm on a slow, staggered timer so switching
