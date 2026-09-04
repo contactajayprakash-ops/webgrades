@@ -1,4 +1,22 @@
 // Extra service-worker behavior imported into the generated Workbox SW.
+
+// Server-sent Web Push: show the grade notification the Pi pushed. Fires even
+// when the app is fully closed (installed PWA) — this is what makes iPhone work.
+self.addEventListener('push', (event) => {
+  let data = {}
+  try { data = event.data ? event.data.json() : {} } catch (_) {}
+  const title = data.title || 'New grade posted'
+  const options = {
+    body: data.body || '',
+    tag: data.tag || 'wg-grades',
+    renotify: true,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: { url: data.url || '/' },
+  }
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
 // Focus the app (or open it) when a grade notification is tapped.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()

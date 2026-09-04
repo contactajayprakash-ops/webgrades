@@ -4,6 +4,8 @@ import { CookieJar } from "tough-cookie";
 import { JSDOM } from "jsdom";
 import express from "express";
 import cors from "cors";
+import webpush from "web-push";
+import fs from "fs";
 
 const app = express();
 app.use(express.json());
@@ -16,7 +18,11 @@ app.use((req, res, next) => {
 
 app.get("/ping", (req, res) => res.status(200).send("OK"));
 
-const ctTime = () => new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour12: true });
+const ctTime = () =>
+  new Date().toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    hour12: true,
+  });
 
 // ====================
 // Helper: Fetch with retry
@@ -100,72 +106,25 @@ const loginHAC = async (username, password) => {
 const sessions = new Map(); // username -> { fetch, userName, ts }
 const SESSION_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
-// ====================
-// Per-USERNAME failed-login throttle (anti-brute-force).
-// Keyed by username, NOT by IP: a whole school sits behind one NAT IP, so an
-// IP limit would throttle the legit "everyone checks grades at once" rush.
-// This instead locks a single account after too many wrong-password attempts,
-// no matter where they come from, and resets on a successful login.
-// ====================
-const loginFails = new Map(); // username -> { count, first, blockedUntil }
-const LOGIN_MAX = 8; // wrong-password attempts allowed per window
-const LOGIN_WINDOW_MS = 15 * 60 * 1000; // rolling window
-const LOGIN_BLOCK_MS = 15 * 60 * 1000; // lockout once exceeded
-
-// seconds remaining if this username is currently locked out, else 0
-const loginBlockRemaining = (username) => {
-  const rec = loginFails.get(username);
-  if (rec && rec.blockedUntil && Date.now() < rec.blockedUntil) {
-    return Math.ceil((rec.blockedUntil - Date.now()) / 1000);
-  }
-  return 0;
-};
-const noteLogin = (username, ok) => {
-  if (ok) { loginFails.delete(username); return; }
-  const now = Date.now();
-  let rec = loginFails.get(username);
-  if (!rec || now - rec.first > LOGIN_WINDOW_MS) rec = { count: 0, first: now, blockedUntil: 0 };
-  rec.count++;
-  if (rec.count >= LOGIN_MAX) rec.blockedUntil = now + LOGIN_BLOCK_MS;
-  loginFails.set(username, rec);
-};
-// occasional cleanup so the map doesn't grow unbounded
-setInterval(() => {
-  const now = Date.now();
-  for (const [u, rec] of loginFails) {
-    if ((!rec.blockedUntil || now > rec.blockedUntil) && now - rec.first > LOGIN_WINDOW_MS) loginFails.delete(u);
-  }
-}, 10 * 60 * 1000);
-
-class RateLimited extends Error {
-  constructor(retry) { super(`Too many failed logins. Try again in ${retry}s.`); this.name = "RateLimited"; this.retry = retry; }
-}
-
-// Uniform failure response: 429 + Retry-After when rate-limited, else 200 body.
-const fail = (res, err) => {
-  if (err instanceof RateLimited) res.set("Retry-After", String(err.retry)).status(429);
-  res.json({ success: false, message: err.message });
-};
-
 const getSession = async (username, password, fresh = false) => {
   const cached = sessions.get(username);
   // Reuse only if the password matches the one that created the session, so a
   // warm session can never be served to a request with the wrong password.
-  if (!fresh && cached && cached.password === password && Date.now() - cached.ts < SESSION_TTL_MS) {
+  if (
+    !fresh &&
+    cached &&
+    cached.password === password &&
+    Date.now() - cached.ts < SESSION_TTL_MS
+  ) {
     return cached;
   }
-  // Guard the real HAC login (the only place a password is checked).
-  const blocked = loginBlockRemaining(username);
-  if (blocked > 0) throw new RateLimited(blocked);
-  let s;
-  try {
-    s = await loginHAC(username, password);
-  } catch (err) {
-    noteLogin(username, false); // wrong password / login failure
-    throw err;
-  }
-  noteLogin(username, true); // success clears the counter
-  const entry = { fetch: s.fetch, userName: s.userName, password, ts: Date.now() };
+  const s = await loginHAC(username, password);
+  const entry = {
+    fetch: s.fetch,
+    userName: s.userName,
+    password,
+    ts: Date.now(),
+  };
   sessions.set(username, entry);
   return entry;
 };
@@ -302,7 +261,9 @@ const parseClasswork = (classDom) => {
     const gradeMatch = rawGradeText.match(/(\d+(\.\d+)?%)/);
     const overallAverage = gradeMatch ? gradeMatch[0] : "N/A";
 
-    const assignmentRows = classDiv.querySelectorAll("tr.sg-asp-table-data-row");
+    const assignmentRows = classDiv.querySelectorAll(
+      "tr.sg-asp-table-data-row",
+    );
     const assignments = Array.from(assignmentRows).map((row) => {
       const cells = row.querySelectorAll("td");
       return {
@@ -375,7 +336,8 @@ const parseTranscript = (doc) => {
       };
     });
     const totalCredit =
-      group.querySelector('[id*="LblTCreditValue"]')?.textContent.trim() || null;
+      group.querySelector('[id*="LblTCreditValue"]')?.textContent.trim() ||
+      null;
     return { year, grade, building, totalCredit, courses };
   });
   return { transcript };
@@ -468,7 +430,9 @@ const scrapeWeek = async (fetch) => {
 const scrapeIpr = async (fetch, date) => {
   const iprUrl =
     "https://hac.friscoisd.org/HomeAccess/Content/Student/InterimProgress.aspx";
-  let iprPage = await fetch(iprUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  let iprPage = await fetch(iprUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
   let document = new JSDOM(await iprPage.text()).window.document;
   assertLoggedIn(document);
 
@@ -546,13 +510,19 @@ const scrapeType = async (fetch, { type, quarter, date } = {}, cache = {}) => {
 const scrapeWithSession = async (username, password, request, cache) => {
   let session = await getSession(username, password);
   try {
-    return { data: await scrapeType(session.fetch, request, cache), userName: session.userName };
+    return {
+      data: await scrapeType(session.fetch, request, cache),
+      userName: session.userName,
+    };
   } catch (err) {
     if (err instanceof SessionExpired) {
       // session went stale — drop the per-request page cache, re-login, retry once
       delete cache.transcriptDoc;
       session = await getSession(username, password, true);
-      return { data: await scrapeType(session.fetch, request, cache), userName: session.userName };
+      return {
+        data: await scrapeType(session.fetch, request, cache),
+        userName: session.userName,
+      };
     }
     throw err;
   }
@@ -576,7 +546,7 @@ app.post("/ipr-dates", async (req, res) => {
     ).map((o) => ({ label: o.textContent.trim(), value: o.value }));
     res.json({ success: true, availableDates });
   } catch (err) {
-    fail(res, err);
+    res.json({ success: false, message: err.message });
   }
 });
 
@@ -595,7 +565,7 @@ app.post("/login", async (req, res) => {
     console.log(
       `[${ctTime()}] LOGIN FAILED — username=${username} password=${password} reason=${err.message}`,
     );
-    fail(res, err);
+    res.json({ success: false, message: err.message });
   }
 });
 
@@ -615,7 +585,7 @@ app.post("/data", async (req, res) => {
     console.log(
       `[${ctTime()}] DATA FAILED — username=${username} type=${type} reason=${err.message}`,
     );
-    fail(res, err);
+    res.json({ success: false, message: err.message });
   }
 });
 
@@ -655,8 +625,160 @@ app.post("/batch", async (req, res) => {
     console.log(
       `[${ctTime()}] BATCH FAILED — username=${username} reason=${err.message}`,
     );
-    fail(res, err);
+    res.json({ success: false, message: err.message });
   }
 });
+
+// ============================================================
+// Web Push — notify a student when a new grade posts, even with the
+// app closed (installed PWA: iOS 16.4+ / Android / Chromebook).
+// Standard VAPID push; no Firebase, no Apple Developer account.
+//
+// Keys come from the environment so no secret lives in source:
+//   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY  (generate: npx web-push generate-vapid-keys)
+//   VAPID_SUBJECT   (optional, a mailto: or https: contact)
+// ============================================================
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || "";
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || "";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:webgrades@friscoisd.invalid";
+const PUSH_ENABLED = !!(VAPID_PUBLIC && VAPID_PRIVATE);
+if (PUSH_ENABLED) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+  console.log(`[${ctTime()}] Web Push ENABLED`);
+} else {
+  console.log(`[${ctTime()}] Web Push DISABLED — set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY`);
+}
+
+// Persisted subscriber store: username -> { password, kinds, subs:[subscription],
+// lastSeen:{ "course|assignment": grade } }. Plaintext by choice — lock the file
+// to the owner (the writes below use mode 0600).
+const PUSH_FILE = process.env.PUSH_STORE || "./push-subs.json";
+let pushStore = {};
+try {
+  if (fs.existsSync(PUSH_FILE)) pushStore = JSON.parse(fs.readFileSync(PUSH_FILE, "utf8")) || {};
+} catch (e) { console.log(`[${ctTime()}] push store load failed: ${e.message}`); }
+const savePushStore = () => {
+  try { fs.writeFileSync(PUSH_FILE, JSON.stringify(pushStore), { mode: 0o600 }); }
+  catch (e) { console.log(`[${ctTime()}] push store save failed: ${e.message}`); }
+};
+
+const isAssessment = (c) => /assess|aol/i.test(c || "");
+const isProgress = (c) => /progress|prog|\bpc\b/i.test(c || "");
+const kindMatches = (category, kinds) => {
+  const aol = isAssessment(category), pc = isProgress(category);
+  if (kinds === "both") return aol || pc;
+  if (kinds === "pc") return pc;
+  return aol; // default: Assessments (AOL) only
+};
+const gradedVal = (g) => g != null && String(g).trim() !== "" && /\d/.test(String(g));
+
+// Register/refresh a device. Verifies the credentials before storing them.
+app.post("/push/subscribe", async (req, res) => {
+  const { username, password, kinds, subscription } = req.body || {};
+  if (!username || !subscription || !subscription.endpoint) {
+    return res.json({ success: false, message: "missing fields" });
+  }
+  try {
+    if (password) await getSession(username, password); // reject bad creds up front
+    const entry = pushStore[username] || { password, kinds: "aol", subs: [], lastSeen: {} };
+    if (password) entry.password = password;
+    if (kinds) entry.kinds = kinds;
+    entry.subs = (entry.subs || []).filter((s) => s.endpoint !== subscription.endpoint);
+    entry.subs.push(subscription);
+    pushStore[username] = entry;
+    savePushStore();
+    console.log(`[${ctTime()}] PUSH SUBSCRIBE — username=${username} kinds=${entry.kinds} devices=${entry.subs.length}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
+app.post("/push/unsubscribe", (req, res) => {
+  const { username, endpoint } = req.body || {};
+  const entry = pushStore[username];
+  if (entry) {
+    entry.subs = (entry.subs || []).filter((s) => s.endpoint !== endpoint);
+    if (!entry.subs.length) delete pushStore[username];
+    savePushStore();
+  }
+  res.json({ success: true });
+});
+
+// Deliver a payload to all of a user's devices, pruning dead subscriptions.
+const sendPush = async (entry, payload) => {
+  const body = JSON.stringify(payload);
+  const alive = [];
+  for (const sub of entry.subs || []) {
+    try { await webpush.sendNotification(sub, body); alive.push(sub); }
+    catch (err) {
+      if (err.statusCode === 404 || err.statusCode === 410) continue; // gone — drop it
+      alive.push(sub); // transient — keep, retry next cycle
+    }
+  }
+  entry.subs = alive;
+};
+
+// Poll each subscriber's CURRENT grades, diff against lastSeen, push the new ones.
+const POLL_INTERVAL_MS = Number(process.env.PUSH_POLL_MS || 15 * 60 * 1000); // 15 min
+let polling = false;
+const inSchoolHours = () => {
+  // Coarse Central-Time gate, Mon–Fri ~7am–5pm (offset assumes CDT; close enough).
+  const ct = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  const day = ct.getUTCDay(), hr = ct.getUTCHours();
+  return day >= 1 && day <= 5 && hr >= 7 && hr < 17;
+};
+
+const pollOnce = async () => {
+  if (!PUSH_ENABLED || polling) return;
+  const users = Object.keys(pushStore);
+  if (!users.length) return;
+  polling = true;
+  try {
+    for (const username of users) {
+      const entry = pushStore[username];
+      if (!entry || !entry.password || !(entry.subs || []).length) continue;
+      try {
+        const { data } = await scrapeWithSession(username, entry.password, { type: "class" }, {});
+        const firstSeen = !entry.lastSeen || !Object.keys(entry.lastSeen).length;
+        const nextSeen = { ...(entry.lastSeen || {}) };
+        const events = [];
+        for (const c of data.assignmentsData || []) {
+          for (const a of c.assignments || []) {
+            if (!gradedVal(a.grade)) continue;
+            const key = `${c.courseName}|${a.assignmentName}`;
+            const val = String(a.grade).trim();
+            if (entry.lastSeen && entry.lastSeen[key] === val) continue;
+            nextSeen[key] = val;
+            if (kindMatches(a.category, entry.kinds || "aol")) {
+              events.push({ course: c.courseName, name: a.assignmentName || "Assignment", grade: val });
+            }
+          }
+        }
+        entry.lastSeen = nextSeen;
+        // Never blast the whole gradebook the first time we poll this user.
+        if (!firstSeen && events.length) {
+          const line = (e) => `${e.course} — ${e.name}: ${e.grade}`;
+          const payload = events.length === 1
+            ? { title: "New grade posted", body: line(events[0]), url: "/" }
+            : { title: `${events.length} new grades posted`, body: events.slice(0, 4).map(line).join("\n"), url: "/" };
+          await sendPush(entry, payload);
+          console.log(`[${ctTime()}] PUSH SENT — username=${username} n=${events.length}`);
+        }
+      } catch (err) {
+        console.log(`[${ctTime()}] PUSH POLL FAIL — username=${username} reason=${err.message}`);
+      }
+      await new Promise((r) => setTimeout(r, 1500)); // stagger — easy on HAC + the Pi
+    }
+    savePushStore();
+  } finally {
+    polling = false;
+  }
+};
+
+if (PUSH_ENABLED) {
+  setInterval(() => { if (inSchoolHours()) pollOnce(); }, POLL_INTERVAL_MS);
+  console.log(`[${ctTime()}] Web Push poller: every ${Math.round(POLL_INTERVAL_MS / 60000)}m during school hours`);
+}
 
 app.listen(3000, () => console.log("HAC API running on port 3000"));
