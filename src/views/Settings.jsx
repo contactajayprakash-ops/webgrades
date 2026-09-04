@@ -5,7 +5,9 @@ import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import { ACCENTS, loadTheme, saveTheme } from '../lib/theme.js'
 import { useInstall } from '../hooks/useInstall.js'
-import { syncLock, setSyncLock, bgProfilesEnabled, setBgProfilesEnabled } from '../lib/syncPolicy.js'
+import { syncLock, setSyncLock, bgProfilesEnabled, setBgProfilesEnabled,
+  pollIntervalMin, setPollIntervalMin, POLL_MIN_MIN, POLL_MIN_MAX } from '../lib/syncPolicy.js'
+import { notifySupported, notifyPermission, requestNotifyPermission, loadNotifyPrefs, saveNotifyPrefs } from '../lib/notify.js'
 
 // Nuke the service worker + all caches, then hard-reload — the reliable escape
 // from a stuck stale build (plain reloads don't force Safari to swap the SW).
@@ -122,6 +124,9 @@ export default function Settings() {
           />
         </div>
 
+        {/* Notifications */}
+        <NotificationsSection />
+
         {/* Install */}
         <InstallSection />
 
@@ -199,9 +204,36 @@ function DeviceSyncSection({ username }) {
   const [bgOn, setBgOn] = useState(bgProfilesEnabled)
   const toggleBg = (next) => { setBgProfilesEnabled(next); setBgOn(next) }
 
+  const [poll, setPoll] = useState(pollIntervalMin)
+  const changePoll = (v) => { const n = Number(v); setPoll(n); setPollIntervalMin(n) }
+
   return (
     <div className="card card-pad">
       <h3 className="mb-3">This device</h3>
+      <div className="row-between" style={{ gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600 }}>Auto-check for new grades</div>
+          <div className="small faint">
+            How often the app quietly re-checks HAC for new grades while it's open. Lower is fresher; higher is gentler on your battery and the server. Applies to this browser only.
+          </div>
+          <input
+            type="range"
+            min={POLL_MIN_MIN}
+            max={POLL_MIN_MAX}
+            step={1}
+            value={poll}
+            onChange={(e) => changePoll(e.target.value)}
+            aria-label="Auto-check interval in minutes"
+            style={{ width: '100%', marginTop: 12, accentColor: 'var(--accent)' }}
+          />
+          <div className="row-between small faint" style={{ marginTop: 2 }}>
+            <span>{POLL_MIN_MIN} min</span>
+            <span style={{ fontWeight: 600, color: 'var(--accent-text)' }}>Every {poll} min</span>
+            <span>{POLL_MIN_MAX} min</span>
+          </div>
+        </div>
+      </div>
+      <div style={{ height: 16 }} />
       <ToggleRow
         label="Only sync this account here"
         hint={on
@@ -219,6 +251,68 @@ function DeviceSyncSection({ username }) {
         checked={bgOn}
         onChange={toggleBg}
       />
+    </div>
+  )
+}
+
+// Grade notifications: a per-device toggle (requests OS permission) plus a
+// choice of which grade categories fire one. Default: Assessments (AOL) only.
+function NotificationsSection() {
+  const supported = notifySupported()
+  const [perm, setPerm] = useState(() => notifyPermission())
+  const [prefs, setPrefs] = useState(loadNotifyPrefs)
+  const on = prefs.enabled && perm === 'granted'
+
+  const toggle = async (next) => {
+    if (next) {
+      let p = perm
+      if (p !== 'granted') { p = await requestNotifyPermission(); setPerm(p) }
+      const np = { ...prefs, enabled: p === 'granted' }
+      setPrefs(np); saveNotifyPrefs(np)
+    } else {
+      const np = { ...prefs, enabled: false }
+      setPrefs(np); saveNotifyPrefs(np)
+    }
+  }
+  const setKinds = (kinds) => { const np = { ...prefs, kinds }; setPrefs(np); saveNotifyPrefs(np) }
+
+  return (
+    <div className="card card-pad">
+      <h3 className="mb-3">Notifications</h3>
+      {!supported ? (
+        <div className="small faint">
+          This browser can’t show grade notifications. On iPhone/iPad, add WebGrades to your
+          Home Screen (Share → <b>Add to Home Screen</b>) and open it from there to enable them.
+        </div>
+      ) : (
+        <>
+          <ToggleRow
+            label="Grade notifications"
+            hint={perm === 'denied'
+              ? 'Blocked in your browser settings — allow notifications for this site, then turn this on.'
+              : on
+                ? 'You’ll get a notification when a new grade posts during a background check. Best as an installed app — a fully-closed app can’t check until it’s reopened.'
+                : 'Get notified when a new grade posts, detected on the app’s background checks. Works best installed to your home screen or shelf.'}
+            checked={on}
+            onChange={toggle}
+          />
+          {on && (
+            <div className="field mt-3">
+              <label>Notify me about</label>
+              <Segmented
+                style={{ marginTop: 4, alignSelf: 'flex-start' }}
+                value={prefs.kinds}
+                onChange={setKinds}
+                ariaLabel="Which grades to notify about"
+                options={[{ value: 'aol', label: 'Assessments' }, { value: 'pc', label: 'Progress' }, { value: 'both', label: 'Both' }]}
+              />
+              <span className="small faint">
+                Assessments (AOL) drive your grade; Progress (PC) are formative checks. Default is Assessments only.
+              </span>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
