@@ -38,3 +38,28 @@ export function setBgProfilesEnabled(on) {
     else localStorage.setItem(BG_PROFILES_KEY, 'off')
   } catch (_) {}
 }
+
+// Per-BROWSER background auto-check interval for the ACTIVE account, in minutes.
+// How often the app quietly re-checks HAC for new grades while it's open (even
+// unfocused). Default 5 min; a slider in Settings lets you pick 2–20. Stored
+// browser-local like the toggles above, so it never follows you to another
+// device. Read live on each poll tick, so a change takes effect without reload.
+const POLL_MIN_KEY = 'wg_poll_min'
+export const POLL_MIN_DEFAULT = 5
+export const POLL_MIN_MIN = 2
+export const POLL_MIN_MAX = 20
+
+const clampPoll = (n) => Math.min(POLL_MIN_MAX, Math.max(POLL_MIN_MIN, Math.round(n)))
+
+export function pollIntervalMin() {
+  try {
+    const raw = parseInt(localStorage.getItem(POLL_MIN_KEY), 10)
+    return Number.isFinite(raw) ? clampPoll(raw) : POLL_MIN_DEFAULT
+  } catch (_) { return POLL_MIN_DEFAULT }
+}
+
+export function setPollIntervalMin(min) {
+  try { localStorage.setItem(POLL_MIN_KEY, String(clampPoll(min))) } catch (_) {}
+}
+
+export function pollIntervalMs() { return pollIntervalMin() * 60_000 }
