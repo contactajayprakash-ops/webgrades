@@ -89,8 +89,34 @@ routes on the Host header, and forwarding CloudFront's hostname breaks it.
 A Raspberry Pi 3 on the tailnet running `server.mjs`: Express on port 3000
 (hardcoded, no `PORT` env), Node 18, scraping `hac.friscoisd.org` with
 `node-fetch` + `fetch-cookie` + `jsdom`. Routes: `GET /ping`, `POST /login`,
-`/data`, `/batch`, `/ipr-dates`. Keeps logged-in cookie jars in memory for 3
-minutes, keyed by username and re-checked against the password.
+`/data`, `/batch`, `/ipr-dates`, `/push/subscribe`, `/push/unsubscribe`. Keeps
+logged-in cookie jars in memory for 3 minutes, keyed by username and re-checked
+against the password.
+
+### Web Push (grade notifications)
+
+Server-sent Web Push so a student gets notified when a grade posts even with the
+app closed — the only way to do it on iPhone (iOS freezes backgrounded PWAs and
+has no Background Sync; the client-side notifier in `AuthContext` only fires
+while the app runs). Standard VAPID push — **no Firebase, no Apple Developer
+account**. Delivery is cheap; the cost is the poll.
+
+- **Deps/config:** needs `web-push` installed on the Pi and `VAPID_PUBLIC_KEY` /
+  `VAPID_PRIVATE_KEY` in the process env (public key is also hardcoded in
+  `src/lib/push.js` — the pair must match). Push is a no-op if the env is unset.
+- **Store:** `push-subs.json` next to `server.mjs`, `username -> { password,
+  kinds, subs[], lastSeen }`. Credentials are stored **in plaintext by explicit
+  choice** (file is written `chmod 600`) — the Pi is the private place to hold
+  them; a cloud poller would be worse. Every existing "HAC API" scrapes with the
+  password too — there is no token to store instead.
+- **Poller:** every 15 min (`PUSH_POLL_MS`) during a coarse school-hours gate,
+  staggered per user; diffs current `class` grades against `lastSeen` and pushes
+  new ones matching each user's `aol`/`pc`/`both` choice. Never blasts the whole
+  gradebook on the first poll after subscribing.
+- **Client:** `src/lib/push.js` subscribes via `PushManager`; the SW `push` +
+  `notificationclick` handlers live in `public/wg-sw-ext.js` (injected into the
+  generated Workbox SW via `workbox.importScripts`). Enable/opt-in is in
+  Settings → Notifications (default off).
 
 `HACFAKESERVERNORUN.txt` in this repo is a copy of that source. **Nothing keeps
 it in sync** — if the Pi is edited and this file isn't, the copy becomes fiction.
