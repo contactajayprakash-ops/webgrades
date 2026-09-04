@@ -8,6 +8,7 @@ import { useInstall } from '../hooks/useInstall.js'
 import { syncLock, setSyncLock, bgProfilesEnabled, setBgProfilesEnabled,
   pollIntervalMin, setPollIntervalMin, POLL_MIN_MIN, POLL_MIN_MAX } from '../lib/syncPolicy.js'
 import { notifySupported, notifyPermission, requestNotifyPermission, loadNotifyPrefs, saveNotifyPrefs } from '../lib/notify.js'
+import { subscribeToPush, unsubscribeFromPush } from '../lib/push.js'
 
 // Nuke the service worker + all caches, then hard-reload — the reliable escape
 // from a stuck stale build (plain reloads don't force Safari to swap the SW).
@@ -258,23 +259,34 @@ function DeviceSyncSection({ username }) {
 // Grade notifications: a per-device toggle (requests OS permission) plus a
 // choice of which grade categories fire one. Default: Assessments (AOL) only.
 function NotificationsSection() {
+  const { session } = useAuth()
   const supported = notifySupported()
   const [perm, setPerm] = useState(() => notifyPermission())
   const [prefs, setPrefs] = useState(loadNotifyPrefs)
   const on = prefs.enabled && perm === 'granted'
 
+  const creds = () => ({ username: session?.username, password: session?.password })
+
   const toggle = async (next) => {
     if (next) {
       let p = perm
       if (p !== 'granted') { p = await requestNotifyPermission(); setPerm(p) }
-      const np = { ...prefs, enabled: p === 'granted' }
+      const enabled = p === 'granted'
+      const np = { ...prefs, enabled }
       setPrefs(np); saveNotifyPrefs(np)
+      // Register this device for server push so it fires even when the app is
+      // closed (installed PWA). Harmless if push is unsupported here.
+      if (enabled) subscribeToPush({ ...creds(), kinds: np.kinds })
     } else {
       const np = { ...prefs, enabled: false }
       setPrefs(np); saveNotifyPrefs(np)
+      unsubscribeFromPush({ username: session?.username })
     }
   }
-  const setKinds = (kinds) => { const np = { ...prefs, kinds }; setPrefs(np); saveNotifyPrefs(np) }
+  const setKinds = (kinds) => {
+    const np = { ...prefs, kinds }; setPrefs(np); saveNotifyPrefs(np)
+    if (np.enabled) subscribeToPush({ ...creds(), kinds }) // update the server's filter
+  }
 
   return (
     <div className="card card-pad">

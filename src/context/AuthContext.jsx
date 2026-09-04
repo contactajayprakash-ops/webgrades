@@ -4,6 +4,7 @@ import { cleanCourseName, guessCurrentQuarter } from '../lib/courses.js'
 import { clearPrefs } from '../lib/prefs.js'
 import { bgProfilesEnabled, pollIntervalMs } from '../lib/syncPolicy.js'
 import { loadNotifyPrefs, eventMatches, showGradeNotification } from '../lib/notify.js'
+import { hasPushSubscription } from '../lib/push.js'
 
 const AuthContext = createContext(null)
 
@@ -304,11 +305,14 @@ export function AuthProvider({ children }) {
   // the app is backgrounded (in the foreground the "Recently posted" card already
   // shows them), and only for the categories the user opted into. Duplicates
   // across the wave-1 current view and its keyed quarter are collapsed.
-  const maybeNotify = useCallback((events, username) => {
+  const maybeNotify = useCallback(async (events, username) => {
     if (!events.length || username !== userRef.current) return
     if (typeof document !== 'undefined' && document.visibilityState === 'visible') return
     const prefs = loadNotifyPrefs()
     if (!prefs.enabled) return
+    // If server push is registered on this device, let the Pi be the single
+    // source of truth — otherwise the app would notify a second time.
+    if (await hasPushSubscription()) return
     const seen = new Set()
     const filtered = events.filter((e) => {
       if (!eventMatches(e.category, prefs.kinds)) return false
