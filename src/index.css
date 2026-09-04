@@ -540,6 +540,7 @@ body { overscroll-behavior-y: contain; } /* replace the browser's native pull-to
 .input:focus, .select:focus { background: var(--fill-4); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 .input.mini { padding: 6px 10px; font-size: var(--t-footnote); width: 76px; text-align: right; border-radius: 9px; }
 .select.mini { padding: 6px 10px; font-size: var(--t-footnote); width: auto; border-radius: 9px; }
+.grades-search { width: 200px; } /* desktop; goes full-width (flex:1) on mobile */
 
 /* ============================================================================
    BUTTONS — Apple pill / glass / prominent
@@ -727,6 +728,13 @@ html[data-theme="light"] .seg-indicator { background: #ffffff; }
   .main { padding: 8px 18px 120px; }
   .page-head { padding: 8px 2px 16px; }
   .page-head h1 { font-size: var(--t-title1); }
+
+  /* Grades toolbar: stack full-width so the tabs, search and sort all align to
+     the same edges as the cards (search fills the row, sort sits at the right). */
+  .grades-toolbar { flex-direction: column; align-items: stretch; }
+  .grades-tabs { width: 100%; }
+  .grades-tools { width: 100%; }
+  .grades-search { flex: 1; min-width: 0; }
 
   /* Lift the sync toast clear of the floating tab bar (tab bar sits at
      14px + safe-area and is ~62px tall) so it never hides behind it. */
