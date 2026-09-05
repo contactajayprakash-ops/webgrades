@@ -677,17 +677,16 @@ const gradedVal = (g) => g != null && String(g).trim() !== "" && /\d/.test(Strin
 const normGrade = (g) => { const n = parseFloat(String(g)); return Number.isFinite(n) ? String(n) : String(g).trim(); };
 // HAC category-subtotal junk rows have a bare-number "assignment name".
 const isSubtotalName = (n) => /^\s*-?\d+(\.\d+)?\s*$/.test(String(n || ""));
-// One-time migration: normalize (and drop junk-row) grades stored by older
-// builds so they stop re-notifying after this deploy.
+// The dedup key now includes CATEGORY. HAC lists the same assignment name under
+// both a Progress and an Assessment category (e.g. "1D Motion Math" = 70 PC AND
+// 97 AOL); the old `course|name` key collided, so the two values overwrote each
+// other and re-notified every other poll. Reset each baseline ONCE (keyVer) so
+// the first poll re-captures under the new keys silently.
 for (const u of Object.keys(pushStore)) {
-  const ls = pushStore[u] && pushStore[u].lastSeen;
-  if (!ls) continue;
-  for (const k of Object.keys(ls)) {
-    if (isSubtotalName(k.slice(k.indexOf("|") + 1))) { delete ls[k]; continue; }
-    ls[k] = normGrade(ls[k]);
-  }
+  const e = pushStore[u];
+  if (e && e.keyVer !== 2) { e.lastSeen = {}; e.keyVer = 2; }
 }
-savePushStore(); // persist the migration so it survives + can be verified
+savePushStore();
 
 // Register/refresh a device. Verifies the credentials before storing them.
 app.post("/push/subscribe", async (req, res) => {
@@ -799,7 +798,7 @@ const pollOnce = async () => {
           for (const a of c.assignments || []) {
             if (!gradedVal(a.grade)) continue;
             if (isSubtotalName(a.assignmentName)) continue; // skip HAC subtotal junk rows
-            const key = `${c.courseName}|${a.assignmentName}`;
+            const key = `${c.courseName}|${a.category}|${a.assignmentName}`;
             const nv = normGrade(a.grade); // normalized: stable across HAC decimal drift
             if (entry.lastSeen && entry.lastSeen[key] === nv) continue;
             nextSeen[key] = nv;
@@ -831,6 +830,9 @@ const pollOnce = async () => {
 
 if (PUSH_ENABLED) {
   setInterval(() => { if (inActiveHours()) pollOnce(); }, POLL_INTERVAL_MS);
+  // One-time baseline shortly after boot so a reset/key-format change re-captures
+  // silently (firstSeen) instead of waiting up to a full interval.
+  setTimeout(() => pollOnce(), 8000);
   console.log(`[${ctTime()}] Web Push poller: every ${Math.round(POLL_INTERVAL_MS / 60000)}m, 6am–11pm CT`);
 }
 
