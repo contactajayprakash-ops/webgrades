@@ -671,6 +671,23 @@ const kindMatches = (category, kinds) => {
   return aol; // default: Assessments (AOL) only
 };
 const gradedVal = (g) => g != null && String(g).trim() !== "" && /\d/.test(String(g));
+// Normalize a grade for STABLE comparison: HAC returns inconsistent decimals
+// ("97" / "97.0" / "97.00"), which made the string compare read unchanged grades
+// as new and re-notify every poll. Compare/store the numeric form ("97").
+const normGrade = (g) => { const n = parseFloat(String(g)); return Number.isFinite(n) ? String(n) : String(g).trim(); };
+// HAC category-subtotal junk rows have a bare-number "assignment name".
+const isSubtotalName = (n) => /^\s*-?\d+(\.\d+)?\s*$/.test(String(n || ""));
+// One-time migration: normalize (and drop junk-row) grades stored by older
+// builds so they stop re-notifying after this deploy.
+for (const u of Object.keys(pushStore)) {
+  const ls = pushStore[u] && pushStore[u].lastSeen;
+  if (!ls) continue;
+  for (const k of Object.keys(ls)) {
+    if (isSubtotalName(k.slice(k.indexOf("|") + 1))) { delete ls[k]; continue; }
+    ls[k] = normGrade(ls[k]);
+  }
+}
+savePushStore(); // persist the migration so it survives + can be verified
 
 // Register/refresh a device. Verifies the credentials before storing them.
 app.post("/push/subscribe", async (req, res) => {
@@ -714,7 +731,7 @@ app.post("/push/test", async (req, res) => {
     return res.json({ success: false, message: "no subscription for this user" });
   }
   try {
-    if (password && entry.password && password !== entry.password) {
+    if (!password || password !== entry.password) {
       return res.json({ success: false, message: "bad password" });
     }
     await sendPush(entry, { title: "WebGrades test", body: "Push notifications are working ✅", url: "/" });
@@ -723,6 +740,19 @@ app.post("/push/test", async (req, res) => {
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
+});
+
+// Trigger one poll cycle on demand (gated by password) — to verify dedup
+// end-to-end without waiting for the 15-minute timer.
+app.post("/push/poll", async (req, res) => {
+  const { username, password } = req.body || {};
+  const entry = pushStore[username];
+  if (!entry) return res.json({ success: false, message: "no subscription" });
+  if (!password || password !== entry.password) {
+    return res.json({ success: false, message: "bad password" });
+  }
+  await pollOnce();
+  res.json({ success: true });
 });
 
 // Deliver a payload to all of a user's devices, pruning dead subscriptions.
@@ -768,12 +798,13 @@ const pollOnce = async () => {
         for (const c of data.assignmentsData || []) {
           for (const a of c.assignments || []) {
             if (!gradedVal(a.grade)) continue;
+            if (isSubtotalName(a.assignmentName)) continue; // skip HAC subtotal junk rows
             const key = `${c.courseName}|${a.assignmentName}`;
-            const val = String(a.grade).trim();
-            if (entry.lastSeen && entry.lastSeen[key] === val) continue;
-            nextSeen[key] = val;
+            const nv = normGrade(a.grade); // normalized: stable across HAC decimal drift
+            if (entry.lastSeen && entry.lastSeen[key] === nv) continue;
+            nextSeen[key] = nv;
             if (kindMatches(a.category, entry.kinds || "aol")) {
-              events.push({ course: c.courseName, name: a.assignmentName || "Assignment", grade: val });
+              events.push({ course: c.courseName, name: a.assignmentName || "Assignment", grade: String(a.grade).trim() });
             }
           }
         }
