@@ -109,8 +109,9 @@ account**. Delivery is cheap; the cost is the poll.
   choice** (file is written `chmod 600`) — the Pi is the private place to hold
   them; a cloud poller would be worse. Every existing "HAC API" scrapes with the
   password too — there is no token to store instead.
-- **Poller:** every 15 min (`PUSH_POLL_MS`) during a coarse school-hours gate,
-  staggered per user; diffs current `class` grades against `lastSeen` and pushes
+- **Poller:** every 15 min (`PUSH_POLL_MS`), 6am–11pm CT daily (coarse gate —
+  teachers grade evenings/weekends), staggered per user; diffs current `class`
+  grades against `lastSeen` and pushes
   new ones matching each user's `aol`/`pc`/`both` choice. Never blasts the whole
   gradebook on the first poll after subscribing.
 - **Client:** `src/lib/push.js` subscribes via `PushManager`; the SW `push` +
