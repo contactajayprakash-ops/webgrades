@@ -742,11 +742,13 @@ const sendPush = async (entry, payload) => {
 // Poll each subscriber's CURRENT grades, diff against lastSeen, push the new ones.
 const POLL_INTERVAL_MS = Number(process.env.PUSH_POLL_MS || 15 * 60 * 1000); // 15 min
 let polling = false;
-const inSchoolHours = () => {
-  // Coarse Central-Time gate, Mon–Fri ~7am–5pm (offset assumes CDT; close enough).
+const inActiveHours = () => {
+  // Poll waking hours EVERY day — teachers post grades in the evening and on
+  // weekends too, so a Mon–Fri 9-to-5 gate misses most real drops. Coarse
+  // Central-Time gate (offset assumes CDT; close enough for a window this wide).
   const ct = new Date(Date.now() - 5 * 60 * 60 * 1000);
-  const day = ct.getUTCDay(), hr = ct.getUTCHours();
-  return day >= 1 && day <= 5 && hr >= 7 && hr < 17;
+  const hr = ct.getUTCHours();
+  return hr >= 6 && hr < 23; // 6am–11pm CT, all 7 days
 };
 
 const pollOnce = async () => {
@@ -797,8 +799,8 @@ const pollOnce = async () => {
 };
 
 if (PUSH_ENABLED) {
-  setInterval(() => { if (inSchoolHours()) pollOnce(); }, POLL_INTERVAL_MS);
-  console.log(`[${ctTime()}] Web Push poller: every ${Math.round(POLL_INTERVAL_MS / 60000)}m during school hours`);
+  setInterval(() => { if (inActiveHours()) pollOnce(); }, POLL_INTERVAL_MS);
+  console.log(`[${ctTime()}] Web Push poller: every ${Math.round(POLL_INTERVAL_MS / 60000)}m, 6am–11pm CT`);
 }
 
 app.listen(3000, () => console.log("HAC API running on port 3000"));
