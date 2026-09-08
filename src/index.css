@@ -1003,14 +1003,15 @@ body:has(.app-shell.v2)::before {
     radial-gradient(115vmax 78vmax at 50% -26%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 52%),
     radial-gradient(82vmax 62vmax at 110% 6%, color-mix(in srgb, var(--accent-2) 17%, transparent), transparent 56%),
     linear-gradient(180deg, #0b0d16 0%, #06070c 55%);
-  background-size: 175% 175%;
-  animation: bgdrift 26s ease-in-out infinite;
+  will-change: transform;
+  animation: bloomdrift 24s ease-in-out infinite alternate;
 }
-/* Slow, subtle drift of the color blooms — alive but never distracting. */
-@keyframes bgdrift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+/* Slow, subtle drift of the color blooms — alive but never distracting.
+   (Transform actually moves the layer; animating background-position on
+   vmax-sized radials was imperceptible.) */
+@keyframes bloomdrift {
+  from { transform: translate3d(0, 0, 0) scale(1.05); }
+  to   { transform: translate3d(-5%, 3.5%, 0) scale(1.18); }
 }
 
 /* Light theme — the same Midnight-Glass system, inverted to a bright frosted
