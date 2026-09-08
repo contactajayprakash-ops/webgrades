@@ -28,8 +28,11 @@ const PRIMARY = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/grades', label: 'Grades' },
   { to: '/gpa', label: 'GPA' },
-  { to: '/agenda', label: 'Agenda' },
+  { to: '/agenda', label: 'Agenda', badge: 'New' },
 ]
+
+// The extra pages behind "More" (everything not already a primary pill tab).
+const SECONDARY = NAV.slice(4) // starts at the "Records" section
 
 // The four primary tabs for the iPhone floating tab bar.
 const TABS = [
@@ -102,6 +105,7 @@ export default function Layout() {
               <NavLink key={t.to} to={t.to} end={t.end}
                 className={({ isActive }) => `np-tab ${isActive ? 'active' : ''}`}>
                 {t.label}
+                {t.badge && !seenBadges[t.to] && <span className="np-dot" aria-hidden="true" />}
               </NavLink>
             ))}
             <button className={`np-tab ${menu ? 'active' : ''}`} onClick={() => setMenu((m) => !m)}>More</button>
@@ -121,7 +125,7 @@ export default function Layout() {
               <div className="nav-menu-backdrop" onClick={() => setMenu(false)} />
               <div className="nav-menu" role="menu">
                 <div className="nav-menu-list">
-                  {NAV.map((item, i) => item.section
+                  {SECONDARY.map((item, i) => item.section
                     ? <div className="nav-section" key={`s${i}`}>{item.section}</div>
                     : navRow(item, () => setMenu(false)))}
                 </div>

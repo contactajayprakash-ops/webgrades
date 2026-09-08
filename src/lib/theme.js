@@ -40,10 +40,9 @@ export function loadTheme() {
 
 export function saveTheme(state) {
   try { localStorage.setItem(KEY, JSON.stringify(state)) } catch (_) {}
-  markSettingsChanged() // bump the sync stamp before the reload so it pushes after
-  applyTheme(state)
-  window.location.reload();
-
+  markSettingsChanged()  // signal the cloud sync to push (debounced)
+  applyTheme(state)      // apply live — NO reload (a reload re-pulls the cloud
+                         // copy and can revert the change you just made)
 }
 
 // Lighten a #rrggbb toward white (for the brighter end of gradients/favicon).
