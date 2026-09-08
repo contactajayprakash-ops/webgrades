@@ -1000,18 +1000,21 @@ body:has(.app-shell.v2)::before {
   content: '';
   opacity: 1;
   background-image:
-    radial-gradient(105vmax 72vmax at 20% -18%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 55%),
-    radial-gradient(90vmax 66vmax at 100% 8%, color-mix(in srgb, var(--accent-2) 26%, transparent), transparent 58%),
-    radial-gradient(80vmax 60vmax at 78% 108%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%),
+    radial-gradient(105vmax 72vmax at 20% -18%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 55%),
+    radial-gradient(90vmax 66vmax at 100% 8%, color-mix(in srgb, var(--accent-2) 13%, transparent), transparent 58%),
+    radial-gradient(80vmax 60vmax at 78% 108%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
     linear-gradient(180deg, #0b0d16 0%, #06070c 55%);
   will-change: transform;
-  animation: bloomdrift 15s ease-in-out infinite alternate;
+  animation: bloomdrift 11s ease-in-out infinite;
 }
-/* Noticeable, organic drift of the color blooms (translate + scale + a touch of
-   rotation). Scale stays high enough that the rotation never reveals corners. */
+/* Continuous, energetic drift — loops through 4 positions (not alternate, which
+   pauses at the ends). Scale stays high enough the rotation never bares corners. */
 @keyframes bloomdrift {
-  from { transform: translate3d(-5%, -3%, 0) scale(1.2) rotate(-3deg); }
-  to   { transform: translate3d(7%, 6%, 0) scale(1.38) rotate(4deg); }
+  0%   { transform: translate3d(-5%, -3%, 0) scale(1.35) rotate(-4deg); }
+  25%  { transform: translate3d(6%, 3%, 0)  scale(1.52) rotate(4deg); }
+  50%  { transform: translate3d(3%, 7%, 0)  scale(1.4)  rotate(7deg); }
+  75%  { transform: translate3d(-5%, 2%, 0) scale(1.55) rotate(-2deg); }
+  100% { transform: translate3d(-5%, -3%, 0) scale(1.35) rotate(-4deg); }
 }
 
 /* Light theme — the same Midnight-Glass system, inverted to a bright frosted
