@@ -884,3 +884,171 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .profile-row-main, .profile-remove, .profile-action, .menu-item { outline: none; }
 .profile-row:has(.profile-row-main:focus-visible) { box-shadow: inset 0 0 0 2px var(--accent); }
 .profile-remove:focus-visible, .profile-action:focus-visible, .menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* ============================================================================
+   v2 REDESIGN — cinejoy-inspired floating Liquid Glass nav (experimental 2.0)
+   A calm dark canvas + a single translucent pill of navigation. Content scrolls
+   beneath the glass; the sidebar becomes an overlay sheet behind "More".
+   ============================================================================ */
+.app-shell.v2 { display: block; min-height: 100dvh; }
+
+/* Calmer atmosphere — dial the busy aurora back so the glass reads clean. */
+body:has(.app-shell.v2)::before { opacity: 0.38; }
+
+/* Sidebar → overlay glass sheet at every width (opened by "More" / the menu). */
+.app-shell.v2 .sidebar {
+  position: fixed; z-index: 250; top: 0; left: 0;
+  height: 100vh; height: 100dvh;
+  width: min(88vw, 330px);
+  transform: translateX(-100%);
+  transition: transform .44s var(--ease);
+  background: var(--mat-thick);
+  -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
+  border-right: 0.5px solid var(--glass-border);
+  animation: none;
+}
+.app-shell.v2 .sidebar.open { transform: none; box-shadow: var(--drop-lg); }
+
+/* ---- Floating top nav (desktop) — brand left, glass pill right ---- */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; padding: 15px clamp(18px, 3vw, 40px);
+  pointer-events: none;
+}
+.topbar > * { pointer-events: auto; }
+
+.tb-brand {
+  display: flex; align-items: center; gap: 11px;
+  font-weight: 700; font-size: var(--t-title3); letter-spacing: -0.022em; color: var(--text);
+}
+.tb-brand .logo {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: linear-gradient(160deg, var(--accent-bright), var(--accent-2));
+  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 18px;
+  box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--accent) 90%, transparent), inset 0 1px 0 rgba(255,255,255,.6);
+}
+.tb-brand .accent { color: var(--accent-text); }
+
+.navpill {
+  display: flex; align-items: center; gap: 2px;
+  padding: 5px; border-radius: var(--pill);
+  background: var(--mat-thin);
+  -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--rim), var(--drop);
+}
+.np-tab {
+  appearance: none; border: none; background: none; cursor: pointer; font-family: inherit;
+  font-size: var(--t-subhead); font-weight: 500; letter-spacing: -0.01em;
+  color: var(--text-dim); padding: 9px 17px; border-radius: var(--pill); white-space: nowrap;
+  transition: color .22s var(--ease), background .28s var(--spring);
+}
+.np-tab:hover { color: var(--text); }
+.np-tab.active {
+  background: var(--text); color: var(--bg); font-weight: 600;
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.55);
+}
+.np-sep { width: 1px; align-self: stretch; margin: 5px; background: var(--glass-border); }
+.np-icon {
+  display: grid; place-items: center; width: 36px; height: 36px;
+  border: none; background: none; border-radius: 50%; color: var(--text-dim); cursor: pointer;
+  transition: background .2s, color .2s, transform .2s var(--spring);
+}
+.np-icon:hover { background: var(--fill-4); color: var(--text); }
+.np-icon:active { transform: scale(.9); }
+.np-icon.active { background: var(--fill-3); color: var(--text); }
+
+/* Content clears the fixed nav and scrolls beneath it. */
+.app-shell.v2 .shell-body { min-width: 0; }
+.app-shell.v2 .main { padding-top: 92px; }
+
+/* Desktop: hide the mobile chrome, use the floating top nav. */
+@media (min-width: 821px) {
+  .app-shell.v2 .mobile-topbar { display: none; }
+  .app-shell.v2 .tab-bar { display: none; }
+}
+
+/* Mobile: hide the desktop top nav; keep the mobile top bar + bottom tabs. */
+@media (max-width: 820px) {
+  .app-shell.v2 .topbar { display: none; }
+  .app-shell.v2 .main { padding-top: 8px; }
+}
+
+/* ============================================================================
+   v2 VISUAL SYSTEM — "Midnight Glass"
+   A cinematic obsidian canvas, fully-frosted floating glass, oversized confident
+   type. Redefines shared tokens + core components so EVERY view transforms.
+   ============================================================================ */
+.app-shell.v2 {
+  --radius: 26px;
+  --radius-sm: 18px;
+  --radius-xs: 12px;
+  --glass-card: rgba(18, 20, 28, 0.55);
+  --glass-hi: rgba(255, 255, 255, 0.08);
+  --glass-hi-2: rgba(255, 255, 255, 0.14);
+  --card-shadow: 0 26px 64px -30px rgba(0, 0, 0, 0.9), 0 4px 14px -8px rgba(0, 0, 0, 0.5);
+  --font-display: 'Bricolage Grotesque', 'Onest', -apple-system, system-ui, sans-serif;
+  --font: 'Onest', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+/* Cinematic canvas — one soft bloom, not a busy aurora */
+body:has(.app-shell.v2) { background: #06070c; }
+body:has(.app-shell.v2)::before {
+  content: '';
+  opacity: 1;
+  background:
+    radial-gradient(115vmax 78vmax at 50% -26%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 52%),
+    radial-gradient(82vmax 62vmax at 110% 6%, color-mix(in srgb, var(--accent-2) 17%, transparent), transparent 56%),
+    linear-gradient(180deg, #0b0d16 0%, #06070c 55%);
+}
+
+/* Confident, distinctive display face for titles */
+.app-shell.v2 .page-head h1, .app-shell.v2 h1 {
+  font-family: var(--font-display); font-weight: 700; letter-spacing: -0.035em; line-height: 1.02;
+}
+.app-shell.v2 .page-head h1 { font-size: clamp(30px, 4.4vw, 48px); }
+.app-shell.v2 h2, .app-shell.v2 h3, .app-shell.v2 .ttl { font-family: var(--font-display); letter-spacing: -0.028em; }
+
+/* Every card → frosted floating glass */
+.app-shell.v2 .card {
+  background: var(--glass-card);
+  -webkit-backdrop-filter: saturate(150%) blur(26px);
+  backdrop-filter: saturate(150%) blur(26px);
+  border: 0.5px solid var(--glass-hi);
+  border-radius: var(--radius);
+  box-shadow: var(--rim), var(--card-shadow);
+  transition: transform .32s var(--spring), box-shadow .32s var(--ease), border-color .32s;
+}
+.app-shell.v2 .card-pad { padding: 24px 26px; }
+.app-shell.v2 .grid { gap: 18px; }
+
+/* Interactive cards lift on hover */
+@media (hover: hover) {
+  .app-shell.v2 a.card:hover, .app-shell.v2 .class-card:hover, .app-shell.v2 .row-link:hover,
+  .app-shell.v2 .nav-tile:hover, .app-shell.v2 .stat-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--glass-hi-2);
+    box-shadow: var(--rim-strong), 0 34px 76px -32px rgba(0, 0, 0, 0.95);
+  }
+}
+
+/* Controls → glass pills */
+.app-shell.v2 .btn { border-radius: var(--pill); transition: transform .2s var(--spring), background .2s, box-shadow .2s; }
+.app-shell.v2 .btn.ghost {
+  background: var(--glass-card); border: 0.5px solid var(--glass-hi);
+  -webkit-backdrop-filter: var(--blur-sm); backdrop-filter: var(--blur-sm);
+}
+.app-shell.v2 .btn:active { transform: scale(.96); }
+.app-shell.v2 .input, .app-shell.v2 .select {
+  background: var(--glass-card); border: 0.5px solid var(--glass-hi); border-radius: var(--radius-sm);
+  -webkit-backdrop-filter: var(--blur-sm); backdrop-filter: var(--blur-sm);
+}
+.app-shell.v2 .seg {
+  background: var(--glass-card); border: 0.5px solid var(--glass-hi);
+  -webkit-backdrop-filter: var(--blur-sm); backdrop-filter: var(--blur-sm);
+}
+
+/* Page-head breathes more */
+.app-shell.v2 .page-head { padding-top: 26px; padding-bottom: 22px; }
+.app-shell.v2 .page-head .sub { font-size: var(--t-callout); }
