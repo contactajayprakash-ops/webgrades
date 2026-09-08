@@ -12,6 +12,7 @@ import { syncAllowedFor } from '../lib/syncPolicy.js'
 const keyMap = (username) => ({
   theme: 'wg_theme',
   agendaView: 'wg_agenda_view',
+  gradeView: 'wg_grade_view',      // dashboard Current-grades list/tile view
   prefs: `wg_prefs_${username || '_anon'}`,
 })
 const localUpdatedAt = () => Number(localStorage.getItem(META_KEY)) || 0

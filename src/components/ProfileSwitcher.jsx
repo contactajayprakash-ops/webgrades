@@ -10,7 +10,7 @@ function initials(name) {
   return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?'
 }
 
-export default function ProfileSwitcher() {
+export default function ProfileSwitcher({ compact = false }) {
   const { profiles, activeUsername, userName, switchProfile, removeProfile, addAccount, logout } = useAuth()
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -37,7 +37,7 @@ export default function ProfileSwitcher() {
   }
 
   return (
-    <div className="profile-switch">
+    <div className={`profile-switch ${compact ? 'compact' : ''}`}>
       {open && <div className="profile-backdrop" onClick={close} />}
 
       {open && (
@@ -87,17 +87,22 @@ export default function ProfileSwitcher() {
         </div>
       )}
 
-      <button className={`profile-trigger ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)}>
+      <button className={`profile-trigger ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)}
+        title={compact ? (userName || 'Account') : undefined} aria-label={compact ? 'Account' : undefined}>
         <span className="avatar">{initials(userName)}</span>
-        <span className="profile-trigger-text">
-          <span className="name">{userName || 'Student'}</span>
-          <span className="sub">
-            {syncAllowedFor(activeUsername)
-              ? (profiles.length > 1 ? `${profiles.length} accounts` : 'HAC connected')
-              : 'Local only · not syncing'}
-          </span>
-        </span>
-        <Icon.chevron className={`profile-caret ${open ? 'open' : ''}`} width={16} height={16} />
+        {!compact && (
+          <>
+            <span className="profile-trigger-text">
+              <span className="name">{userName || 'Student'}</span>
+              <span className="sub">
+                {syncAllowedFor(activeUsername)
+                  ? (profiles.length > 1 ? `${profiles.length} accounts` : 'HAC connected')
+                  : 'Local only · not syncing'}
+              </span>
+            </span>
+            <Icon.chevron className={`profile-caret ${open ? 'open' : ''}`} width={16} height={16} />
+          </>
+        )}
       </button>
     </div>
   )
