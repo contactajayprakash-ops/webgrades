@@ -1231,3 +1231,10 @@ html[data-theme="light"] .app-shell.v2 .grade-tile {
 }
 .app-shell.v2 .impact-head { border-bottom-color: var(--glass-hi); }
 .app-shell.v2 .impact-cell { border-right-color: var(--glass-hi); }
+/* Agenda day columns + heads — were solid gray boxes */
+.app-shell.v2 .wk-day {
+  background: var(--glass-card);
+  -webkit-backdrop-filter: saturate(150%) blur(22px); backdrop-filter: saturate(150%) blur(22px);
+  border-color: var(--glass-hi);
+}
+.app-shell.v2 .wk-head { border-bottom-color: var(--glass-hi); }
