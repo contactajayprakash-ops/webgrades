@@ -23,15 +23,14 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHead title={greeting(userName)} sub="Your grades at a glance." />
-      <div className="dash-grid">
-        <div className="dash-main">
-          {showRecent && <RecentlyPosted recent={recent} />}
-          <CurrentClasses recent={recent} />
-        </div>
-        <aside className="dash-side">
-          <TopStats />
-        </aside>
+      <PageHead
+        title={greeting(userName)}
+        sub={`Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`}
+      />
+      <div className="dash-v2">
+        <TopStats />
+        {showRecent && <RecentlyPosted recent={recent} />}
+        <CurrentClasses recent={recent} />
       </div>
     </>
   )
