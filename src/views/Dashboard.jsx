@@ -24,10 +24,14 @@ export default function Dashboard() {
   return (
     <>
       <PageHead title={greeting(userName)} sub="Your grades at a glance." />
-      <div className="grid" style={{ gridTemplateColumns: '1fr' }}>
-        <TopStats />
-        {showRecent && <RecentlyPosted recent={recent} />}
-        <CurrentClasses recent={recent} />
+      <div className="dash-grid">
+        <div className="dash-main">
+          {showRecent && <RecentlyPosted recent={recent} />}
+          <CurrentClasses recent={recent} />
+        </div>
+        <aside className="dash-side">
+          <TopStats />
+        </aside>
       </div>
     </>
   )
@@ -158,7 +162,7 @@ function TopStats() {
   const showGpa = !!theme.showGpa // off by default — GPA stays private behind buttons
 
   return (
-    <div className="grid grid-3 top-stats">
+    <div className="dash-tiles">
       {showGpa
         ? <GpaCard />
         : <NavTile to="/agenda" label="Planner" title="Agenda" sub="Homework & due dates" />}
