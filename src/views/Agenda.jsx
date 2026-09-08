@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
-import { PageHead, Empty } from '../components/ui.jsx'
+import { PageHead, Empty, LastUpdated } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import { cleanCourseName, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
@@ -43,6 +43,12 @@ export default function Agenda() {
   const sessionRef = useRef(session); sessionRef.current = session
   const localUpdatedAt = useRef(loadAgendaMeta(activeUsername).updatedAt)
   const pushTimer = useRef(null)
+  // When the agenda last synced to the cloud (shown in the header).
+  const [syncedAt, setSyncedAt] = useState(() => Number(localStorage.getItem(`wg_agenda_synced_${activeUsername || '_anon'}`)) || 0)
+  const stampSync = useCallback(() => {
+    const t = Date.now(); setSyncedAt(t)
+    try { localStorage.setItem(`wg_agenda_synced_${activeUsername || '_anon'}`, String(t)) } catch (_) {}
+  }, [activeUsername])
 
   // Force this device's agenda to be the cloud copy, so future logins get it.
   const forceSync = async () => {
@@ -55,6 +61,7 @@ export default function Agenda() {
     try {
       const { pushAgenda } = await syncMod()
       await pushAgenda(s.username, s.password, tasks, ts)
+      stampSync()
       setSyncState('done')
       setTimeout(() => setSyncState('idle'), 2000)
     } catch (_) {
@@ -75,7 +82,7 @@ export default function Agenda() {
     if (!s?.username || !s?.password || !syncAllowedFor(s.username)) return
     clearTimeout(pushTimer.current)
     pushTimer.current = setTimeout(async () => {
-      try { const { pushAgenda } = await syncMod(); await pushAgenda(s.username, s.password, nextTasks, updatedAt) } catch (_) {}
+      try { const { pushAgenda } = await syncMod(); await pushAgenda(s.username, s.password, nextTasks, updatedAt); stampSync() } catch (_) {}
     }, 800)
   }, [activeUsername])
 
@@ -105,6 +112,7 @@ export default function Agenda() {
         } else if ((local.updatedAt || 0) > (cloud.updatedAt || 0)) {
           pushAgenda(s.username, s.password, local.tasks, local.updatedAt).catch(() => {})
         }
+        stampSync()
       } catch (_) { /* stay local */ }
     })()
     return () => { cancelled = true }
@@ -165,6 +173,7 @@ export default function Agenda() {
           ariaLabel="Agenda view"
           options={[{ value: 'week', label: 'Week' }, { value: 'day', label: 'Day' }]}
         />
+        <LastUpdated at={syncedAt} prefix="Synced " />
         <button className="btn ghost sm" onClick={forceSync} disabled={syncState === 'syncing'}
           title="Save this device's agenda to the cloud as the current copy (future logins get this)">
           {syncState === 'syncing'
