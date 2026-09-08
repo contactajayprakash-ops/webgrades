@@ -4,6 +4,7 @@ import { PageHead } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import { ACCENTS, loadTheme, saveTheme } from '../lib/theme.js'
+import { loadUI, setUI } from '../lib/ui.js'
 import { useInstall } from '../hooks/useInstall.js'
 import { syncLock, setSyncLock, bgProfilesEnabled, setBgProfilesEnabled,
   pollIntervalMin, setPollIntervalMin, POLL_MIN_MIN, POLL_MIN_MAX } from '../lib/syncPolicy.js'
@@ -27,6 +28,7 @@ async function forceUpdate() {
 export default function Settings() {
   const { session, clearCache, logout } = useAuth()
   const [theme, setTheme] = useState(loadTheme)
+  const [ui, setUiState] = useState(loadUI)
 
   // every change persists + applies to the live document immediately
   const update = (patch) => {
@@ -45,6 +47,18 @@ export default function Settings() {
           <h3 className="mb-3">Appearance</h3>
 
           <div className="field">
+            <label>Interface</label>
+            <Segmented
+              style={{ marginTop: 4, alignSelf: 'flex-start' }}
+              value={ui}
+              onChange={(v) => { setUI(v); setUiState(v) }}
+              ariaLabel="Interface"
+              options={[{ value: 'v2', label: 'New (2.0)' }, { value: 'legacy', label: 'Classic' }]}
+            />
+            <span className="small faint">The redesigned app, or the classic sidebar layout — switch anytime.</span>
+          </div>
+
+          <div className="field mt-3">
             <label>Theme</label>
             <Segmented
               style={{ marginTop: 4, alignSelf: 'flex-start' }}

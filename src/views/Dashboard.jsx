@@ -13,6 +13,7 @@ import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince } from '../li
 import { officialAverage, isAssessment, isProgress } from '../lib/whatif.js'
 import { loadTheme } from '../lib/theme.js'
 import { markSettingsChanged } from '../lib/settingsMeta.js'
+import { loadUI } from '../lib/ui.js'
 import { loadAgenda, todayKey, startOfWeek, addDays, dateKey, labelFor } from '../lib/agenda.js'
 
 export default function Dashboard() {
@@ -332,8 +333,11 @@ function CurrentClasses({ recent }) {
   const navigate = useNavigate()
   const updating = sync.phase === 'syncing'
   const openClass = (courseName) => navigate(`/grades?c=${encodeURIComponent(courseKey(courseName))}`)
-  // List (default) vs. tile view — remembered per device.
-  const [view, setView] = useState(() => { try { return localStorage.getItem('wg_grade_view') || 'list' } catch (_) { return 'list' } })
+  // List (default) vs. tile view — remembered per device. The tile view is a 2.0
+  // feature; the classic UI always uses the list.
+  const isLegacy = loadUI() === 'legacy'
+  const [viewPref, setView] = useState(() => { try { return localStorage.getItem('wg_grade_view') || 'list' } catch (_) { return 'list' } })
+  const view = isLegacy ? 'list' : viewPref
   const pickView = (v) => { setView(v); try { localStorage.setItem('wg_grade_view', v) } catch (_) {} markSettingsChanged() }
 
   // The most-recent-quarter grades + change diff are computed once in the parent
@@ -356,11 +360,13 @@ function CurrentClasses({ recent }) {
             : <LastUpdated at={syncedAt} />}
         </div>
         <div className="flex" style={{ gap: 8 }}>
-          <div className="view-toggle" data-view={view} role="group" aria-label="Grades view">
-            <span className="vt-thumb" aria-hidden="true" />
-            <button className={`vt-btn ${view === 'list' ? 'active' : ''}`} onClick={() => pickView('list')} aria-label="List view" title="List"><Icon.list width={16} height={16} /></button>
-            <button className={`vt-btn ${view === 'grid' ? 'active' : ''}`} onClick={() => pickView('grid')} aria-label="Tile view" title="Tiles"><Icon.grid width={16} height={16} /></button>
-          </div>
+          {!isLegacy && (
+            <div className="view-toggle" data-view={view} role="group" aria-label="Grades view">
+              <span className="vt-thumb" aria-hidden="true" />
+              <button className={`vt-btn ${view === 'list' ? 'active' : ''}`} onClick={() => pickView('list')} aria-label="List view" title="List"><Icon.list width={16} height={16} /></button>
+              <button className={`vt-btn ${view === 'grid' ? 'active' : ''}`} onClick={() => pickView('grid')} aria-label="Tile view" title="Tiles"><Icon.grid width={16} height={16} /></button>
+            </div>
+          )}
           <button className="btn ghost sm" onClick={syncAll} disabled={updating} title="Re-check HAC for new grades">
             <Icon.refresh width={14} height={14} /> Refresh
           </button>

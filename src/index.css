@@ -325,6 +325,12 @@ input, select { font-family: inherit; }
 
 @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
 
+/* Dashboard grid — base rules so the layout works in BOTH the classic and 2.0
+   shells (2.0 adds glass/animation on top via .app-shell.v2 overrides). */
+.dash-v2 { display: grid; gap: 16px; }
+.dash-tiles { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 760px) { .dash-tiles { grid-template-columns: 1fr; } }
+
 /* clickable cards — subtle iOS press */
 button.card, .card-link { text-align: left; transition: transform .32s var(--spring), box-shadow .3s var(--ease), border-color .25s; }
 .card-link { text-decoration: none; color: inherit; cursor: pointer; display: flex; }
