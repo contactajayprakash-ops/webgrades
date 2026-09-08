@@ -1062,3 +1062,33 @@ body:has(.app-shell.v2)::before {
 /* Make the grades card the clear focus. */
 .app-shell.v2 .dash-v2 .cur-classes, .app-shell.v2 .dash-v2 > .card:last-child { box-shadow: var(--rim-strong), var(--card-shadow); }
 @media (max-width: 760px) { .app-shell.v2 .dash-tiles { grid-template-columns: 1fr; } }
+
+/* Current grades → a bento grid of class tiles, each tinted by its grade.
+   The number is huge, the color reads at a glance — nothing like a table. */
+.app-shell.v2 .grade-grid {
+  display: grid; gap: 14px; padding: 4px 20px 22px;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+}
+.app-shell.v2 .grade-tile {
+  position: relative; overflow: hidden; cursor: pointer; text-align: left;
+  display: flex; flex-direction: column; gap: 8px; min-height: 136px;
+  padding: 15px 17px; border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035); border: 0.5px solid var(--glass-hi);
+  -webkit-backdrop-filter: var(--blur-sm); backdrop-filter: var(--blur-sm);
+  transition: transform .28s var(--spring), border-color .28s, box-shadow .28s;
+}
+.app-shell.v2 .grade-tile:hover { transform: translateY(-3px); border-color: var(--glass-hi-2); box-shadow: var(--card-shadow); }
+.app-shell.v2 .grade-tile:active { transform: translateY(-1px) scale(.99); }
+.app-shell.v2 .grade-tile .gt-glow {
+  position: absolute; right: -34px; top: -34px; width: 128px; height: 128px;
+  border-radius: 50%; background: currentColor; opacity: .18; filter: blur(26px); pointer-events: none;
+}
+.app-shell.v2 .gt-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.app-shell.v2 .gt-name { color: var(--text); font-weight: 600; font-size: var(--t-subhead); letter-spacing: -0.01em; line-height: 1.25; }
+.app-shell.v2 .gt-grade { display: flex; align-items: baseline; gap: 7px; margin-top: auto; }
+.app-shell.v2 .gt-pct { font-family: var(--font-display); font-weight: 700; font-size: 33px; letter-spacing: -0.03em; line-height: 1; }
+.app-shell.v2 .gt-sym { font-size: 16px; font-weight: 600; opacity: .7; }
+.app-shell.v2 .gt-letter { font-size: var(--t-callout); font-weight: 700; opacity: .9; }
+.app-shell.v2 .gt-na { font-family: var(--font-display); font-weight: 700; font-size: 26px; color: var(--text-faint); margin-top: auto; }
+.app-shell.v2 .gt-meta { display: flex; align-items: center; gap: 4px; color: var(--text-faint); font-size: var(--t-caption); margin-top: 2px; }
+.app-shell.v2 .gt-chev { margin-left: auto; opacity: .5; }
