@@ -36,6 +36,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       host: true,
+      // Allow sharing the dev server through a cloudflared quick tunnel.
+      allowedHosts: ['.trycloudflare.com'],
       proxy: {
         '/api': {
           target,
