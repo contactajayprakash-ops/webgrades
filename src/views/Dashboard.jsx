@@ -6,7 +6,7 @@ import { useGpaMetrics, GPA_METRICS, findMetric } from '../hooks/useGpaMetrics.j
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import { PageHead, Loading, Empty, GradeBadge, LastUpdated } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
-import { parseGrade } from '../lib/gpa.js'
+import { parseGrade, letterGrade } from '../lib/gpa.js'
 import { cleanCourseName, courseKey, QUARTERS, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince } from '../lib/seen.js'
@@ -367,27 +367,30 @@ function CurrentClasses({ recent }) {
       {loading && <Loading label="Loading classes…" />}
       {!loading && classes.length === 0 && <Empty>No current classes found.</Empty>}
       {classes.length > 0 && (
-        <table className="table">
-          <thead>
-            <tr><th>Class</th><th>Assignments</th><th className="num">Average</th></tr>
-          </thead>
-          <tbody>
-            {classes.map((c, i) => (
-              <tr key={i} className={`row-link ${changed.has(c.courseName) ? 'row-new' : ''}`}
-                onClick={() => openClass(c.courseName)}
-                title={`Open ${cleanCourseName(c.courseName)}`}>
-                <td>{cleanCourseName(c.courseName)}{changed.has(c.courseName) && <span className="pill pill-new">new</span>}</td>
-                <td className="faint small">{(c.assignments?.length || 0)} assignments</td>
-                <td className="num">
-                  <span className="flex" style={{ gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-                    <GradeBadge value={officialAverage(c)} />
-                    <Icon.chevron className="row-link-chev" width={16} height={16} />
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="grade-grid">
+          {classes.map((c, i) => {
+            const avg = officialAverage(c)
+            const lg = letterGrade(avg)
+            const isNew = changed.has(c.courseName)
+            return (
+              <button key={i} className={`grade-tile ${lg.cls}${isNew ? ' is-new' : ''}`}
+                onClick={() => openClass(c.courseName)} title={`Open ${cleanCourseName(c.courseName)}`}>
+                <span className="gt-glow" aria-hidden="true" />
+                <div className="gt-top">
+                  <span className="gt-name">{cleanCourseName(c.courseName)}</span>
+                  {isNew && <span className="pill pill-new">new</span>}
+                </div>
+                {avg != null ? (
+                  <div className="gt-grade">
+                    <span className="gt-pct">{avg}<span className="gt-sym">%</span></span>
+                    <span className="gt-letter">{lg.letter}</span>
+                  </div>
+                ) : <span className="gt-na">N/A</span>}
+                <div className="gt-meta">{(c.assignments?.length || 0)} assignments<Icon.chevron className="gt-chev" width={15} height={15} /></div>
+              </button>
+            )
+          })}
+        </div>
       )}
     </div>
   )
