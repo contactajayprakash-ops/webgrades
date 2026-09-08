@@ -13,6 +13,7 @@ const keyMap = (username) => ({
   theme: 'wg_theme',
   agendaView: 'wg_agenda_view',
   gradeView: 'wg_grade_view',      // dashboard Current-grades list/tile view
+  ui: 'wg_ui',                     // new 2.0 UI vs classic
   prefs: `wg_prefs_${username || '_anon'}`,
 })
 const localUpdatedAt = () => Number(localStorage.getItem(META_KEY)) || 0

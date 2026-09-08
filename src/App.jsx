@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext.jsx'
 import Login from './components/Login.jsx'
 import Layout from './components/Layout.jsx'
+import LayoutLegacy from './components/LayoutLegacy.jsx'
+import { loadUI } from './lib/ui.js'
 import SyncToast from './components/SyncToast.jsx'
 import InstallPrompt from './components/InstallPrompt.jsx'
 import Dashboard from './views/Dashboard.jsx'
@@ -20,6 +23,16 @@ import MovedNotice, { isRetiredHost } from './components/MovedNotice.jsx'
 export default function App() {
   const { isAuthed } = useAuth()
 
+  // Which shell to render — new 2.0 UI or the classic sidebar. Reacts live to
+  // the Settings toggle (which fires 'wg-settings-changed').
+  const [ui, setUi] = useState(loadUI)
+  useEffect(() => {
+    const h = () => setUi(loadUI())
+    window.addEventListener('wg-settings-changed', h)
+    return () => window.removeEventListener('wg-settings-changed', h)
+  }, [])
+  const Shell = ui === 'legacy' ? LayoutLegacy : Layout
+
   // Old Vercel deployment: send everyone to the new Firebase link before anything
   // else (no data loads on the dead host anyway).
   if (isRetiredHost()) return <MovedNotice />
@@ -30,7 +43,7 @@ export default function App() {
   return (
     <>
       <Routes>
-        <Route element={<Layout />}>
+        <Route element={<Shell />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/grades" element={<Grades />} />
           <Route path="/gpa" element={<Gpa />} />
