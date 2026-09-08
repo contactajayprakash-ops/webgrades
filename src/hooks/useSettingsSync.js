@@ -72,13 +72,22 @@ export function useSettingsSync(session) {
           return
         }
         const localTs = localUpdatedAt()
+        // If YOU changed a setting on this device in the last 20s, that change is
+        // authoritative — a reload must not let an in-flight/older cloud copy (or
+        // a stale second tab) revert it. Otherwise, last-write-wins by timestamp.
+        const localFresh = Date.now() - localTs < 20000
         if (!cloud) {
           pushSettings(s.username, s.password, collect(s.username), localTs || Date.now()).catch(() => {})
-        } else if ((cloud.updatedAt || 0) > localTs) {
+        } else if ((cloud.updatedAt || 0) > localTs && !localFresh) {
           applyCloud(cloud.data || {}, cloud.updatedAt, s.username)
-        } else if (localTs > (cloud.updatedAt || 0)) {
-          pushSettings(s.username, s.password, collect(s.username), localTs).catch(() => {})
+        } else if (localTs > (cloud.updatedAt || 0) || localFresh) {
+          // local newer, or freshly changed here → keep local and push it up as
+          // the newest so it also wins in the cloud.
+          const ts = localFresh ? Date.now() : localTs
+          if (localFresh) { try { localStorage.setItem(META_KEY, String(ts)) } catch (_) {} }
+          pushSettings(s.username, s.password, collect(s.username), ts).catch(() => {})
         }
+        // else: equal + not fresh → already in sync, nothing to do
       } catch (_) { /* stay local */ }
     })()
     return () => { cancelled = true }
