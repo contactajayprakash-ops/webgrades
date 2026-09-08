@@ -999,10 +999,18 @@ body:has(.app-shell.v2) { background: #06070c; }
 body:has(.app-shell.v2)::before {
   content: '';
   opacity: 1;
-  background:
+  background-image:
     radial-gradient(115vmax 78vmax at 50% -26%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 52%),
     radial-gradient(82vmax 62vmax at 110% 6%, color-mix(in srgb, var(--accent-2) 17%, transparent), transparent 56%),
     linear-gradient(180deg, #0b0d16 0%, #06070c 55%);
+  background-size: 175% 175%;
+  animation: bgdrift 26s ease-in-out infinite;
+}
+/* Slow, subtle drift of the color blooms — alive but never distracting. */
+@keyframes bgdrift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 /* Light theme — the same Midnight-Glass system, inverted to a bright frosted
@@ -1015,7 +1023,7 @@ html[data-theme="light"] .app-shell.v2 {
 }
 html[data-theme="light"] body:has(.app-shell.v2) { background: #eceff5; }
 html[data-theme="light"] body:has(.app-shell.v2)::before {
-  background:
+  background-image:
     radial-gradient(115vmax 78vmax at 50% -26%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 52%),
     radial-gradient(82vmax 62vmax at 110% 6%, color-mix(in srgb, var(--accent-2) 11%, transparent), transparent 56%),
     linear-gradient(180deg, #eef1f8 0%, #e5e8f1 55%);
@@ -1200,3 +1208,15 @@ html[data-theme="light"] .app-shell.v2 .grade-tile {
 .app-shell.v2 .btn:active { transform: scale(.95); }
 .app-shell.v2 .seg-btn { transition: color .2s var(--ease); }
 .app-shell.v2 .circle-btn:hover { transform: translateY(-1px) scale(1.05); }
+
+/* Other surfaces that weren't `.card` — bring them onto the glass system so
+   they don't read as random solid-gray boxes (GPA impact panel, notices, etc). */
+.app-shell.v2 .impact {
+  background: var(--glass-card);
+  -webkit-backdrop-filter: saturate(150%) blur(26px); backdrop-filter: saturate(150%) blur(26px);
+  border: 0.5px solid var(--glass-hi);
+  border-radius: var(--radius);
+  box-shadow: var(--rim), var(--card-shadow);
+}
+.app-shell.v2 .impact-head { border-bottom-color: var(--glass-hi); }
+.app-shell.v2 .impact-cell { border-right-color: var(--glass-hi); }
