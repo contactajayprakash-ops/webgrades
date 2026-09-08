@@ -1000,18 +1000,18 @@ body:has(.app-shell.v2)::before {
   content: '';
   opacity: 1;
   background-image:
-    radial-gradient(115vmax 78vmax at 50% -26%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 52%),
-    radial-gradient(82vmax 62vmax at 110% 6%, color-mix(in srgb, var(--accent-2) 17%, transparent), transparent 56%),
+    radial-gradient(105vmax 72vmax at 20% -18%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 55%),
+    radial-gradient(90vmax 66vmax at 100% 8%, color-mix(in srgb, var(--accent-2) 26%, transparent), transparent 58%),
+    radial-gradient(80vmax 60vmax at 78% 108%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%),
     linear-gradient(180deg, #0b0d16 0%, #06070c 55%);
   will-change: transform;
-  animation: bloomdrift 24s ease-in-out infinite alternate;
+  animation: bloomdrift 15s ease-in-out infinite alternate;
 }
-/* Slow, subtle drift of the color blooms — alive but never distracting.
-   (Transform actually moves the layer; animating background-position on
-   vmax-sized radials was imperceptible.) */
+/* Noticeable, organic drift of the color blooms (translate + scale + a touch of
+   rotation). Scale stays high enough that the rotation never reveals corners. */
 @keyframes bloomdrift {
-  from { transform: translate3d(0, 0, 0) scale(1.05); }
-  to   { transform: translate3d(-5%, 3.5%, 0) scale(1.18); }
+  from { transform: translate3d(-5%, -3%, 0) scale(1.2) rotate(-3deg); }
+  to   { transform: translate3d(7%, 6%, 0) scale(1.38) rotate(4deg); }
 }
 
 /* Light theme — the same Midnight-Glass system, inverted to a bright frosted
@@ -1025,8 +1025,9 @@ html[data-theme="light"] .app-shell.v2 {
 html[data-theme="light"] body:has(.app-shell.v2) { background: #eceff5; }
 html[data-theme="light"] body:has(.app-shell.v2)::before {
   background-image:
-    radial-gradient(115vmax 78vmax at 50% -26%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 52%),
-    radial-gradient(82vmax 62vmax at 110% 6%, color-mix(in srgb, var(--accent-2) 11%, transparent), transparent 56%),
+    radial-gradient(105vmax 72vmax at 20% -18%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 55%),
+    radial-gradient(90vmax 66vmax at 100% 8%, color-mix(in srgb, var(--accent-2) 30%, transparent), transparent 58%),
+    radial-gradient(80vmax 60vmax at 78% 108%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
     linear-gradient(180deg, #eef1f8 0%, #e5e8f1 55%);
 }
 html[data-theme="light"] .app-shell.v2 .grade-tile {
