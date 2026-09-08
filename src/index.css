@@ -1053,16 +1053,12 @@ body:has(.app-shell.v2)::before {
 .app-shell.v2 .page-head { padding-top: 26px; padding-bottom: 22px; }
 .app-shell.v2 .page-head .sub { font-size: var(--t-callout); }
 
-/* Dashboard — two columns: wide grades main + sticky widget rail */
-.app-shell.v2 .dash-grid {
-  display: grid; gap: 18px; align-items: start;
-  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 360px);
-}
-.app-shell.v2 .dash-main { display: grid; gap: 18px; align-content: start; min-width: 0; }
-.app-shell.v2 .dash-side { position: sticky; top: 104px; }
-.app-shell.v2 .dash-tiles { display: grid; gap: 14px; grid-template-columns: 1fr; }
-.app-shell.v2 .dash-tiles .stat { min-height: 118px; }
-@media (max-width: 900px) {
-  .app-shell.v2 .dash-grid { grid-template-columns: 1fr; }
-  .app-shell.v2 .dash-side { position: static; order: -1; } /* quick tiles first on mobile */
-}
+/* Dashboard — grades-first: a compact tile row on top, then Current grades
+   full-width as the hero (it's what people open the app for). No side rail, so
+   no dead space when the grades list runs long. */
+.app-shell.v2 .dash-v2 { display: grid; gap: 18px; }
+.app-shell.v2 .dash-tiles { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
+.app-shell.v2 .dash-tiles .stat { min-height: 130px; }
+/* Make the grades card the clear focus. */
+.app-shell.v2 .dash-v2 .cur-classes, .app-shell.v2 .dash-v2 > .card:last-child { box-shadow: var(--rim-strong), var(--card-shadow); }
+@media (max-width: 760px) { .app-shell.v2 .dash-tiles { grid-template-columns: 1fr; } }
