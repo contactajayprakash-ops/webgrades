@@ -921,89 +921,138 @@ const guessCurrentQuarter = (d = new Date()) => {
 //   `${type}:${JSON.stringify(rest)}`  ->  "class:{}", "class:{\"quarter\":\"3\"}", ...
 const snapKey = (type, extra = {}) => `${type}:${JSON.stringify(extra)}`;
 
-// Scrape one student's full gradebook into the client's cache-map shape. Reuses
-// ONE session + per-request page cache (like /batch) so rank+transcript share a
-// fetch. A single failed resource is skipped, not fatal — a partial snapshot
-// still beats a cold scrape.
-const buildSnapshot = async (username, password) => {
+// The FULL resource set (client cache-map shape): `class` for each quarter, plus
+// rank/transcript (one shared page) and schedule/attendance. The HOT set is just
+// the current quarter — the only thing that moves between grading periods.
+const fullResources = () => [
+  ["class", { quarter: "1" }], ["class", { quarter: "2" }],
+  ["class", { quarter: "3" }], ["class", { quarter: "4" }],
+  ["rank", {}], ["transcript", {}], ["schedule", {}], ["attendance", {}],
+];
+const hotResources = (curQ) => [["class", { quarter: curQ }]];
+
+// Scrape a set of resources in ONE session (the per-request page cache shares the
+// transcript page across rank+transcript, like /batch). A failed resource is
+// skipped, not fatal. Aliases the current quarter into the generic `class:{}`
+// view (same HAC page) so the client's Dashboard/Agenda fallback is populated.
+const scrapeResources = async (username, password, resources, curQ) => {
   const cache = {};
   const data = {};
-  const grab = async (type, extra = {}) => {
+  for (const [type, extra] of resources) {
     try {
       const { data: d } = await scrapeWithSession(username, password, { type, ...extra }, cache);
       data[snapKey(type, extra)] = d;
     } catch (e) { /* skip this resource; keep the rest */ }
-  };
-  const curQ = guessCurrentQuarter();
-  for (const q of ["1", "2", "3", "4"]) await grab("class", { quarter: q });
-  await grab("rank");
-  await grab("transcript"); // shares the transcript page with rank via `cache`
-  await grab("schedule");
-  await grab("attendance");
-  // Alias the current quarter into the generic `class:{}` view (same HAC page),
-  // matching the client so its Dashboard/Agenda fallback is populated too.
+  }
   const curData = data[snapKey("class", { quarter: curQ })];
   if (curData !== undefined) data[snapKey("class", {})] = curData;
   return data;
 };
 
+// Last full uncompressed snapshot per user, kept in memory so a HOT poll can
+// patch just the current quarter onto it without re-scraping everything. Lost on
+// restart → the first poll after boot is forced FULL to rebuild it.
+const snapDataCache = new Map(); // username -> data object
+
 // Write one gzipped snapshot doc per user at grades/<credKey>, but ONLY when the
-// uncompressed payload actually changed (hash compare) — this is what keeps us
-// far inside the Firestore free tier. Doc shape: { codec, data(base64), hash,
-// updatedAt, v }. `updatedAt` is the snapshot's real age (the client shows it).
-const writeSnapshot = async (username, password) => {
-  if (!SNAPSHOT_ENABLED) return { changed: false, bytes: 0 };
-  const data = await buildSnapshot(username, password);
-  if (!Object.keys(data).length) return { changed: false, bytes: 0 }; // total scrape failure
+// uncompressed payload actually changed (hash compare) — keeps us far inside the
+// Firestore free tier. mode 'hot' patches the current quarter onto the last full
+// data; 'full' re-scrapes everything. Doc: { codec, data(base64), hash,
+// updatedAt, v }; updatedAt is the snapshot's real age (the client shows it).
+const writeSnapshot = async (username, password, mode = "full") => {
+  if (!SNAPSHOT_ENABLED) return { changed: false, bytes: 0, mode };
+  const curQ = guessCurrentQuarter();
+  const prior = snapDataCache.get(username);
+  // Can't patch onto nothing — a hot poll with no in-memory base becomes full.
+  const effMode = mode === "hot" && prior ? "hot" : "full";
+  const scraped = await scrapeResources(
+    username, password,
+    effMode === "hot" ? hotResources(curQ) : fullResources(),
+    curQ,
+  );
+  if (!Object.keys(scraped).length) return { changed: false, bytes: 0, mode: effMode }; // total failure
+  const data = effMode === "hot" ? { ...prior, ...scraped } : scraped;
+  snapDataCache.set(username, data);
+  const entry = snapStore[username] || {};
+  entry.password = password;
+  if (effMode === "full") entry.lastFull = Date.now();
   const json = JSON.stringify(data);
   const hash = crypto.createHash("sha256").update(json).digest("hex");
-  const entry = snapStore[username] || {};
   const gz = zlib.gzipSync(json);
   const bytes = gz.length;
-  if (entry.snapHash === hash) return { changed: false, bytes }; // unchanged → skip the write
+  if (entry.snapHash === hash) { snapStore[username] = entry; return { changed: false, bytes, mode: effMode }; }
   await firestore.collection("grades").doc(credKey(username, password)).set({
-    codec: "gzip",
-    data: gz.toString("base64"),
-    hash,
-    updatedAt: Date.now(),
-    v: 1,
+    codec: "gzip", data: gz.toString("base64"), hash, updatedAt: Date.now(), v: 1,
   });
   entry.snapHash = hash;
-  entry.password = password;
   snapStore[username] = entry;
   saveSnapStore();
-  return { changed: true, bytes };
+  return { changed: true, bytes, mode: effMode };
 };
 
-// Snapshot poll loop — separate from the push poller and its lastSeen state, so
-// Firestore never becomes part of the notification path. Serial with a stagger,
-// gentle on HAC. Tiering + concurrency come in #5.
-const SNAP_POLL_MS = Number(process.env.SNAPSHOT_POLL_MS || 15 * 60 * 1000);
+// ---- Poller tiering + concurrency (#5) ----
+// Budget the poll against HAC, not Firestore: at a few hundred students a serial
+// full-scrape loop would make thousands of hac.friscoisd.org logins a day from
+// one IP — that gets noticed and blocked long before any free tier runs out. So
+// tier by ACTIVITY (how recently the student used the app) and by RESOURCE
+// (current grades often, everything else ~daily), run a small worker pool, and
+// stagger. Every knob is env-configurable so intervals can be dialed back fast.
+const SNAP_POLL_MS = Number(process.env.SNAPSHOT_POLL_MS || 15 * 60 * 1000); // cycle tick
+const SNAP_FULL_TTL_MS = Number(process.env.SNAPSHOT_FULL_TTL_MS || 24 * 60 * 60 * 1000); // full re-scrape ~daily
+const SNAP_ACTIVE_MS = Number(process.env.SNAPSHOT_ACTIVE_MS || 48 * 60 * 60 * 1000); // "active" window
+const SNAP_DORMANT_MS = Number(process.env.SNAPSHOT_DORMANT_MS || 14 * 24 * 60 * 60 * 1000); // beyond → daily only
+const SNAP_HOT_MS = Number(process.env.SNAPSHOT_HOT_MS || 15 * 60 * 1000); // active cadence
+const SNAP_HOURLY_MS = Number(process.env.SNAPSHOT_HOURLY_MS || 60 * 60 * 1000); // dormant cadence
+const SNAP_CONCURRENCY = Math.max(1, Number(process.env.POLL_CONCURRENCY || 2)); // JSDOM is memory-hungry on a 1GB Pi 3
+const SNAP_STAGGER_MS = Number(process.env.SNAPSHOT_STAGGER_MS || 1500); // per-worker gap between users
+
+// How often THIS user should be polled, by how recently they used the app.
+const userCadence = (seenAt) => {
+  const age = Date.now() - (seenAt || 0);
+  if (age < SNAP_ACTIVE_MS) return SNAP_HOT_MS;     // active → check current grades every cycle
+  if (age < SNAP_DORMANT_MS) return SNAP_HOURLY_MS; // dormant → hourly
+  return SNAP_FULL_TTL_MS;                           // very dormant → daily
+};
+
 let snapPolling = false;
 const snapshotPollOnce = async () => {
   if (!SNAPSHOT_ENABLED || snapPolling) return;
-  const users = Object.keys(snapStore);
-  if (!users.length) return;
+  const now = Date.now();
+  const due = Object.keys(snapStore).filter((u) => {
+    const e = snapStore[u];
+    return e && e.password && now - (e.lastSnapAt || 0) >= userCadence(e.seenAt);
+  });
+  if (!due.length) return;
   snapPolling = true;
   try {
-    for (const username of users) {
-      const entry = snapStore[username];
-      if (!entry || !entry.password) continue;
-      try {
-        const { changed, bytes } = await writeSnapshot(username, entry.password);
-        console.log(`[${ctTime()}] SNAPSHOT — username=${username} bytes=${bytes} changed=${changed ? "y" : "n"}`);
-      } catch (err) {
-        console.log(`[${ctTime()}] SNAPSHOT FAIL — username=${username} reason=${err.message}`);
+    let idx = 0;
+    const worker = async () => {
+      while (idx < due.length) {
+        const username = due[idx++];
+        const entry = snapStore[username];
+        if (!entry || !entry.password) continue;
+        // FULL when there's no in-memory base (e.g. after a restart) or the daily
+        // TTL elapsed; otherwise a cheap HOT patch of just the current quarter.
+        const needFull = !snapDataCache.has(username) || now - (entry.lastFull || 0) >= SNAP_FULL_TTL_MS;
+        try {
+          const { changed, bytes, mode } = await writeSnapshot(username, entry.password, needFull ? "full" : "hot");
+          console.log(`[${ctTime()}] SNAPSHOT — username=${username} mode=${mode} bytes=${bytes} changed=${changed ? "y" : "n"}`);
+        } catch (err) {
+          console.log(`[${ctTime()}] SNAPSHOT FAIL — username=${username} reason=${err.message}`);
+        }
+        entry.lastSnapAt = Date.now();
+        await new Promise((r) => setTimeout(r, SNAP_STAGGER_MS)); // stagger — easy on HAC + the Pi
       }
-      await new Promise((r) => setTimeout(r, 1500)); // stagger — easy on HAC + the Pi
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(SNAP_CONCURRENCY, due.length) }, () => worker()));
+    saveSnapStore();
   } finally {
     snapPolling = false;
   }
 };
 
-// On-demand snapshot for one user (gated by the correct password) — verify the
-// writer end-to-end without waiting for the timer.
+// On-demand FULL snapshot for one user (gated by the correct password) — verify
+// the writer end-to-end without waiting for the timer.
 app.post("/snapshot/run", async (req, res) => {
   const { username, password } = req.body || {};
   if (!SNAPSHOT_ENABLED) return res.json({ success: false, message: "snapshots disabled" });
@@ -1012,9 +1061,10 @@ app.post("/snapshot/run", async (req, res) => {
   if (!pw) return res.json({ success: false, message: "no password" });
   try {
     await getSession(username, pw); // reject bad creds
-    const { changed, bytes } = await writeSnapshot(username, pw);
-    console.log(`[${ctTime()}] SNAPSHOT — username=${username} bytes=${bytes} changed=${changed ? "y" : "n"} (on-demand)`);
-    res.json({ success: true, changed, bytes });
+    const { changed, bytes, mode } = await writeSnapshot(username, pw, "full");
+    if (snapStore[username]) { snapStore[username].lastSnapAt = Date.now(); saveSnapStore(); }
+    console.log(`[${ctTime()}] SNAPSHOT — username=${username} mode=${mode} bytes=${bytes} changed=${changed ? "y" : "n"} (on-demand)`);
+    res.json({ success: true, changed, bytes, mode });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
@@ -1023,7 +1073,7 @@ app.post("/snapshot/run", async (req, res) => {
 if (SNAPSHOT_ENABLED) {
   setInterval(() => { if (inActiveHours()) snapshotPollOnce(); }, SNAP_POLL_MS);
   setTimeout(() => snapshotPollOnce(), 12000); // baseline shortly after boot
-  console.log(`[${ctTime()}] Snapshot poller: every ${Math.round(SNAP_POLL_MS / 60000)}m, 6am–11pm CT`);
+  console.log(`[${ctTime()}] Snapshot poller: cycle ${Math.round(SNAP_POLL_MS / 60000)}m, concurrency ${SNAP_CONCURRENCY}, full≈daily, 6am–11pm CT`);
 }
 
 app.listen(3000, () => console.log("HAC API running on port 3000"));
