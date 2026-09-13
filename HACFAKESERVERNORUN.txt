@@ -858,10 +858,14 @@ let firestore = null;
 if (SA_PATH && fs.existsSync(SA_PATH)) {
   try {
     // Lazy import: only load firebase-admin when we actually have a service
-    // account, so a Pi without the package (or with the feature off) is unaffected.
-    const admin = (await import("firebase-admin")).default;
-    admin.initializeApp({ credential: admin.credential.cert(JSON.parse(fs.readFileSync(SA_PATH, "utf8"))) });
-    firestore = admin.firestore();
+    // account, so a Pi without the package (or with the feature off) is
+    // unaffected. Use the modular subpath entry points (firebase-admin/app,
+    // /firestore) — the clean ESM interface; the default `firebase-admin` import
+    // doesn't expose `.credential` reliably under a dynamic import().
+    const { initializeApp, cert } = await import("firebase-admin/app");
+    const { getFirestore } = await import("firebase-admin/firestore");
+    initializeApp({ credential: cert(JSON.parse(fs.readFileSync(SA_PATH, "utf8"))) });
+    firestore = getFirestore();
     console.log(`[${ctTime()}] Snapshot sync ENABLED`);
   } catch (e) {
     console.log(`[${ctTime()}] Snapshot sync init FAILED — ${e.message}`);
