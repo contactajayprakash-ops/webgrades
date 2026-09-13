@@ -88,8 +88,10 @@ routes on the Host header, and forwarding CloudFront's hostname breaks it.
 
 A Raspberry Pi 3 on the tailnet running `server.mjs`: Express on port 3000
 (hardcoded, no `PORT` env), Node 18, scraping `hac.friscoisd.org` with
-`node-fetch` + `fetch-cookie` + `jsdom`. Routes: `GET /ping`, `POST /login`,
-`/data`, `/batch`, `/ipr-dates`, `/push/subscribe`, `/push/unsubscribe`. Keeps
+`node-fetch` + `fetch-cookie` + `jsdom` (plus `firebase-admin` +
+`@google-cloud/firestore` for snapshot sync, when enabled). Routes: `GET /ping`,
+`POST /login`, `/data`, `/batch`, `/ipr-dates`, `/push/subscribe`,
+`/push/unsubscribe`, `/push/test`, `/push/poll`, `/snapshot/run`. Keeps
 logged-in cookie jars in memory for 3 minutes, keyed by username and re-checked
 against the password.
 
@@ -118,6 +120,63 @@ account**. Delivery is cheap; the cost is the poll.
   `notificationclick` handlers live in `public/wg-sw-ext.js` (injected into the
   generated Workbox SW via `workbox.importScripts`). Enable/opt-in is in
   Settings → Notifications (default off).
+
+### Server-side grade snapshots (fast cold open)
+
+The cold open used to run ~9 scrape units in 3 serial waves — ~22 HAC page loads
+on a Pi 3, and worst exactly when the cache is empty (first load, new device,
+borrowed Chromebook). The fix inverts it: the Pi is the canonical writer, the
+browser reads a snapshot.
+
+```
+before:  browser -> CloudFront -> Pi -> HAC        (every open, ~22 page loads)
+after:   Pi -> HAC -> writes snapshot -> Firestore (grades/<credKey>)
+         browser -> Firestore (1 gzipped doc read, instant paint)
+         browser -> CloudFront -> Pi  only for login + live revalidate
+```
+
+The Pi is NOT retired — it matters more. Firestore can't log into HAC or run
+JSDOM. Scraping, Web Push, VAPID and `push-subs.json` are unchanged.
+
+- **Feature flag:** the whole subsystem is a **no-op unless a Firebase service
+  account is present** on the Pi (`FIREBASE_SA` → a JSON key path, or
+  `GOOGLE_APPLICATION_CREDENTIALS`), the same way push is a no-op without VAPID.
+  `firebase-admin` is imported **lazily**, so the server runs identically without
+  the package or the key. On the Pi: `firebase-sa.json` (`chmod 600`, gitignored),
+  `FIREBASE_SA` set in `ecosystem.config.cjs`. `firebase-admin` needs
+  `@google-cloud/firestore` installed **explicitly** — it's an optional dep that
+  npm skips on the 32-bit `armv7l` Pi.
+- **Doc:** `grades/<credKey>` where `credKey` = SHA-256 of `` `${username} ${password}` ``
+  — computed identically on the Pi (`node:crypto`) and the browser
+  (`src/lib/cloudSync.js`, Web Crypto). If these drift, every client reads a
+  missing doc and silently falls back to the slow path. Guarded by
+  `npm run test:credkey` (runs both code paths). Doc shape:
+  `{ codec:'gzip', data:<base64>, hash, updatedAt, v }`; `data` gunzips to the
+  client's exact cache-key shape (`class:{}`, `class:{"quarter":"3"}`, `rank:{}`,
+  …). Written **only when the payload hash changed** (write-budget) — unchanged
+  scrapes log `changed=n` and skip the write.
+- **Registry:** `snapshot-subs.json` (plaintext, `chmod 600`, gitignored),
+  **independent of push** — auto-populated on every verified `/login` and
+  `/batch` (product decision: fast loading for everyone). A user can have fast
+  loads without notifications and vice versa.
+- **Poller tiers** (budgeted against HAC, not Firestore — env-configurable):
+  current quarter refreshes each cycle; the other quarters + rank + transcript +
+  schedule + attendance re-scrape ~daily (a HOT poll patches just the current
+  quarter onto the last full data, kept in memory). Active users (<48h) poll
+  every cycle, dormant hourly, very dormant daily (from `seenAt`). A small worker
+  pool (`POLL_CONCURRENCY`, default 2) with a per-user stagger. First poll after
+  a restart is forced FULL.
+- **Rules** (`firestore.rules`): `grades/{id}` allows `get` on a known id, no
+  `list`, no client `write` — only the Pi writes, via the Admin SDK (bypasses
+  rules). The client `getDoc`s by its own credential hash.
+- **Client tier:** `AuthContext.hydrateFromSnapshot` is a third cache tier
+  between `localStorage` and the live scrape — one `getDoc`, gunzip via native
+  `DecompressionStream`, merged only when **newer** than the local cache;
+  `syncedAt` comes from the snapshot's own `updatedAt` (honest "as of Xm ago").
+  The first live `syncAll` of a session suppresses notifications so a
+  snapshot-hydrated cache can't fire a gradebook-wide burst. Any failure
+  (offline, no doc, browser without gunzip) falls through silently. Gated by the
+  `wg_snapshot_read` rollout flag (now on by default) **and** `syncAllowedFor`.
 
 `HACFAKESERVERNORUN.txt` in this repo is a copy of that source. **Nothing keeps
 it in sync** — if the Pi is edited and this file isn't, the copy becomes fiction.

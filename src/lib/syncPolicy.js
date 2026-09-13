@@ -65,13 +65,13 @@ export function setPollIntervalMin(min) {
 export function pollIntervalMs() { return pollIntervalMin() * 60_000 }
 
 // Rollout gate for reading the Pi's server-side grade snapshot on cold open
-// (server-side snapshot sync). Off by default during the gated rollout, so it
-// can be enabled per-browser (`wg_snapshot_read`) for one account first; flip
-// SNAPSHOT_READ_DEFAULT to true to turn it on for everyone. Browser-local, like
-// the toggles above — a snapshot read never makes the app worse, so this only
-// controls WHO gets the cold-open speedup, not correctness.
+// (server-side snapshot sync). Now ON by default — rolled out to everyone. A
+// per-browser override (`wg_snapshot_read` = 'on'|'off') can still force it
+// either way (e.g. 'off' on a browser you want to test the pure-scrape path on).
+// A snapshot read never makes the app worse (silent fall-through on any miss),
+// so this only controls WHO gets the cold-open speedup, not correctness.
 const SNAPSHOT_READ_KEY = 'wg_snapshot_read' // 'on' | 'off'; absent = default
-const SNAPSHOT_READ_DEFAULT = false
+const SNAPSHOT_READ_DEFAULT = true
 
 export function snapshotReadEnabled() {
   try {
