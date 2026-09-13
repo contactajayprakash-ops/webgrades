@@ -24,6 +24,16 @@ service cloud.firestore {
                    && request.resource.data.data is map;
     }
 
+    // Server-side grade snapshots. The Pi is the ONLY writer (Firebase Admin SDK,
+    // which bypasses these rules); the browser only reads its own doc by the
+    // credential-hash id. So: get on a known id, no enumeration, and NO client
+    // write path at all.
+    match /grades/{id} {
+      allow get: if true;      // doc id is the SHA-256 of username+password
+      allow list: if false;    // no enumeration
+      allow write: if false;   // only the Pi writes, via the Admin SDK
+    }
+
     // Nothing else is accessible.
     match /{document=**} { allow read, write: if false; }
   }
