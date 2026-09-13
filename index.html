@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+    <!-- Raster fallback so Google's favicon crawler (which often ignores SVG) has
+         a PNG to show next to the search result. -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="mask-icon" href="/favicon.svg?v=3" color="#4aa9ff" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
@@ -68,6 +71,18 @@
         "operatingSystem": "Web, iOS, Android, Chrome OS",
         "browserRequirements": "Requires JavaScript",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+
+    <!-- WebSite schema — this is what Google uses to show "WebGrades" as the
+         site name in search results (instead of the hosting domain name). -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "WebGrades",
+        "alternateName": "Frisco ISD WebGrades",
+        "url": "https://webgrades.firebaseapp.com/"
       }
     </script>
   </head>
