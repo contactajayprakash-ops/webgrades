@@ -246,6 +246,16 @@ const getClassworkDom = async (fetch, quarter = null) => {
   return iframeDom;
 };
 
+// HAC renders a per-class category-summary table (Category | Weight | Points |
+// Percent) using the SAME `tr.sg-asp-table-data-row` class as real assignments,
+// so the parser scoops those rows up too — they show up as fake assignments with
+// a bare-number "name" ("100.00", "200.00") and a percentage "category"
+// ("88.000%"). They only appear in the active quarter's view. Drop them at the
+// source so no consumer (snapshot, /data, /batch, the "Recently posted" feed)
+// ever sees them. Bare-number name is the discriminator (same heuristic the push
+// poller already trusts). Real assignments have text names.
+const isSubtotalName = (n) => /^\s*-?\d+(\.\d+)?\s*$/.test(String(n || ""));
+
 // Parse the classwork DOM into { assignmentsData }
 const parseClasswork = (classDom) => {
   const doc = classDom.window.document;
@@ -279,7 +289,7 @@ const parseClasswork = (classDom) => {
         grade: cells[4]?.textContent.trim(),
         totalPoints: cells[5]?.textContent.trim(),
       };
-    });
+    }).filter((a) => !isSubtotalName(a.assignmentName)); // drop category-summary rows
 
     return { courseName, overallAverage, assignments };
   });
@@ -681,8 +691,8 @@ const gradedVal = (g) => g != null && String(g).trim() !== "" && /\d/.test(Strin
 // ("97" / "97.0" / "97.00"), which made the string compare read unchanged grades
 // as new and re-notify every poll. Compare/store the numeric form ("97").
 const normGrade = (g) => { const n = parseFloat(String(g)); return Number.isFinite(n) ? String(n) : String(g).trim(); };
-// HAC category-subtotal junk rows have a bare-number "assignment name".
-const isSubtotalName = (n) => /^\s*-?\d+(\.\d+)?\s*$/.test(String(n || ""));
+// (isSubtotalName is defined near parseClasswork — these junk rows are now
+// filtered at the parser, so the poller rarely sees one, but the guard stays.)
 // The dedup key now includes CATEGORY. HAC lists the same assignment name under
 // both a Progress and an Assessment category (e.g. "1D Motion Math" = 70 PC AND
 // 97 AOL); the old `course|name` key collided, so the two values overwrote each

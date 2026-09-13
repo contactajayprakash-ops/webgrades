@@ -24,12 +24,19 @@ const gradeOf = (a) => {
   return parseGrade(g) == null ? null : String(g).trim()
 }
 
+// HAC's per-class category-summary rows (Category | Weight | Points | Percent)
+// share the assignment row markup, so they leak in as fake assignments with a
+// bare-number "name" ("100.00", "200.00"). The Pi now filters these at the
+// parser, but guard here too so already-cached data / older snapshots don't
+// surface them in "Recently posted" before the next re-scrape.
+const isSubtotalName = (n) => /^\s*-?\d+(\.\d+)?\s*$/.test(String(n || ''))
+
 // Map of graded assignments for one class: { assignmentName: grade }.
 function assignmentsOf(course) {
   const a = {}
   for (const asg of course.assignments || []) {
     const g = gradeOf(asg)
-    if (g != null && asg.assignmentName) a[asg.assignmentName] = g
+    if (g != null && asg.assignmentName && !isSubtotalName(asg.assignmentName)) a[asg.assignmentName] = g
   }
   return a
 }
