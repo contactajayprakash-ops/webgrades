@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake } from '../api/hac.js'
 import { cleanCourseName, guessCurrentQuarter } from '../lib/courses.js'
 import { clearPrefs } from '../lib/prefs.js'
-import { bgProfilesEnabled, pollIntervalMs } from '../lib/syncPolicy.js'
+import { bgProfilesEnabled, pollIntervalMs, syncAllowedFor, snapshotReadEnabled } from '../lib/syncPolicy.js'
 import { loadNotifyPrefs, eventMatches, showGradeNotification } from '../lib/notify.js'
 import { hasPushSubscription } from '../lib/push.js'
 
@@ -179,6 +179,7 @@ export function AuthProvider({ children }) {
   const bgSyncing = useRef(false) // a quiet background-profile sync is running
   const lastSyncAt = useRef(0) // ms timestamp of the last sync start (resume throttle)
   const lastFullSyncAt = useRef(new Map()) // username -> ms of last GPA/cold refresh
+  const liveSyncedAccts = useRef(new Set()) // usernames that finished ≥1 LIVE sync this session
   const [dataVersion, setDataVersion] = useState(0) // bumped when cache changes -> consumers re-read
 
   // background sync state for the toast
@@ -252,6 +253,11 @@ export function AuthProvider({ children }) {
     lastSyncAt.current = Date.now()
     const acct = cacheFor(username)
     const initial = acct.size === 0
+    // Whether this is the FIRST live sync for this account this app session. A
+    // snapshot hydration (or a fresh login) pre-fills the cache, so `initial`
+    // can't be trusted as the notification baseline — this can. See the guard on
+    // maybeNotify below.
+    const firstLive = !liveSyncedAccts.current.has(username)
     // The GPA/cold waves change ~once a grading period, so in the background we
     // refresh them at most hourly and let the hot wave (current grades) run every
     // time. A manual refresh (opts.full — from the pull-to-refresh / refresh
@@ -322,9 +328,14 @@ export function AuthProvider({ children }) {
         // Remember when the GPA/cold waves last ran so the hourly gate can skip
         // them on the next background re-sync.
         if (full) lastFullSyncAt.current.set(username, now)
+        liveSyncedAccts.current.add(username) // notification baseline is now real
       }
       setSync({ phase: 'done', done: total, total, changes, initial })
-      maybeNotify(gradeEvents, username)
+      // Suppress notifications on the FIRST live sync of the session: a fresh
+      // login or a snapshot-hydrated cache would otherwise diff a whole (or
+      // partial) gradebook into a notification burst. Genuine new-grade
+      // notifications come from later background-poll syncs (and the Pi push).
+      if (!firstLive) maybeNotify(gradeEvents, username)
     }
   }, [cacheFor, persistCache, getData, bump])
 
@@ -352,6 +363,36 @@ export function AuthProvider({ children }) {
   }, [])
 
   const dismissSync = useCallback(() => setSync((s) => ({ ...s, phase: 'idle' })), [])
+
+  // Snapshot-first hydration (server-side snapshot sync): a THIRD cache tier
+  // between localStorage and the live scrape. One Firestore doc read on cold open
+  // paints a full gradebook instantly instead of waiting on ~9 serial HAC scrapes
+  // — the whole point, for empty-cache opens (first load, new device, borrowed
+  // Chromebook). Strictly additive and safe:
+  //  - newest-wins: never downgrades a fresher localStorage cache to an older snapshot;
+  //  - syncedAt comes from the snapshot's OWN updatedAt (honest "as of Xm ago"),
+  //    never Date.now();
+  //  - does NOT touch liveSyncedAccts, so the first live syncAll still suppresses
+  //    a notification burst (see the maybeNotify guard);
+  //  - any failure (offline, no doc, browser without gunzip) falls through silently.
+  //  - gated by the per-browser rollout flag AND the dev sync lock.
+  const hydrateFromSnapshot = useCallback(async (username, password) => {
+    if (!username || !password) return
+    if (!snapshotReadEnabled() || !syncAllowedFor(username)) return
+    try {
+      // Lazy-load Firestore-lite (same as settings/agenda sync) so it stays out
+      // of the entry bundle — a cold-open feature must not bloat first paint.
+      const { cloudGetGrades } = await import('../lib/cloudSync.js')
+      const snap = await cloudGetGrades(username, password)
+      if (!snap || !snap.data || !snap.updatedAt) return
+      if (snap.updatedAt <= loadSyncedAt(username)) return // localStorage is fresher
+      const acct = cacheFor(username)
+      for (const [k, v] of Object.entries(snap.data)) acct.set(k, v)
+      persistCache(username)
+      try { localStorage.setItem(syncedKeyFor(username), String(snap.updatedAt)) } catch (_) {}
+      if (userRef.current === username) { setSyncedAt(snap.updatedAt); bump() }
+    } catch (_) { /* no snapshot / unreachable / can't gunzip → the live path handles it */ }
+  }, [cacheFor, persistCache, bump])
 
   // Quietly refresh ONE (usually non-active) profile's grades into ITS OWN cache,
   // to keep background accounts warm so switching to them shows fresh data. No
@@ -479,7 +520,14 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!creds) return
     let cancelled = false
-    ;(async () => { await apiWake(); if (!cancelled) syncAll() })()
+    ;(async () => {
+      // Wake the Pi in parallel — the snapshot read hits Firestore, not the Pi,
+      // so it can paint before the (possibly cold-starting) backend responds.
+      const wake = apiWake().catch(() => {})
+      await hydrateFromSnapshot(creds.username, creds.password)
+      await wake
+      if (!cancelled) syncAll()
+    })()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creds])
