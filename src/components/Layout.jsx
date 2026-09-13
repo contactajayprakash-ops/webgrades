@@ -168,7 +168,7 @@ export default function Layout() {
         </div>
 
         <main className="main" key={activeUsername}>
-          <PullToRefresh onRefresh={syncAll}>
+          <PullToRefresh onRefresh={() => syncAll({ full: true })}>
             <OfflineBanner />
             <Outlet />
           </PullToRefresh>

@@ -43,9 +43,14 @@ function loadProfiles() {
 // The pages read grades keyed by quarter number (`class {quarter:N}`), so wave 1
 // MUST fetch that keyed current quarter — not just the generic `class {}` — or
 // the Dashboard/Grades keep showing stale data until the whole GPA wave finishes.
+//
+// `class {}` (HAC's default "current") and `class {quarter:curQ}` are the SAME
+// HAC page, so we fetch ONLY the keyed one and alias it into the `class:{}` cache
+// key (see the alias step in syncAll/syncProfileQuiet). Dashboard/Agenda fall back
+// to `class:{}`; keeping it populated by alias avoids scraping the page twice.
 const ALL_QUARTERS = ['4', '3', '2', '1']
 function buildHotGpaWaves(curQ) {
-  const hot = [['class', {}], ['class', { quarter: curQ }]]
+  const hot = [['class', { quarter: curQ }]]
   const gpa = [
     ['rank', {}],
     ['transcript', {}], // rank + transcript share one HAC page — merged server-side
@@ -57,6 +62,12 @@ const WAVE_COLD = [
   ['schedule', {}],
   ['attendance', {}],
 ]
+
+// The GPA wave (other quarters + rank + transcript) and cold wave (schedule +
+// attendance) change about once a grading period — refresh them at most this
+// often in the background. The hot wave (current grades) still runs every sync.
+// A manual refresh or a never-synced account forces a full run regardless.
+const GPA_TTL_MS = 60 * 60 * 1000 // ~hourly
 
 const keyOf = (type, extra) => {
   const { force, ...rest } = extra || {}
@@ -167,6 +178,7 @@ export function AuthProvider({ children }) {
   const syncing = useRef(false) // a full (active-account) sync is currently running
   const bgSyncing = useRef(false) // a quiet background-profile sync is running
   const lastSyncAt = useRef(0) // ms timestamp of the last sync start (resume throttle)
+  const lastFullSyncAt = useRef(new Map()) // username -> ms of last GPA/cold refresh
   const [dataVersion, setDataVersion] = useState(0) // bumped when cache changes -> consumers re-read
 
   // background sync state for the toast
@@ -231,7 +243,7 @@ export function AuthProvider({ children }) {
   // Prefetch + revalidate everything for the current account, wave by wave, so
   // the current grades (wave 1) refresh and paint FIRST. Each wave is a single
   // batched request. Aborts if the user switches accounts mid-sync.
-  const syncAll = useCallback(async () => {
+  const syncAll = useCallback(async (opts = {}) => {
     const c = credsRef.current
     if (!c) return
     const username = c.username
@@ -240,12 +252,20 @@ export function AuthProvider({ children }) {
     lastSyncAt.current = Date.now()
     const acct = cacheFor(username)
     const initial = acct.size === 0
+    // The GPA/cold waves change ~once a grading period, so in the background we
+    // refresh them at most hourly and let the hot wave (current grades) run every
+    // time. A manual refresh (opts.full — from the pull-to-refresh / refresh
+    // button) or a never-synced account always runs them. This keeps the steady
+    // -state visibility/poll re-syncs to just the one page people open the app for.
+    const full = opts.full === true || initial ||
+      Date.now() - (lastFullSyncAt.current.get(username) || 0) >= GPA_TTL_MS
     // Wave 1 refreshes the current quarter (calendar guess) so its grades paint
     // first; the remaining quarters ride along in the GPA wave.
-    const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(guessCurrentQuarter())
+    const curQ = guessCurrentQuarter()
+    const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(curQ)
     // Cold resources rarely change — only refetch them when we have nothing cached.
     const coldNeeded = WAVE_COLD.filter(([t, e]) => acct.get(keyOf(t, e)) === undefined)
-    const waves = [WAVE_HOT, WAVE_GPA, coldNeeded].filter((w) => w.length)
+    const waves = [WAVE_HOT, ...(full ? [WAVE_GPA, coldNeeded] : [])].filter((w) => w.length)
     const total = waves.reduce((n, w) => n + w.length, 0)
     setSync({ phase: 'syncing', done: 0, total, changes: [], initial })
     const changes = []
@@ -283,6 +303,10 @@ export function AuthProvider({ children }) {
           fetched++
         }
       })
+      // Same page — alias the keyed current quarter into the generic `class:{}`
+      // view so Dashboard/Agenda's fallback stays fresh without a second scrape.
+      const curKey = keyOf('class', { quarter: curQ })
+      if (gotByKey[curKey] !== undefined) acct.set(keyOf('class', {}), gotByKey[curKey])
       persistCache(username)
       done += wave.length
       if (syncGen.current === myGen) { bump(); setSync((s) => ({ ...s, done })) }
@@ -295,6 +319,9 @@ export function AuthProvider({ children }) {
         const now = Date.now()
         try { localStorage.setItem(syncedKeyFor(username), String(now)) } catch (_) {}
         if (userRef.current === username) setSyncedAt(now)
+        // Remember when the GPA/cold waves last ran so the hourly gate can skip
+        // them on the next background re-sync.
+        if (full) lastFullSyncAt.current.set(username, now)
       }
       setSync({ phase: 'done', done: total, total, changes, initial })
       maybeNotify(gradeEvents, username)
@@ -338,9 +365,14 @@ export function AuthProvider({ children }) {
     try {
       const username = c.username
       const acct = cacheFor(username)
-      const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(guessCurrentQuarter())
+      const initial = acct.size === 0
+      // Same hourly gate as syncAll: a warm background profile only needs its
+      // current grades refreshed each cycle; GPA/cold ride the hourly cadence.
+      const full = initial || Date.now() - (lastFullSyncAt.current.get(username) || 0) >= GPA_TTL_MS
+      const curQ = guessCurrentQuarter()
+      const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(curQ)
       const coldNeeded = WAVE_COLD.filter(([t, e]) => acct.get(keyOf(t, e)) === undefined)
-      const waves = [WAVE_HOT, WAVE_GPA, coldNeeded].filter((w) => w.length)
+      const waves = [WAVE_HOT, ...(full ? [WAVE_GPA, coldNeeded] : [])].filter((w) => w.length)
       let fetched = 0
       for (const wave of waves) {
         const gotByKey = {}
@@ -355,12 +387,17 @@ export function AuthProvider({ children }) {
           const key = keyOf(type, extra)
           if (gotByKey[key] !== undefined) { acct.set(key, gotByKey[key]); fetched++ }
         }
+        // Alias the keyed current quarter into `class:{}` (same page as syncAll).
+        const curKey = keyOf('class', { quarter: curQ })
+        if (gotByKey[curKey] !== undefined) acct.set(keyOf('class', {}), gotByKey[curKey])
         persistCache(username)
       }
       if (fetched > 0) {
-        try { localStorage.setItem(syncedKeyFor(username), String(Date.now())) } catch (_) {}
+        const now = Date.now()
+        try { localStorage.setItem(syncedKeyFor(username), String(now)) } catch (_) {}
+        if (full) lastFullSyncAt.current.set(username, now)
         // If this profile happens to be the active one, reflect its fresh data/time.
-        if (userRef.current === username) { setSyncedAt(Date.now()); bump() }
+        if (userRef.current === username) { setSyncedAt(now); bump() }
       }
     } finally {
       bgSyncing.current = false
