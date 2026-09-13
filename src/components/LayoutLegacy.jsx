@@ -143,7 +143,7 @@ export default function LayoutLegacy() {
 
         {/* key by account so switching profiles remounts the views with fresh state */}
         <main className="main" key={activeUsername}>
-          <PullToRefresh onRefresh={syncAll}>
+          <PullToRefresh onRefresh={() => syncAll({ full: true })}>
             <OfflineBanner />
             <Outlet />
           </PullToRefresh>

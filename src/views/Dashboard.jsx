@@ -367,7 +367,7 @@ function CurrentClasses({ recent }) {
               <button className={`vt-btn ${view === 'grid' ? 'active' : ''}`} onClick={() => pickView('grid')} aria-label="Tile view" title="Tiles"><Icon.grid width={16} height={16} /></button>
             </div>
           )}
-          <button className="btn ghost sm" onClick={syncAll} disabled={updating} title="Re-check HAC for new grades">
+          <button className="btn ghost sm" onClick={() => syncAll({ full: true })} disabled={updating} title="Re-check HAC for new grades">
             <Icon.refresh width={14} height={14} /> Refresh
           </button>
           <Link to="/grades" className="btn ghost sm">View all <Icon.chevron width={14} height={14} /></Link>
