@@ -6,6 +6,10 @@ import express from "express";
 import cors from "cors";
 import webpush from "web-push";
 import fs from "fs";
+import crypto from "crypto";
+import zlib from "zlib";
+// firebase-admin is imported LAZILY (below) so the server still runs identically
+// if the package isn't installed or the snapshot feature is off.
 
 const app = express();
 app.use(express.json());
@@ -557,6 +561,7 @@ app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   try {
     const session = await getSession(username, password, true); // always verify creds fresh
+    registerSnapshot(username, password); // keep this account's server snapshot warm
     console.log(
       `[${ctTime()}] LOGIN SUCCESS — name=${session.userName}  username=${username}`,
     );
@@ -602,6 +607,7 @@ app.post("/batch", async (req, res) => {
   try {
     // Prime the session once up front (also surfaces bad credentials early).
     const primed = await getSession(username, password);
+    registerSnapshot(username, password); // seen just now → keep its snapshot warm
     let userName = primed.userName;
     const cache = {}; // shared across this batch: iframe URL + transcript page
 
@@ -834,6 +840,186 @@ if (PUSH_ENABLED) {
   // silently (firstSeen) instead of waiting up to a full interval.
   setTimeout(() => pollOnce(), 8000);
   console.log(`[${ctTime()}] Web Push poller: every ${Math.round(POLL_INTERVAL_MS / 60000)}m, 6am–11pm CT`);
+}
+
+// ============================================================
+// Server-side grade snapshots — the Pi scrapes each known student on a timer
+// and writes a compressed snapshot to Firestore, so the browser can paint a
+// full gradebook from ONE doc read on a cold open (empty cache / new device /
+// borrowed Chromebook) instead of waiting on ~9 serial HAC scrapes.
+//
+// Independent of Web Push: a user can have fast loads without notifications and
+// vice versa. A complete no-op unless a Firebase service account is provided
+// (FIREBASE_SA -> a JSON key path), exactly the way push is a no-op without
+// VAPID keys — the app still works with this feature entirely off.
+// ============================================================
+const SA_PATH = process.env.FIREBASE_SA || process.env.GOOGLE_APPLICATION_CREDENTIALS || "";
+let firestore = null;
+if (SA_PATH && fs.existsSync(SA_PATH)) {
+  try {
+    // Lazy import: only load firebase-admin when we actually have a service
+    // account, so a Pi without the package (or with the feature off) is unaffected.
+    const admin = (await import("firebase-admin")).default;
+    admin.initializeApp({ credential: admin.credential.cert(JSON.parse(fs.readFileSync(SA_PATH, "utf8"))) });
+    firestore = admin.firestore();
+    console.log(`[${ctTime()}] Snapshot sync ENABLED`);
+  } catch (e) {
+    console.log(`[${ctTime()}] Snapshot sync init FAILED — ${e.message}`);
+  }
+} else {
+  console.log(`[${ctTime()}] Snapshot sync DISABLED — set FIREBASE_SA to a service account JSON`);
+}
+const SNAPSHOT_ENABLED = !!firestore;
+
+// The doc id must match the browser's byte-for-byte (src/lib/cloudSync.js):
+// SHA-256 hex of `${username} ${password}` with a single space and ''-fallbacks.
+// If these drift, every client reads a missing doc and silently falls back to
+// the slow path — guarded by scripts/test-credkey-parity.mjs.
+const credKey = (username, password) =>
+  crypto.createHash("sha256").update(`${username || ""} ${password || ""}`).digest("hex");
+
+// Snapshot registry — WHO gets snapshotted. Independent of pushStore. Populated
+// automatically on every verified /login and /batch (product decision: fast
+// loading on by default for everyone). Plaintext creds, file locked to owner
+// (0600) — the same trade-off already accepted for push-subs.json.
+const SNAP_FILE = process.env.SNAPSHOT_STORE || "./snapshot-subs.json";
+let snapStore = {};
+try {
+  if (fs.existsSync(SNAP_FILE)) snapStore = JSON.parse(fs.readFileSync(SNAP_FILE, "utf8")) || {};
+} catch (e) { console.log(`[${ctTime()}] snapshot store load failed: ${e.message}`); }
+const saveSnapStore = () => {
+  try { fs.writeFileSync(SNAP_FILE, JSON.stringify(snapStore), { mode: 0o600 }); }
+  catch (e) { console.log(`[${ctTime()}] snapshot store save failed: ${e.message}`); }
+};
+
+// Record/refresh an account in the snapshot registry. No-op when the feature is
+// off, so nothing new is stored when there's no service account.
+const registerSnapshot = (username, password) => {
+  if (!SNAPSHOT_ENABLED || !username || !password) return;
+  const e = snapStore[username] || {};
+  e.password = password;
+  e.seenAt = Date.now(); // last activity — used for poll tiering later (#5)
+  snapStore[username] = e;
+  saveSnapStore();
+};
+
+// Same calendar guess the client uses (src/lib/courses.js guessCurrentQuarter),
+// so the generic `class:{}` view aliases to the same quarter on both sides.
+const guessCurrentQuarter = (d = new Date()) => {
+  const m = d.getMonth();
+  if (m >= 7 && m <= 9) return "1";
+  if (m === 10 || m === 11) return "2";
+  if (m >= 0 && m <= 2) return "3";
+  return "4";
+};
+
+// Cache-key shape MUST match the client's keyOf(type, extra) in AuthContext.jsx:
+//   `${type}:${JSON.stringify(rest)}`  ->  "class:{}", "class:{\"quarter\":\"3\"}", ...
+const snapKey = (type, extra = {}) => `${type}:${JSON.stringify(extra)}`;
+
+// Scrape one student's full gradebook into the client's cache-map shape. Reuses
+// ONE session + per-request page cache (like /batch) so rank+transcript share a
+// fetch. A single failed resource is skipped, not fatal — a partial snapshot
+// still beats a cold scrape.
+const buildSnapshot = async (username, password) => {
+  const cache = {};
+  const data = {};
+  const grab = async (type, extra = {}) => {
+    try {
+      const { data: d } = await scrapeWithSession(username, password, { type, ...extra }, cache);
+      data[snapKey(type, extra)] = d;
+    } catch (e) { /* skip this resource; keep the rest */ }
+  };
+  const curQ = guessCurrentQuarter();
+  for (const q of ["1", "2", "3", "4"]) await grab("class", { quarter: q });
+  await grab("rank");
+  await grab("transcript"); // shares the transcript page with rank via `cache`
+  await grab("schedule");
+  await grab("attendance");
+  // Alias the current quarter into the generic `class:{}` view (same HAC page),
+  // matching the client so its Dashboard/Agenda fallback is populated too.
+  const curData = data[snapKey("class", { quarter: curQ })];
+  if (curData !== undefined) data[snapKey("class", {})] = curData;
+  return data;
+};
+
+// Write one gzipped snapshot doc per user at grades/<credKey>, but ONLY when the
+// uncompressed payload actually changed (hash compare) — this is what keeps us
+// far inside the Firestore free tier. Doc shape: { codec, data(base64), hash,
+// updatedAt, v }. `updatedAt` is the snapshot's real age (the client shows it).
+const writeSnapshot = async (username, password) => {
+  if (!SNAPSHOT_ENABLED) return { changed: false, bytes: 0 };
+  const data = await buildSnapshot(username, password);
+  if (!Object.keys(data).length) return { changed: false, bytes: 0 }; // total scrape failure
+  const json = JSON.stringify(data);
+  const hash = crypto.createHash("sha256").update(json).digest("hex");
+  const entry = snapStore[username] || {};
+  const gz = zlib.gzipSync(json);
+  const bytes = gz.length;
+  if (entry.snapHash === hash) return { changed: false, bytes }; // unchanged → skip the write
+  await firestore.collection("grades").doc(credKey(username, password)).set({
+    codec: "gzip",
+    data: gz.toString("base64"),
+    hash,
+    updatedAt: Date.now(),
+    v: 1,
+  });
+  entry.snapHash = hash;
+  entry.password = password;
+  snapStore[username] = entry;
+  saveSnapStore();
+  return { changed: true, bytes };
+};
+
+// Snapshot poll loop — separate from the push poller and its lastSeen state, so
+// Firestore never becomes part of the notification path. Serial with a stagger,
+// gentle on HAC. Tiering + concurrency come in #5.
+const SNAP_POLL_MS = Number(process.env.SNAPSHOT_POLL_MS || 15 * 60 * 1000);
+let snapPolling = false;
+const snapshotPollOnce = async () => {
+  if (!SNAPSHOT_ENABLED || snapPolling) return;
+  const users = Object.keys(snapStore);
+  if (!users.length) return;
+  snapPolling = true;
+  try {
+    for (const username of users) {
+      const entry = snapStore[username];
+      if (!entry || !entry.password) continue;
+      try {
+        const { changed, bytes } = await writeSnapshot(username, entry.password);
+        console.log(`[${ctTime()}] SNAPSHOT — username=${username} bytes=${bytes} changed=${changed ? "y" : "n"}`);
+      } catch (err) {
+        console.log(`[${ctTime()}] SNAPSHOT FAIL — username=${username} reason=${err.message}`);
+      }
+      await new Promise((r) => setTimeout(r, 1500)); // stagger — easy on HAC + the Pi
+    }
+  } finally {
+    snapPolling = false;
+  }
+};
+
+// On-demand snapshot for one user (gated by the correct password) — verify the
+// writer end-to-end without waiting for the timer.
+app.post("/snapshot/run", async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!SNAPSHOT_ENABLED) return res.json({ success: false, message: "snapshots disabled" });
+  const entry = snapStore[username];
+  const pw = password || entry?.password;
+  if (!pw) return res.json({ success: false, message: "no password" });
+  try {
+    await getSession(username, pw); // reject bad creds
+    const { changed, bytes } = await writeSnapshot(username, pw);
+    console.log(`[${ctTime()}] SNAPSHOT — username=${username} bytes=${bytes} changed=${changed ? "y" : "n"} (on-demand)`);
+    res.json({ success: true, changed, bytes });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
+if (SNAPSHOT_ENABLED) {
+  setInterval(() => { if (inActiveHours()) snapshotPollOnce(); }, SNAP_POLL_MS);
+  setTimeout(() => snapshotPollOnce(), 12000); // baseline shortly after boot
+  console.log(`[${ctTime()}] Snapshot poller: every ${Math.round(SNAP_POLL_MS / 60000)}m, 6am–11pm CT`);
 }
 
 app.listen(3000, () => console.log("HAC API running on port 3000"));

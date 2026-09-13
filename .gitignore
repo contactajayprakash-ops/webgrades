@@ -14,6 +14,13 @@ yarn-error.log*
 .firebase/
 .trash-firebase-init/
 
+# Pi-only secrets — service account key + credential stores. NEVER commit these.
+*serviceaccount*.json
+*service-account*.json
+firebase-sa*.json
+snapshot-subs.json
+push-subs.json
+
 # Firebase "agent skills" - docs the CLI drops in, not part of this project
 .agents/
 .claude/skills/
