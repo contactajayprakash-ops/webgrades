@@ -110,9 +110,6 @@ export default function Layout() {
             ))}
             <button className={`np-tab ${menu ? 'active' : ''}`} onClick={() => setMenu((m) => !m)}>More</button>
             <span className="np-sep" />
-            <button className="np-icon" onClick={() => setMenu((m) => !m)} aria-label="All pages">
-              <Icon.search width={17} height={17} />
-            </button>
             <NavLink to="/settings" className={({ isActive }) => `np-icon ${isActive ? 'active' : ''}`} aria-label="Settings">
               <Icon.settings width={17} height={17} />
             </NavLink>
