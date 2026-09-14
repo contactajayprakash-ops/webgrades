@@ -907,14 +907,19 @@ const saveSnapStore = () => {
 };
 
 // Record/refresh an account in the snapshot registry. No-op when the feature is
-// off, so nothing new is stored when there's no service account.
+// off, so nothing new is stored when there's no service account. A brand-new
+// sign-in (no snapshot yet) is snapshotted RIGHT AWAY — async, non-blocking — so
+// their fast-load doc exists for the next cold open instead of waiting up to a
+// full poll cycle. `snapshotNow` is defined below; the setTimeout defers the ref.
 const registerSnapshot = (username, password) => {
   if (!SNAPSHOT_ENABLED || !username || !password) return;
   const e = snapStore[username] || {};
+  const isNew = !e.snapHash; // never snapshotted → prime it immediately
   e.password = password;
-  e.seenAt = Date.now(); // last activity — used for poll tiering later (#5)
+  e.seenAt = Date.now(); // last activity — drives poll tiering (#5)
   snapStore[username] = e;
   saveSnapStore();
+  if (isNew) setTimeout(() => snapshotNow(username, password, "full"), 0);
 };
 
 // Same calendar guess the client uses (src/lib/courses.js guessCurrentQuarter),
@@ -1000,6 +1005,26 @@ const writeSnapshot = async (username, password, mode = "full") => {
   return { changed: true, bytes, mode: effMode };
 };
 
+// One snapshot for one user, guarded so the same account is never scraped twice
+// at once (an immediate on-sign-in snapshot vs the poll cycle picking up the same
+// user). Logs + stamps lastSnapAt. Returns the write result, or null if skipped.
+const snapInFlight = new Set(); // usernames currently being snapshotted
+const snapshotNow = async (username, password, mode = "full") => {
+  if (!SNAPSHOT_ENABLED || snapInFlight.has(username)) return null;
+  snapInFlight.add(username);
+  try {
+    const res = await writeSnapshot(username, password, mode);
+    if (snapStore[username]) { snapStore[username].lastSnapAt = Date.now(); saveSnapStore(); }
+    console.log(`[${ctTime()}] SNAPSHOT — username=${username} mode=${res.mode} bytes=${res.bytes} changed=${res.changed ? "y" : "n"}`);
+    return res;
+  } catch (err) {
+    console.log(`[${ctTime()}] SNAPSHOT FAIL — username=${username} reason=${err.message}`);
+    return null;
+  } finally {
+    snapInFlight.delete(username);
+  }
+};
+
 // ---- Poller tiering + concurrency (#5) ----
 // Budget the poll against HAC, not Firestore: at a few hundred students a serial
 // full-scrape loop would make thousands of hac.friscoisd.org logins a day from
@@ -1044,13 +1069,7 @@ const snapshotPollOnce = async () => {
         // FULL when there's no in-memory base (e.g. after a restart) or the daily
         // TTL elapsed; otherwise a cheap HOT patch of just the current quarter.
         const needFull = !snapDataCache.has(username) || now - (entry.lastFull || 0) >= SNAP_FULL_TTL_MS;
-        try {
-          const { changed, bytes, mode } = await writeSnapshot(username, entry.password, needFull ? "full" : "hot");
-          console.log(`[${ctTime()}] SNAPSHOT — username=${username} mode=${mode} bytes=${bytes} changed=${changed ? "y" : "n"}`);
-        } catch (err) {
-          console.log(`[${ctTime()}] SNAPSHOT FAIL — username=${username} reason=${err.message}`);
-        }
-        entry.lastSnapAt = Date.now();
+        await snapshotNow(username, entry.password, needFull ? "full" : "hot"); // logs + guards + stamps
         await new Promise((r) => setTimeout(r, SNAP_STAGGER_MS)); // stagger — easy on HAC + the Pi
       }
     };
@@ -1071,10 +1090,9 @@ app.post("/snapshot/run", async (req, res) => {
   if (!pw) return res.json({ success: false, message: "no password" });
   try {
     await getSession(username, pw); // reject bad creds
-    const { changed, bytes, mode } = await writeSnapshot(username, pw, "full");
-    if (snapStore[username]) { snapStore[username].lastSnapAt = Date.now(); saveSnapStore(); }
-    console.log(`[${ctTime()}] SNAPSHOT — username=${username} mode=${mode} bytes=${bytes} changed=${changed ? "y" : "n"} (on-demand)`);
-    res.json({ success: true, changed, bytes, mode });
+    const res2 = await snapshotNow(username, pw, "full"); // guarded + logs + stamps
+    if (!res2) return res.json({ success: false, message: "already snapshotting this user" });
+    res.json({ success: true, changed: res2.changed, bytes: res2.bytes, mode: res2.mode });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
