@@ -691,6 +691,19 @@ const gradedVal = (g) => g != null && String(g).trim() !== "" && /\d/.test(Strin
 // ("97" / "97.0" / "97.00"), which made the string compare read unchanged grades
 // as new and re-notify every poll. Compare/store the numeric form ("97").
 const normGrade = (g) => { const n = parseFloat(String(g)); return Number.isFinite(n) ? String(n) : String(g).trim(); };
+// Build the lastSeen map (dedup key -> normalized grade) from a `class` scrape —
+// the SAME keys pollOnce diffs against. Used to silently baseline a (re)new
+// subscription so grades already posted don't blast as "new".
+const buildSeen = (data) => {
+  const seen = {};
+  for (const c of (data && data.assignmentsData) || []) {
+    for (const a of c.assignments || []) {
+      if (!gradedVal(a.grade) || isSubtotalName(a.assignmentName)) continue;
+      seen[`${c.courseName}|${a.category}|${a.assignmentName}`] = normGrade(a.grade);
+    }
+  }
+  return seen;
+};
 // (isSubtotalName is defined near parseClasswork — these junk rows are now
 // filtered at the parser, so the poller rarely sees one, but the guard stays.)
 // The dedup key now includes CATEGORY. HAC lists the same assignment name under
@@ -712,14 +725,31 @@ app.post("/push/subscribe", async (req, res) => {
   }
   try {
     if (password) await getSession(username, password); // reject bad creds up front
-    const entry = pushStore[username] || { password, kinds: "aol", subs: [], lastSeen: {} };
+    const prior = pushStore[username];
+    // "Active" = at least one live device before this call. The poller freezes a
+    // user's lastSeen while they have NO active device (it skips them), so a
+    // subscription that lapsed (endpoint rotated/expired and got pruned) comes
+    // back with a STALE baseline — the next poll would then blast every grade
+    // posted since it lapsed, all of them old and already read. Detect that and
+    // silently re-baseline to the current gradebook so only truly-new grades notify.
+    const wasActive = !!(prior && (prior.subs || []).length);
+    const entry = prior || { password, kinds: "aol", subs: [], lastSeen: {} };
     if (password) entry.password = password;
     if (kinds) entry.kinds = kinds;
+    if (!wasActive) {
+      entry.lastSeen = {}; // fallback: firstSeen guard baselines silently next poll
+      if (entry.password) {
+        try {
+          const { data } = await scrapeWithSession(username, entry.password, { type: "class" }, {});
+          entry.lastSeen = buildSeen(data); // baseline to NOW → nothing pre-existing notifies
+        } catch (_) { /* scrape failed → keep {}, poll still baselines silently, no blast */ }
+      }
+    }
     entry.subs = (entry.subs || []).filter((s) => s.endpoint !== subscription.endpoint);
     entry.subs.push(subscription);
     pushStore[username] = entry;
     savePushStore();
-    console.log(`[${ctTime()}] PUSH SUBSCRIBE — username=${username} kinds=${entry.kinds} devices=${entry.subs.length}`);
+    console.log(`[${ctTime()}] PUSH SUBSCRIBE — username=${username} kinds=${entry.kinds} devices=${entry.subs.length}${wasActive ? "" : " (re-baselined)"}`);
     res.json({ success: true });
   } catch (err) {
     res.json({ success: false, message: err.message });
