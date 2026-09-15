@@ -405,10 +405,10 @@ export function AuthProvider({ children }) {
     if (!username || !password) return
     if (!snapshotReadEnabled() || !syncAllowedFor(username)) return
     try {
-      // Lazy-load Firestore-lite (same as settings/agenda sync) so it stays out
-      // of the entry bundle — a cold-open feature must not bloat first paint.
-      const { cloudGetGrades } = await import('../lib/cloudSync.js')
-      const snap = await cloudGetGrades(username, password)
+      // Read via the Firestore REST API (no SDK) so the paint path doesn't wait
+      // on the ~140 KB firebase chunk. Tiny module, lazy-imported.
+      const { readSnapshot } = await import('../lib/snapshotRead.js')
+      const snap = await readSnapshot(username, password)
       if (!snap || !snap.data || !snap.updatedAt) return
       if (snap.updatedAt <= loadSyncedAt(username)) return // localStorage is fresher
       const acct = cacheFor(username)
