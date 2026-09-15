@@ -8,8 +8,25 @@ import webpush from "web-push";
 import fs from "fs";
 import crypto from "crypto";
 import zlib from "zlib";
+import http from "http";
+import https from "https";
 // firebase-admin is imported LAZILY (below) so the server still runs identically
 // if the package isn't installed or the snapshot feature is off.
+
+// Keep-alive agents so the 3-4 fetches a single scrape makes to hac.friscoisd.org
+// reuse ONE TLS connection instead of paying a fresh handshake each time (each
+// handshake is ~200-400ms on the Pi's link — the dominant per-request cost after
+// HAC's own latency). node-fetch takes `agent` as a fn so it can pick http/https.
+const kaHttps = new https.Agent({ keepAlive: true, maxSockets: 8, timeout: 30000 });
+const kaHttp = new http.Agent({ keepAlive: true, maxSockets: 8, timeout: 30000 });
+const kaAgent = (parsedURL) => (parsedURL.protocol === "http:" ? kaHttp : kaHttps);
+// Wrap node-fetch to inject the keep-alive agent by default (callers can still
+// override via opts). Everything goes through the cookie-jar fetch built on this.
+const fetchKA = (url, opts = {}) => fetchOrig(url, { agent: kaAgent, ...opts });
+
+// How many resources a single /batch scrapes at once. JSDOM is memory-hungry on
+// the 1GB Pi 3, so keep this modest; env-configurable to dial up on a bigger box.
+const BATCH_CONCURRENCY = Math.max(1, Number(process.env.BATCH_CONCURRENCY || 3));
 
 const app = express();
 app.use(express.json());
@@ -49,7 +66,7 @@ const fetchWithRetry = async (fetch, url, options = {}, retries = 3) => {
 // ====================
 const loginHAC = async (username, password) => {
   const cookieJar = new CookieJar();
-  const fetch = fetchCookie(fetchOrig, cookieJar);
+  const fetch = fetchCookie(fetchKA, cookieJar); // keep-alive agent (see kaAgent)
 
   const loginUrl =
     "https://hac.friscoisd.org/HomeAccess/Account/LogOn?ReturnUrl=%2fHomeAccess%2f";
@@ -621,16 +638,29 @@ app.post("/batch", async (req, res) => {
     let userName = primed.userName;
     const cache = {}; // shared across this batch: iframe URL + transcript page
 
-    const results = [];
-    for (const r of requests) {
-      try {
-        const out = await scrapeWithSession(username, password, r, cache);
-        userName = out.userName || userName;
-        results.push({ ...r, success: true, data: out.data });
-      } catch (err) {
-        results.push({ ...r, success: false, message: err.message });
+    // Scrape the requested resources CONCURRENTLY (a small worker pool) instead
+    // of serially — they're independent HAC pages over one shared session, so a
+    // full cold-open batch of 8 goes from ~8x a scrape to ~ceil(8/N)x. Bounded by
+    // BATCH_CONCURRENCY because JSDOM is memory-hungry on the 1GB Pi 3. Results
+    // stay in request order (indexed writes).
+    const results = new Array(requests.length);
+    let bi = 0;
+    const worker = async () => {
+      while (bi < requests.length) {
+        const i = bi++;
+        const r = requests[i];
+        try {
+          const out = await scrapeWithSession(username, password, r, cache);
+          userName = out.userName || userName;
+          results[i] = { ...r, success: true, data: out.data };
+        } catch (err) {
+          results[i] = { ...r, success: false, message: err.message };
+        }
       }
-    }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(BATCH_CONCURRENCY, requests.length) }, () => worker()),
+    );
 
     const okCount = results.filter((x) => x.success).length;
     console.log(
