@@ -33,6 +33,12 @@ function loadProfiles() {
   return legacy ? [legacy] : []
 }
 
+// A profile's `userName` is the student's real display name. HAC sometimes
+// returns no name on a given scrape, so `login` falls back to the numeric
+// username — and older/migrated profiles may lack it entirely. This tells a real
+// name apart from a missing one or the ID fallback, so we know when to backfill.
+const isRealName = (userName, username) => !!userName && userName !== username
+
 // Resources grouped into priority WAVES, each fetched as ONE batched round-trip
 // (server logs into HAC once per wave). The whole point: a grade-drop refresh
 // only needs wave 1 — the CURRENT quarter's grades, the one thing everyone opens
@@ -241,6 +247,24 @@ export function AuthProvider({ children }) {
     return p
   }, [cacheFor, persistCache])
 
+  // Backfill a profile's real display name from a HAC response (batch/login all
+  // return `userName`). Fixes any profile that has creds but no real name — an
+  // older/migrated profile, or a login where HAC fell back to the numeric ID.
+  // Idempotent: no-op once the stored name is real. Updates the persisted profile
+  // and, if it's the active one, the live session so the UI updates immediately.
+  const backfillUserName = useCallback((username, realName) => {
+    if (!username || !isRealName(realName, username)) return
+    setProfiles((prev) => {
+      const cur = prev.find((x) => x.username === username)
+      if (!cur || isRealName(cur.userName, username)) return prev // already named
+      const next = prev.map((x) => (x.username === username ? { ...x, userName: realName } : x))
+      try { localStorage.setItem(PROFILES_KEY, JSON.stringify(next)) } catch (_) {}
+      return next
+    })
+    setSession((s) => (s && s.username === username && !isRealName(s.userName, username)
+      ? { ...s, userName: realName } : s))
+  }, [])
+
   // Prefetch + revalidate everything for the current account, wave by wave, so
   // the current grades (wave 1) refresh and paint FIRST. Each wave is a single
   // batched request. Aborts if the user switches accounts mid-sync.
@@ -285,7 +309,8 @@ export function AuthProvider({ children }) {
       // support /batch (older deploy) or it errors, fall back to per-resource.
       const gotByKey = {}
       try {
-        const { results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+        const { userName: batchName, results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+        backfillUserName(username, batchName) // fill in a missing real name
         wave.forEach(([type, extra], i) => {
           const r = results.find((x) => x.type === type && String(x.quarter ?? '') === String(extra.quarter ?? '')) || results[i]
           if (r && r.success && r.data !== undefined) gotByKey[keyOf(type, extra)] = r.data
@@ -337,7 +362,7 @@ export function AuthProvider({ children }) {
       // notifications come from later background-poll syncs (and the Pi push).
       if (!firstLive) maybeNotify(gradeEvents, username)
     }
-  }, [cacheFor, persistCache, getData, bump])
+  }, [cacheFor, persistCache, getData, bump, backfillUserName])
 
   // Fire a grade notification for the active account's new grades — but only when
   // the app is backgrounded (in the foreground the "Recently posted" card already
@@ -418,7 +443,8 @@ export function AuthProvider({ children }) {
       for (const wave of waves) {
         const gotByKey = {}
         try {
-          const { results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          const { userName: batchName, results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          backfillUserName(username, batchName) // fill in a missing real name for this profile
           wave.forEach(([type, extra], i) => {
             const r = results.find((x) => x.type === type && String(x.quarter ?? '') === String(extra.quarter ?? '')) || results[i]
             if (r && r.success && r.data !== undefined) gotByKey[keyOf(type, extra)] = r.data
@@ -443,7 +469,7 @@ export function AuthProvider({ children }) {
     } finally {
       bgSyncing.current = false
     }
-  }, [cacheFor, persistCache, bump])
+  }, [cacheFor, persistCache, bump, backfillUserName])
 
   const saveProfiles = useCallback((next) => {
     setProfiles(next)
