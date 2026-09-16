@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake } from '../api/hac.js'
+import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake, dedupeClasses } from '../api/hac.js'
 import { cleanCourseName, guessCurrentQuarter } from '../lib/courses.js'
 import { clearPrefs } from '../lib/prefs.js'
 import { bgProfilesEnabled, pollIntervalMs, syncAllowedFor, snapshotReadEnabled } from '../lib/syncPolicy.js'
@@ -412,7 +412,13 @@ export function AuthProvider({ children }) {
       if (!snap || !snap.data || !snap.updatedAt) return
       if (snap.updatedAt <= loadSyncedAt(username)) return // localStorage is fresher
       const acct = cacheFor(username)
-      for (const [k, v] of Object.entries(snap.data)) acct.set(k, v)
+      // The Pi stores the raw scrape, but the live path runs every class fetch
+      // through dedupeClasses (collapses the duplicate old/new-section rows HAC
+      // leaves after a schedule change, strips subtotal rows). Snapshot data must
+      // land in the SAME shape or the snapshot tier paints phantom duplicate tiles
+      // that "fix themselves" only once the live sync overwrites them. Normalize
+      // class:* entries here so the two tiers agree even for older/raw docs.
+      for (const [k, v] of Object.entries(snap.data)) acct.set(k, k.startsWith('class:') ? dedupeClasses(v) : v)
       persistCache(username)
       try { localStorage.setItem(syncedKeyFor(username), String(snap.updatedAt)) } catch (_) {}
       if (userRef.current === username) { setSyncedAt(snap.updatedAt); bump() }

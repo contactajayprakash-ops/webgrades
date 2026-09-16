@@ -51,7 +51,7 @@ const cleanAssignments = (list) => (list || []).filter((a) => {
 // sections of a year-long class, or an old + new section after a schedule change
 // — which surfaces as duplicate rows (one real, one empty). Collapse them by the
 // stable course key, keeping the richer entry (more assignments / a real grade).
-function dedupeClasses(data) {
+export function dedupeClasses(data) {
   if (!data || !Array.isArray(data.assignmentsData)) return data;
   const cleaned = data.assignmentsData.map((c) => ({ ...c, assignments: cleanAssignments(c.assignments) }));
   const rank = (c) => (c.assignments?.length || 0) * 10 + (/\d/.test(c.overallAverage || '') ? 1 : 0);
