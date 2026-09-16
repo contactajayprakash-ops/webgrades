@@ -3,7 +3,7 @@
 // of truth — no risk of the two screens disagreeing).
 import { effectiveAverage } from './whatif.js'
 import { detectWeight, parseGrade, semesterGrade, liveSemesterAverage } from './gpa.js'
-import { cleanCourseName, courseKey, transcriptPeriod } from './courses.js'
+import { cleanCourseName, courseKey, transcriptPeriod, currentSchoolYear } from './courses.js'
 import { transcriptCourseName } from './courseCatalog.js'
 
 export const PERIOD_QUARTERS = { s1: ['1', '2'], s2: ['3', '4'], year: ['1', '2', '3', '4'] }
@@ -173,28 +173,25 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
 
 // Derive the transcript year groupings the cumulative views need.
 //
-// The latest transcript group is the CURRENT year only if the live classwork
-// matches it. HAC posts a finished year under the current calendar year (e.g.
-// 9th-grade finals show up labeled "2025-2026 · Grade 09") while the actually-
-// current classes (10th grade) haven't been transcripted yet. In that case the
-// latest group is completed PRIOR work and the live classwork is the current
-// year — otherwise those courses get orphaned (counted nowhere) and the current
-// year is mislabeled with the wrong grade level.
-export function splitTranscript(transcript, currentLiveRaw = null) {
+// The latest transcript group is the CURRENT year only if its school-year LABEL
+// is this school year. HAC posts a just-finished year under last school year's
+// label (e.g. 9th-grade finals show up as "2025-2026 · Grade 09") while the
+// actually-current classes (10th grade) aren't transcripted yet. Telling them
+// apart by the year label (vs today's school year) is robust; the old heuristic
+// compared live grades to the transcript and false-matched for high-GPA students
+// whose grades all cluster in the 90s — labeling the current year as 9th grade
+// and orphaning the real 9th-grade courses out of the cumulative setup.
+export function splitTranscript(transcript, currentLiveRaw = null, today = new Date()) {
   const txGroups = Array.isArray(transcript) ? transcript : []
   const latestYear = txGroups.reduce((m, g) => (g.year > m ? g.year : m), '')
   const latestGroup = txGroups.find((g) => g.year === latestYear) || null
 
-  let currentGroup = latestGroup
-  if (latestGroup && currentLiveRaw && currentLiveRaw.length) {
-    const txCur = (latestGroup.courses || []).map((c) => ({ ...c, code: c.courseCode || `${latestYear}-${c.description}` }))
-    // The latest group is the current year only if a real chunk of the live
-    // classwork lines up with it (not just one coincidental grade match). If
-    // barely anything matches, it's a completed year posted under this label.
-    const matched = Object.keys(matchOfficial(currentLiveRaw, txCur)).length
-    const need = Math.max(2, Math.ceil((txCur.length || 0) / 3))
-    if (matched < need) currentGroup = null
-  }
+  // Current only if the latest group's year IS this school year. A group labeled
+  // with an earlier school year is completed prior work, no matter what its
+  // grades happen to be. (A missing/blank year label falls back to "assume
+  // current" so nothing is worse than before.)
+  const curYear = currentSchoolYear(today)
+  const currentGroup = latestGroup && latestGroup.year && latestGroup.year !== curYear ? null : latestGroup
 
   const priorGroups = currentGroup ? txGroups.filter((g) => g.year !== latestYear) : txGroups
 
