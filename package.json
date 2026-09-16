@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "build:firebase": "VITE_API_BASE=https://diatjuqtrbl82.cloudfront.net/api vite build",
     "deploy:firebase": "npm run build:firebase && npx firebase-tools deploy --only hosting --project webgrades",
-    "test:credkey": "node scripts/test-credkey-parity.mjs"
+    "test:credkey": "node scripts/test-credkey-parity.mjs",
+    "test:transcript": "node scripts/test-transcript-split.mjs"
   },
   "dependencies": {
     "firebase": "^12.18.0",

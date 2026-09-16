@@ -102,6 +102,16 @@ export function guessCurrentQuarter(date = new Date()) {
   return '4'
 }
 
+// The current Frisco school year as a transcript-style "YYYY-YYYY" label. The
+// year rolls over in August, so Aug–Dec is `${y}-${y+1}` and Jan–Jul is
+// `${y-1}-${y}`. Matches the `year` field on transcript groups, so we can tell a
+// just-completed year (labeled with last school year) from the actually-current
+// one by its label instead of by coincidental grade overlap.
+export function currentSchoolYear(date = new Date()) {
+  const y = date.getFullYear()
+  return date.getMonth() >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`
+}
+
 // Estimate a class average from its assignment list (points-based).
 // APPROXIMATION — HAC weights by category, which the scrape doesn't expose.
 export function estimateAverage(rows) {
