@@ -4,6 +4,23 @@
    measurements. Every legacy class name is preserved so all views keep working.
    ============================================================================ */
 
+/* Self-hosted webfonts (variable, latin). Were loaded from a render-blocking
+   Google Fonts <link>, which the school's Lightspeed filter slow-walks — hanging
+   first paint ~20s. Now local: never blocked, precached by the SW after the first
+   visit. `font-display: swap` paints system-font text instantly and swaps when
+   the woff2 lands; glyphs outside latin (arrows, em-dash) fall back to the stack
+   in --font / --font-display, which already lead with -apple-system / system-ui. */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('/fonts/bricolage-grotesque-latin.woff2') format('woff2');
+  font-weight: 400 800; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Onest';
+  src: url('/fonts/onest-latin.woff2') format('woff2');
+  font-weight: 400 800; font-style: normal; font-display: swap;
+}
+
 :root {
   /* ===== Apple system backgrounds (dark) ===== */
   --bg: #000000;                 /* window / base */
