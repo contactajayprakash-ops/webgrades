@@ -25,9 +25,10 @@
         if ((t.theme || 'light') === 'light') document.documentElement.setAttribute('data-theme', 'light');
       } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <!-- Fonts are self-hosted (see @font-face in index.css) so the school's font
+         filter can never block first paint. Preconnect to Firestore instead, so
+         the TLS handshake for the snapshot read (task A) is already warm. -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
 
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-TTB99XSK4T"></script>
