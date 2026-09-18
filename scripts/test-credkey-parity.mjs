@@ -22,6 +22,15 @@ function piCredKey(username, password) {
   return crypto.createHash('sha256').update(`${username || ''} ${password || ''}`).digest('hex')
 }
 
+// --- Inline preflight path: byte-for-byte from the <script> in index.html.
+// Uses `p.username + ' ' + p.password` with no empty-string fallback (the inline
+// snippet bails earlier if username/password are missing), so only test real creds. ---
+async function inlineCredKey(username, password) {
+  const bytes = new TextEncoder().encode(username + ' ' + password)
+  const buf = await crypto.webcrypto.subtle.digest('SHA-256', bytes)
+  return Array.prototype.map.call(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 const cases = [
   { u: 'student01', p: 'Passw0rd!', expect: 'e24c3e277500a40af36f5ddc272a986607be8301dab57292715900269ef225b5' },
   { u: '', p: '', expect: crypto.createHash('sha256').update(' ').digest('hex') }, // empty-string fallbacks -> hash of a single space
@@ -31,15 +40,18 @@ let failed = 0
 for (const { u, p, expect } of cases) {
   const client = await clientCredKey(u, p)
   const pi = piCredKey(u, p)
-  const ok = client === pi && client === expect
+  // The inline snippet has no ''-fallback path, so only cross-check it on real creds.
+  const inline = u && p ? await inlineCredKey(u, p) : client
+  const ok = client === pi && client === inline && client === expect
   if (!ok) {
     failed++
     console.error(`FAIL  u=${JSON.stringify(u)} p=${JSON.stringify(p)}`)
     console.error(`  client=${client}`)
     console.error(`  pi    =${pi}`)
+    console.error(`  inline=${inline}`)
     console.error(`  expect=${expect}`)
   } else {
-    console.log(`ok    u=${JSON.stringify(u)} -> ${pi.slice(0, 16)}…`)
+    console.log(`ok    u=${JSON.stringify(u)} -> ${pi.slice(0, 16)}… (client=pi=inline)`)
   }
 }
 

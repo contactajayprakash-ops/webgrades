@@ -26,18 +26,31 @@ async function gunzipBase64(b64) {
   return new TextDecoder().decode(await new Response(stream).arrayBuffer())
 }
 
-// Returns { data, updatedAt } (data in the client's cache-key shape) or null when
-// there's no doc / it's unreachable / the browser can't gunzip.
-export async function readSnapshot(username, password) {
-  if (!username || !password) return null
-  const id = await credKey(username, password)
-  const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/grades/${id}?key=${API_KEY}`
-  const res = await fetch(url)
-  if (!res.ok) return null // 404 = no snapshot yet; anything else → fall through to live scrape
-  const doc = await res.json()
-  const f = doc.fields || {}
+// Decode a Firestore REST grades doc into { data, updatedAt }, or null.
+async function decodeDoc(doc) {
+  const f = (doc && doc.fields) || {}
   const payload = f.data && f.data.stringValue
   if (!payload) return null
   const json = (f.codec && f.codec.stringValue) === 'gzip' ? await gunzipBase64(payload) : payload
   return { data: JSON.parse(json), updatedAt: Number(f.updatedAt && f.updatedAt.integerValue) || 0 }
+}
+
+// Returns { data, updatedAt } (data in the client's cache-key shape) or null when
+// there's no doc / it's unreachable / the browser can't gunzip.
+export async function readSnapshot(username, password) {
+  if (!username || !password) return null
+  // Reuse the preflight fetch kicked off in index.html <head> — but ONLY when it
+  // was for the account being asked for (a profile switch after load must not
+  // paint the previous account's data). Any miss falls through unchanged.
+  try {
+    if (typeof window !== 'undefined' && window.__wgSnap) {
+      const pre = await window.__wgSnap
+      if (pre && pre.username === username && pre.doc) return await decodeDoc(pre.doc)
+    }
+  } catch (_) { /* fall through to our own fetch */ }
+  const id = await credKey(username, password)
+  const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/grades/${id}?key=${API_KEY}`
+  const res = await fetch(url)
+  if (!res.ok) return null // 404 = no snapshot yet; anything else → fall through to live scrape
+  return await decodeDoc(await res.json())
 }

@@ -34,6 +34,22 @@ The user sees the app's shape at ~0.5 s instead of a blank page until ~2 s. CLS
 stayed 0.077 (skeleton→app swap adds none). Signed-out clears the skeleton
 synchronously so the login card doesn't flash a dashboard shape.
 
+### A — snapshot preflight (grades paint)
+
+| | CONTENT_ms (grades) |
+|---|---:|
+| baseline | 2041 ms |
+| +B+C+F | 2028 ms |
+| **+A preflight** | **1776 ms** |
+
+Starting the Firestore fetch from `<head>` (before the bundle downloads/parses)
+overlaps the snapshot read with boot instead of doing it after React mounts —
+~265 ms off grades-paint here, and more on a higher-latency real network (the
+fetch fully hides behind bundle download). Parity: `test:credkey` now covers the
+inline hash too (client=pi=inline). Profile-switch verified: preflight fetches
+the active account; switching accounts shows the switched-to account's own data,
+no bleed.
+
 Entry chunk (task D target): **345 KB / 106.9 KB gzip**. CSS 12 KB gz. Firebase
 (cloudSync) 32 KB gz, lazy.
 
