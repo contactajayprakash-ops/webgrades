@@ -86,9 +86,46 @@
         "url": "https://webgrades.firebaseapp.com/"
       }
     </script>
+
+    <!-- Boot skeleton: painted from the HTML itself (no CSS/JS bundle needed) so
+         the user sees the app's shape instantly instead of a blank page through
+         the whole boot. React replaces #root on mount. Reads data-theme (set by
+         the theme script above) so it's not white-on-black for dark mode. -->
+    <style>
+      html { background: #06070c; }
+      html[data-theme="light"] { background: #eef0f5; }
+      .wg-skel { --c: rgba(255,255,255,.05); --c2: rgba(255,255,255,.09); padding: 84px 16px 24px; max-width: 1120px; margin: 0 auto; }
+      html[data-theme="light"] .wg-skel { --c: rgba(0,0,0,.05); --c2: rgba(0,0,0,.09); }
+      .wg-skel-nav { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); width: min(720px, 92%); height: 52px; border-radius: 26px; }
+      .wg-skel-h { height: 34px; width: 210px; border-radius: 9px; margin: 4px 2px 22px; }
+      .wg-skel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+      .wg-skel-tile { height: 118px; border-radius: 22px; }
+      .wg-skel-nav, .wg-skel-h, .wg-skel-tile { background: linear-gradient(90deg, var(--c) 25%, var(--c2) 37%, var(--c) 63%); background-size: 200% 100%; animation: wg-sh 1.5s ease-in-out infinite; }
+      @keyframes wg-sh { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+      @media (max-width: 640px) { .wg-skel-grid { grid-template-columns: repeat(2, 1fr); } .wg-skel { padding-top: 72px; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="wg-skel" aria-hidden="true">
+      <div class="wg-skel-nav"></div>
+      <div class="wg-skel-h"></div>
+      <div class="wg-skel-grid">
+        <div class="wg-skel-tile"></div><div class="wg-skel-tile"></div><div class="wg-skel-tile"></div>
+        <div class="wg-skel-tile"></div><div class="wg-skel-tile"></div><div class="wg-skel-tile"></div>
+      </div>
+    </div></div>
+    <script>
+      // The skeleton is the signed-in dashboard shape. A signed-out visitor would
+      // just flash it before the login card, so clear it synchronously (before
+      // paint) when there's no active profile.
+      try {
+        var _pr = JSON.parse(localStorage.getItem('wg_profiles') || '[]');
+        var _ac = localStorage.getItem('wg_active');
+        if (!_pr.some(function (p) { return p && p.username && p.password && (!_ac || p.username === _ac); })) {
+          var _r = document.getElementById('root'); if (_r) _r.textContent = '';
+        }
+      } catch (e) {}
+    </script>
     <noscript>
       <h1>WebGrades — Frisco ISD Grades &amp; Weighted GPA</h1>
       <p>
