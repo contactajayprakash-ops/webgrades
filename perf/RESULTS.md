@@ -20,6 +20,20 @@ network) the app went from **~20 s to ~1.5–2 s** — self-hosted fonts can't b
 blocked. Normal-network shaved a little via the Firestore preconnect. No CLS
 regression from the font swap.
 
+### F — boot skeleton (perceived speed)
+
+New metric **PAINT_ms** = first non-blank paint (skeleton shows). The skeleton is
+inline in the HTML, so it paints as soon as the render-blocking CSS resolves,
+long before React mounts and the real grades hydrate.
+
+| | PAINT_ms (shape appears) | CONTENT_ms (real grades) |
+|---|---:|---:|
+| signed-in, **+F** | **513 ms** | 2028 ms |
+
+The user sees the app's shape at ~0.5 s instead of a blank page until ~2 s. CLS
+stayed 0.077 (skeleton→app swap adds none). Signed-out clears the skeleton
+synchronously so the login card doesn't flash a dashboard shape.
+
 Entry chunk (task D target): **345 KB / 106.9 KB gzip**. CSS 12 KB gz. Firebase
 (cloudSync) 32 KB gz, lazy.
 

@@ -30,14 +30,17 @@ const CPU_RATE = 4
 const CONTENT_SEL = signedIn ? '.grade-badge, .gt-pct' : 'form, #root input, #root h1, #root h2'
 
 const INJECT = (sel) => `
-  window.__m = { cls: 0, tbt: 0, content: null };
+  window.__m = { cls: 0, tbt: 0, content: null, paint: null };
   new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__m.cls += e.value; }).observe({ type: 'layout-shift', buffered: true });
   new PerformanceObserver((l) => { for (const e of l.getEntries()) { const b = e.duration - 50; if (b > 0) window.__m.tbt += b; } }).observe({ type: 'longtask', buffered: true });
+  const root = () => document.getElementById('root');
   const check = () => {
-    if (window.__m.content != null) return;
-    if (document.querySelector(${JSON.stringify(sel)})) {
+    // First non-blank paint: skeleton (or any #root child) shows.
+    if (window.__m.paint == null && root() && root().firstElementChild) window.__m.paint = performance.now();
+    if (window.__m.content == null && document.querySelector(${JSON.stringify(sel)})) {
       requestAnimationFrame(() => requestAnimationFrame(() => { if (window.__m.content == null) window.__m.content = performance.now(); }));
-    } else { requestAnimationFrame(check); }
+    }
+    if (window.__m.content == null || window.__m.paint == null) requestAnimationFrame(check);
   };
   requestAnimationFrame(check);
 `
@@ -77,8 +80,10 @@ async function once() {
 const results = []
 for (let i = 0; i < RUNS; i++) { process.stderr.write(`  run ${i + 1}/${RUNS}...\n`); results.push(await once()) }
 const contentMed = median(results.map((r) => r.content))
+const paintMed = median(results.map((r) => r.paint))
 console.log(JSON.stringify({
   url, mode: signedIn ? `signed-in(${user})` : 'signed-out', runs: RUNS,
+  PAINT_ms: paintMed != null ? Math.round(paintMed) : null,
   CONTENT_ms: contentMed != null ? Math.round(contentMed) : null,
   TBT_ms: Math.round(median(results.map((r) => r.tbt)) ?? 0),
   CLS: Number((median(results.map((r) => r.cls)) ?? 0).toFixed(3)),
