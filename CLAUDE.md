@@ -216,6 +216,41 @@ Offline data comes from the **application layer**, not the SW:
 
 Adding an IndexedDB cache would duplicate all of this.
 
+## Client cold-open boot path
+
+The snapshot pipeline made the *data* path fast; a second round (`PERF-PLAN.md`)
+fixed the *boot* path. The current cold open, in order:
+
+1. **Repeat opens skip the network for the shell.** The SW (`generateSW`,
+   `navigateFallback: '/index.html'`) serves the precached `index.html` from the
+   workbox precache — verified `fromServiceWorker`. The `no-store` header and the
+   precache don't conflict (Cache API ignores `no-store`). First-ever open still
+   hits the network.
+2. **Fonts are self-hosted** (`public/fonts/*.woff2`, `@font-face` in `index.css`,
+   `font-display: swap`). The old render-blocking Google Fonts `<link>` was
+   slow-walked by the school's Lightspeed filter and **hung first paint ~20 s** —
+   the biggest real-world regression. Never re-add an external font `<link>`.
+3. **Snapshot preflight** — a `<head>` IIFE (`window.__wgSnap` in `index.html`)
+   hashes the active profile's creds and starts the Firestore `grades/<credKey>`
+   fetch *before the bundle exists*. `src/lib/snapshotRead.js` awaits it and reuses
+   the doc only when `pre.username === username` (a profile switch must not paint
+   the prefletched account's data), else falls through to its own fetch. Preceded
+   by a `preconnect` to `firestore.googleapis.com`. The inline hash is a **third**
+   copy of the credKey string — `scripts/test-credkey-parity.mjs` covers it.
+4. **Boot skeleton** painted from the HTML itself (inline `<style>` + markup in
+   `#root`), theme-aware via `data-theme`. Cleared synchronously for signed-out.
+   React replaces `#root` on mount. Shape on screen ~0.5 s vs blank-until-React.
+5. **Route-split entry chunk** — `App.jsx` lazy-loads all views except `Dashboard`
+   and lazy-loads the classic shell (`LayoutLegacy`); each shell wraps its
+   `<Outlet>` in `<Suspense>` so navigation keeps the nav. Entry chunk ~88 KB gz.
+6. **Settings sync is deferred** to `requestIdleCallback` (`useSettingsSync`) so
+   its firebase chunk doesn't contend during boot. Its last-write-wins reconcile
+   (`8e43258`) is load-bearing — don't touch it.
+
+Before/after numbers live in `perf/RESULTS.md`; re-measure with `perf/measure.mjs`
+(needs `npm i --no-save puppeteer-core`; Slow-4G + 4× CPU; `--block-fonts`
+simulates the school network).
+
 ## Known issue — CloudFront gateway errors
 
 CloudFront edges intermittently fail to resolve the Tailscale origin and return

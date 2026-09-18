@@ -91,3 +91,22 @@ Key reads from the baseline:
   ~500 ms grades-vs-shell gap is the post-mount snapshot fetch (task A target).
 - **With fonts blocked the app hangs ~20s** — the render-blocking Google Fonts
   `<link>` is the single biggest real-world problem (task B).
+
+### G — service worker serves the shell (verified, no change)
+
+Repeat opens: the navigation is served **`fromServiceWorker: true`** (workbox
+precache holds `index.html`), so they skip the `GET /` network round trip. The
+`no-store` header and the precache don't conflict (Cache API ignores `no-store`).
+Nothing to fix — already reclaimed. `no-store` headers left as-is.
+
+## Summary
+
+| scenario | baseline | now | Δ |
+|---|---:|---:|---|
+| signed-in grades, normal net | 2041 ms | **1589 ms** | −22% |
+| signed-in grades, **fonts blocked (school)** | **20826 ms** | **~1900 ms** | **−91%** |
+| first-shape paint (skeleton) | — (blank) | **~520 ms** | new |
+| entry chunk (gz) | 106.9 KB | 88.5 KB | −17% |
+
+The school-network case is the real fix: unusable (~20 s blank) → ~2 s, with the
+app's shape on screen at ~0.5 s. TBT/CLS unchanged throughout (≈15 ms / 0.077).
