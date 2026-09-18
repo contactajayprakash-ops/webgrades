@@ -30,6 +30,33 @@
          the TLS handshake for the snapshot read (task A) is already warm. -->
     <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
 
+    <!-- Snapshot preflight: start the grades fetch NOW, from the HTML, instead of
+         waiting for ~104 KB of JS to download+parse+mount first. Credentials are a
+         synchronous localStorage read, so this can run before the bundle exists.
+         src/lib/snapshotRead.js awaits window.__wgSnap and reuses the result when
+         it's for the active profile (else falls through to its own fetch). The
+         hash string MUST stay byte-identical to the Pi / cloudSync.js / the inline
+         case in scripts/test-credkey-parity.mjs: `username + ' ' + password`. -->
+    <script>
+      window.__wgSnap = (async function () {
+        try {
+          var profs = JSON.parse(localStorage.getItem('wg_profiles') || '[]');
+          var active = localStorage.getItem('wg_active');
+          var p = profs.filter(function (x) { return x && x.username === active; })[0] || profs[0];
+          if (!p || !p.username || !p.password) return null;
+          var bytes = new TextEncoder().encode(p.username + ' ' + p.password);
+          var buf = await crypto.subtle.digest('SHA-256', bytes);
+          var id = Array.prototype.map.call(new Uint8Array(buf), function (b) {
+            return b.toString(16).padStart(2, '0');
+          }).join('');
+          var r = await fetch('https://firestore.googleapis.com/v1/projects/webgrades'
+            + '/databases/(default)/documents/grades/' + id
+            + '?key=AIzaSyCjM4oh7m96ZaU4zLWE-m81JJKVPxkZ4Q0');
+          return r.ok ? { username: p.username, doc: await r.json() } : null;
+        } catch (e) { return null; }
+      })();
+    </script>
+
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-TTB99XSK4T"></script>
     <script>
