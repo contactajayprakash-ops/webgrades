@@ -71,6 +71,18 @@ route's load instead of blanking the page.
 case (fonts blocked) went from **~20 s to ~2 s**, with the app's shape on screen
 at ~0.5 s (skeleton).
 
+### E — defer the settings-sync firebase chunk
+
+Moved the initial settings pull (which dynamic-imports the 31 KB gz firebase
+chunk) behind `requestIdleCallback` (2 s `setTimeout` fallback for Safari). Kept
+the debounced push-on-change and the last-write-wins reconcile untouched.
+
+Grades-paint **flat: 1589 → 1588 ms** — as expected, since the snapshot paints via
+the SDK-free REST path, so it never waited on firebase. The win is off-metric:
+the chunk no longer downloads/parses in the critical window, freeing bandwidth and
+main-thread on a constrained device. Verified settings sync still runs (the chunk
+loads at idle, reconcile executes). No regression.
+
 Entry chunk (task D target): **345 KB / 106.9 KB gzip**. CSS 12 KB gz. Firebase
 (cloudSync) 32 KB gz, lazy.
 

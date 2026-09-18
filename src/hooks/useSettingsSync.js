@@ -61,7 +61,13 @@ export function useSettingsSync(session) {
     clearTimeout(pushTimer.current) // drop any push queued by the previous profile
     if (!syncAllowedFor(s.username)) return // dev-browser lock: this account doesn't sync here
     let cancelled = false
-    ;(async () => {
+    // The reconcile logic below is unchanged (last-write-wins with the 20s
+    // localFresh guard from 8e43258 — do not touch). Only WHEN it runs moved: it
+    // dynamic-imports the ~31 KB gz firebase chunk, which used to fire on mount and
+    // compete for bandwidth with the grades the user is waiting for. Settings sync
+    // isn't time-sensitive, so defer it to idle (2s fallback for Safari).
+    const reconcile = async () => {
+      if (cancelled) return
       try {
         const { pullSettings, pushSettings } = await import('../lib/settingsSync.js')
         const cloud = await pullSettings(s.username, s.password)
@@ -89,8 +95,13 @@ export function useSettingsSync(session) {
         }
         // else: equal + not fresh → already in sync, nothing to do
       } catch (_) { /* stay local */ }
-    })()
-    return () => { cancelled = true }
+    }
+    const useIdle = typeof requestIdleCallback !== 'undefined'
+    const handle = useIdle ? requestIdleCallback(reconcile, { timeout: 3000 }) : setTimeout(reconcile, 2000)
+    return () => {
+      cancelled = true
+      if (useIdle) { try { cancelIdleCallback(handle) } catch (_) {} } else clearTimeout(handle)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.username])
 
