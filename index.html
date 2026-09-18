@@ -39,21 +39,27 @@
          case in scripts/test-credkey-parity.mjs: `username + ' ' + password`. -->
     <script>
       window.__wgSnap = (async function () {
+        var p;
         try {
           var profs = JSON.parse(localStorage.getItem('wg_profiles') || '[]');
           var active = localStorage.getItem('wg_active');
-          var p = profs.filter(function (x) { return x && x.username === active; })[0] || profs[0];
+          p = profs.filter(function (x) { return x && x.username === active; })[0] || profs[0];
           if (!p || !p.username || !p.password) return null;
+        } catch (e) { return null; }
+        try {
           var bytes = new TextEncoder().encode(p.username + ' ' + p.password);
           var buf = await crypto.subtle.digest('SHA-256', bytes);
           var id = Array.prototype.map.call(new Uint8Array(buf), function (b) {
             return b.toString(16).padStart(2, '0');
           }).join('');
+          // Hard deadline: on the school network Firestore may be black-holed (hang),
+          // so bound it — a hang here must not strand the snapshot read.
+          var sig; try { sig = AbortSignal.timeout(2500); } catch (e) { sig = undefined; }
           var r = await fetch('https://firestore.googleapis.com/v1/projects/webgrades'
             + '/databases/(default)/documents/grades/' + id
-            + '?key=AIzaSyCjM4oh7m96ZaU4zLWE-m81JJKVPxkZ4Q0');
-          return r.ok ? { username: p.username, doc: await r.json() } : null;
-        } catch (e) { return null; }
+            + '?key=AIzaSyCjM4oh7m96ZaU4zLWE-m81JJKVPxkZ4Q0', { signal: sig });
+          return { username: p.username, doc: r.ok ? await r.json() : null };
+        } catch (e) { return { username: p.username, doc: null }; } // report the user so readSnapshot won't re-fetch
       })();
     </script>
 

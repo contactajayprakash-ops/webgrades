@@ -247,6 +247,19 @@ fixed the *boot* path. The current cold open, in order:
    its firebase chunk doesn't contend during boot. Its last-write-wins reconcile
    (`8e43258`) is load-bearing — don't touch it.
 
+**Rule — treat every third-party origin as BLACK-HOLED, not slow.** The school
+filter drops requests to a full connection timeout instead of refusing them (this
+is what made the Google Fonts `<link>` hang first paint ~20 s). `firestore.
+googleapis.com` is NOT on the confirmed-reachable list and could be dropped the
+same way. So: every boot-path fetch to a third-party origin carries an
+`AbortSignal.timeout` (the snapshot preflight in `index.html` and `readSnapshot`
+both use 2.5 s — a bare `fetch`'s try/catch catches errors, not hangs), and
+**nothing on the critical path `await`s one without a deadline**. Specifically the
+snapshot read is fired **concurrently** with the live scrape in `AuthContext`, not
+awaited before it — otherwise a Firestore hang strands `syncAll` behind it and no
+grades load at all. Newest-wins merge (+ the `liveSyncedAccts` guard) sorts out
+ordering when both land.
+
 Before/after numbers live in `perf/RESULTS.md`; re-measure with `perf/measure.mjs`
 (needs `npm i --no-save puppeteer-core`; Slow-4G + 4× CPU; `--block-fonts`
 simulates the school network).

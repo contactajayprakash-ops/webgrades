@@ -35,22 +35,34 @@ async function decodeDoc(doc) {
   return { data: JSON.parse(json), updatedAt: Number(f.updatedAt && f.updatedAt.integerValue) || 0 }
 }
 
+// Every third-party fetch on the boot path gets a hard deadline. On the school
+// network an origin (Firestore) can be BLACK-HOLED — the request hangs to a full
+// connection timeout instead of failing — so a bare `fetch` never rejects and its
+// try/catch never fires. AbortSignal.timeout turns a hang into a fast reject.
+const FETCH_TIMEOUT_MS = 2500
+function deadline(ms) {
+  try { return AbortSignal.timeout(ms) } catch (_) { return undefined } // old iOS: no deadline, but the read is non-blocking anyway
+}
+
 // Returns { data, updatedAt } (data in the client's cache-key shape) or null when
-// there's no doc / it's unreachable / the browser can't gunzip.
+// there's no doc / it's unreachable / times out / the browser can't gunzip.
 export async function readSnapshot(username, password) {
   if (!username || !password) return null
-  // Reuse the preflight fetch kicked off in index.html <head> — but ONLY when it
-  // was for the account being asked for (a profile switch after load must not
-  // paint the previous account's data). Any miss falls through unchanged.
   try {
     if (typeof window !== 'undefined' && window.__wgSnap) {
-      const pre = await window.__wgSnap
-      if (pre && pre.username === username && pre.doc) return await decodeDoc(pre.doc)
+      const pre = await window.__wgSnap // bounded by the inline preflight's own timeout
+      // The preflight already tried for THIS account — trust its result (a doc, or
+      // a miss/timeout → null) and do NOT re-fetch, which would double the deadline
+      // when Firestore is black-holed. Only a different account (a profile switch
+      // after load) falls through to its own fetch.
+      if (pre && pre.username === username) return pre.doc ? await decodeDoc(pre.doc) : null
     }
   } catch (_) { /* fall through to our own fetch */ }
-  const id = await credKey(username, password)
-  const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/grades/${id}?key=${API_KEY}`
-  const res = await fetch(url)
-  if (!res.ok) return null // 404 = no snapshot yet; anything else → fall through to live scrape
-  return await decodeDoc(await res.json())
+  try {
+    const id = await credKey(username, password)
+    const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/grades/${id}?key=${API_KEY}`
+    const res = await fetch(url, { signal: deadline(FETCH_TIMEOUT_MS) })
+    if (!res.ok) return null // 404 = no snapshot yet; anything else → fall through to live scrape
+    return await decodeDoc(await res.json())
+  } catch (_) { return null } // timeout / network / gunzip → live scrape handles it
 }
