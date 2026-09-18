@@ -1,24 +1,30 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext.jsx'
 import Login from './components/Login.jsx'
 import Layout from './components/Layout.jsx'
-import LayoutLegacy from './components/LayoutLegacy.jsx'
 import { loadUI } from './lib/ui.js'
 import SyncToast from './components/SyncToast.jsx'
 import InstallPrompt from './components/InstallPrompt.jsx'
 import Dashboard from './views/Dashboard.jsx'
-import Grades from './views/Grades.jsx'
-import Gpa from './views/Gpa.jsx'
-import Agenda from './views/Agenda.jsx'
-import Schedule from './views/Schedule.jsx'
-import Week from './views/Week.jsx'
-import Ipr from './views/Ipr.jsx'
-import Rank from './views/Rank.jsx'
-import Transcript from './views/Transcript.jsx'
-import Attendance from './views/Attendance.jsx'
-import Settings from './views/Settings.jsx'
+import { Loading } from './components/ui.jsx'
 import MovedNotice, { isRetiredHost } from './components/MovedNotice.jsx'
+
+// Everything except the Dashboard (the cold-open target) and the default v2 shell
+// is code-split out of the entry chunk — it isn't needed to paint grades. The
+// classic shell only renders for the minority who opted into it; it loads on
+// demand. Each is a route the user navigates to, so the round-trip is hidden.
+const LayoutLegacy = lazy(() => import('./components/LayoutLegacy.jsx'))
+const Grades = lazy(() => import('./views/Grades.jsx'))
+const Gpa = lazy(() => import('./views/Gpa.jsx'))
+const Agenda = lazy(() => import('./views/Agenda.jsx'))
+const Schedule = lazy(() => import('./views/Schedule.jsx'))
+const Week = lazy(() => import('./views/Week.jsx'))
+const Ipr = lazy(() => import('./views/Ipr.jsx'))
+const Rank = lazy(() => import('./views/Rank.jsx'))
+const Transcript = lazy(() => import('./views/Transcript.jsx'))
+const Attendance = lazy(() => import('./views/Attendance.jsx'))
+const Settings = lazy(() => import('./views/Settings.jsx'))
 
 export default function App() {
   const { isAuthed } = useAuth()
@@ -42,9 +48,13 @@ export default function App() {
 
   return (
     <>
-      <Routes>
-        <Route element={<Shell />}>
-          <Route path="/" element={<Dashboard />} />
+      {/* Outer boundary catches the lazy shell (classic only). Lazy ROUTES are
+          caught by an inner <Suspense> around the shell's <Outlet>, so navigating
+          keeps the nav in place instead of blanking the whole page. */}
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route element={<Shell />}>
+            <Route path="/" element={<Dashboard />} />
           <Route path="/grades" element={<Grades />} />
           <Route path="/gpa" element={<Gpa />} />
           <Route path="/agenda" element={<Agenda />} />
@@ -56,8 +66,9 @@ export default function App() {
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
+          </Route>
+        </Routes>
+      </Suspense>
       <SyncToast />
       <InstallPrompt />
     </>

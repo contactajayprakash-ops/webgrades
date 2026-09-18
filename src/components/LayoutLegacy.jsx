@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useSettingsSync } from '../hooks/useSettingsSync.js'
 import { Icon } from './icons.jsx'
-import { OfflineBanner } from './ui.jsx'
+import { OfflineBanner, Loading } from './ui.jsx'
 import ProfileSwitcher from './ProfileSwitcher.jsx'
 import PullToRefresh from './PullToRefresh.jsx'
 
@@ -145,7 +145,7 @@ export default function LayoutLegacy() {
         <main className="main" key={activeUsername}>
           <PullToRefresh onRefresh={() => syncAll({ full: true })}>
             <OfflineBanner />
-            <Outlet />
+            <Suspense fallback={<Loading />}><Outlet /></Suspense>
           </PullToRefresh>
         </main>
       </div>
