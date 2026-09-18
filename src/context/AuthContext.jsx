@@ -410,6 +410,9 @@ export function AuthProvider({ children }) {
       const { readSnapshot } = await import('../lib/snapshotRead.js')
       const snap = await readSnapshot(username, password)
       if (!snap || !snap.data || !snap.updatedAt) return
+      // A live sync may have landed while we were fetching (they now run
+      // concurrently) — don't downgrade fresh live data to an older snapshot.
+      if (liveSyncedAccts.current.has(username)) return
       if (snap.updatedAt <= loadSyncedAt(username)) return // localStorage is fresher
       const acct = cacheFor(username)
       // The Pi stores the raw scrape, but the live path runs every class fetch
@@ -553,11 +556,14 @@ export function AuthProvider({ children }) {
     if (!creds) return
     let cancelled = false
     ;(async () => {
-      // Wake the Pi in parallel — the snapshot read hits Firestore, not the Pi,
-      // so it can paint before the (possibly cold-starting) backend responds.
-      const wake = apiWake().catch(() => {})
-      await hydrateFromSnapshot(creds.username, creds.password)
-      await wake
+      // The snapshot read must NEVER gate the live scrape. On the school network a
+      // third-party origin (Firestore) can be BLACK-HOLED — the request hangs to a
+      // full connection timeout rather than failing — exactly the failure we just
+      // removed for Google Fonts. Awaiting it would strand syncAll behind that
+      // hang. So fire the snapshot read concurrently (it has its own 2.5s deadline
+      // and paints when it lands, newest-wins); wake + scrape proceed independently.
+      hydrateFromSnapshot(creds.username, creds.password)
+      await apiWake().catch(() => {})
       if (!cancelled) syncAll()
     })()
     return () => { cancelled = true }
