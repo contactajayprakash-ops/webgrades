@@ -50,6 +50,27 @@ inline hash too (client=pi=inline). Profile-switch verified: preflight fetches
 the active account; switching accounts shows the switched-to account's own data,
 no bleed.
 
+### D — route splitting (entry chunk)
+
+Lazy-loaded the 10 non-dashboard views + the classic shell. **Entry chunk gzip:
+106.9 KB → 88.5 KB** (−18 KB / −17%). Split chunks: Gpa 7.6, Grades 4.8, Settings
+3.6, LayoutLegacy 1.6 KB gz, etc. Lazy routes load cleanly (0 errors); an inner
+`<Suspense>` around each shell's `<Outlet>` keeps the nav in place during a
+route's load instead of blanking the page.
+
+### Cumulative (signed-in, grades painted, normal network)
+
+| | grades paint |
+|---|---:|
+| baseline | 2041 ms |
+| +B+C | 1975 |
+| +A preflight | 1776 |
+| **+D split** | **1589 ms** |
+
+~450 ms faster on a normal network — and, far more importantly, the school-network
+case (fonts blocked) went from **~20 s to ~2 s**, with the app's shape on screen
+at ~0.5 s (skeleton).
+
 Entry chunk (task D target): **345 KB / 106.9 KB gzip**. CSS 12 KB gz. Firebase
 (cloudSync) 32 KB gz, lazy.
 
