@@ -92,6 +92,10 @@ export default function Layout() {
 
   return (
     <div className="app-shell v2">
+      {/* Cinematic animated background as a REAL element (not a body::before gated
+          by :has(.app-shell.v2)) — that pseudo-element + :has combo intermittently
+          dropped to pure black after a route/Suspense subtree swap. */}
+      <div className="v2-bg" aria-hidden="true" />
       {/* Desktop floating Liquid Glass nav */}
       <header className="topbar">
         <NavLink to="/" end className="tb-brand">
