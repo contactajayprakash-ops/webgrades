@@ -913,7 +913,10 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
    A calm dark canvas + a single translucent pill of navigation. Content scrolls
    beneath the glass; the sidebar becomes an overlay sheet behind "More".
    ============================================================================ */
-.app-shell.v2 { display: block; min-height: 100dvh; }
+/* isolation makes .app-shell.v2 a stacking context, so the z-index:-1 .v2-bg
+   stays scoped inside the shell (which paints above body's opaque background)
+   instead of escaping to the root context where body's bg would cover it. */
+.app-shell.v2 { display: block; min-height: 100dvh; isolation: isolate; }
 
 /* Sidebar → overlay glass sheet at every width (opened by "More" / the menu). */
 .app-shell.v2 .sidebar {
