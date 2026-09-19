@@ -915,9 +915,6 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
    ============================================================================ */
 .app-shell.v2 { display: block; min-height: 100dvh; }
 
-/* Calmer atmosphere — dial the busy aurora back so the glass reads clean. */
-body:has(.app-shell.v2)::before { opacity: 0.38; }
-
 /* Sidebar → overlay glass sheet at every width (opened by "More" / the menu). */
 .app-shell.v2 .sidebar {
   position: fixed; z-index: 250; top: 0; left: 0;
@@ -1019,9 +1016,14 @@ body:has(.app-shell.v2)::before { opacity: 0.38; }
 
 /* Cinematic canvas — one soft bloom, not a busy aurora */
 body:has(.app-shell.v2) { background: #06070c; }
-body:has(.app-shell.v2)::before {
-  content: '';
-  opacity: 1;
+/* Real element (rendered by Layout) instead of body::before + :has(). Opaque
+   (the linear fill), fixed, z-index:-1 so it sits behind the glass content and
+   covers the base body::before. Not gated by :has, so a Suspense/route subtree
+   swap can't drop it to black. */
+.app-shell.v2 .v2-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background-image:
     radial-gradient(105vmax 72vmax at 20% -18%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 55%),
     radial-gradient(90vmax 66vmax at 100% 8%, color-mix(in srgb, var(--accent-2) 13%, transparent), transparent 58%),
@@ -1049,7 +1051,7 @@ html[data-theme="light"] .app-shell.v2 {
   --card-shadow: 0 20px 48px -28px rgba(20, 24, 40, 0.2), 0 3px 12px -8px rgba(20, 24, 40, 0.1);
 }
 html[data-theme="light"] body:has(.app-shell.v2) { background: #eceff5; }
-html[data-theme="light"] body:has(.app-shell.v2)::before {
+html[data-theme="light"] .app-shell.v2 .v2-bg {
   background-image:
     radial-gradient(105vmax 72vmax at 20% -18%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 55%),
     radial-gradient(90vmax 66vmax at 100% 8%, color-mix(in srgb, var(--accent-2) 30%, transparent), transparent 58%),
