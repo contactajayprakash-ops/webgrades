@@ -17,6 +17,40 @@ export function saveSeen(username, snapshot) {
   try { localStorage.setItem(keyFor(username), JSON.stringify(snapshot)) } catch (_) {}
 }
 
+// When WebGrades FIRST saw each assignment graded — our proxy for "posted on HAC"
+// (HAC doesn't expose a real post timestamp). Persisted per account and NEVER
+// reset by "mark seen" (unlike the seen snapshot), so each assignment keeps its
+// own first-seen time. Shape: { "<courseName>||<assignmentName>": ms }. A value
+// of 0 means "seeded" — present before we started tracking, so we show no time
+// for it rather than a bogus "just now".
+const postedKeyFor = (u) => `wg_posted_${u || '_anon'}`
+const idOf = (courseName, name) => `${courseName}||${name}`
+
+export function loadPosted(username) {
+  try { return JSON.parse(localStorage.getItem(postedKeyFor(username))) || null } catch (_) { return null }
+}
+
+// Record the first-seen time of every currently-graded assignment. The first ever
+// call for an account (no store yet) seeds all current assignments at 0 (unknown
+// time) so we don't stamp a whole gradebook as "just now"; every later call
+// stamps only genuinely new keys with the real time. Returns the map.
+export function recordPosted(username, classes) {
+  const stored = loadPosted(username)
+  const baseline = stored == null
+  const map = stored || {}
+  const now = Date.now()
+  for (const c of classes || []) {
+    for (const asg of c.assignments || []) {
+      const g = gradeOf(asg)
+      if (g == null || !asg.assignmentName || isSubtotalName(asg.assignmentName)) continue
+      const id = idOf(c.courseName, asg.assignmentName)
+      if (!(id in map)) map[id] = baseline ? 0 : now
+    }
+  }
+  try { localStorage.setItem(postedKeyFor(username), JSON.stringify(map)) } catch (_) {}
+  return map
+}
+
 // A graded assignment's display grade, or null if it's not really graded yet.
 const gradeOf = (a) => {
   const g = a && a.grade
@@ -70,9 +104,11 @@ export function changedSince(seen, classes) {
 }
 
 // The specific assignments graded/changed since last seen, for the feed:
-// [{ course, name, grade, isNew }]. Skips classes with no assignment baseline
-// (legacy snapshot / first-ever visit) so we don't flood the feed on upgrade.
-export function postedSince(seen, classes) {
+// [{ course, name, grade, isNew, category, postedAt }]. Skips classes with no
+// assignment baseline (legacy snapshot / first-ever visit) so we don't flood the
+// feed on upgrade. `postedMap` (from recordPosted) supplies each row's first-seen
+// time; 0/absent means unknown (seeded before tracking) and the UI shows no time.
+export function postedSince(seen, classes, postedMap = null) {
   if (!seen) return []
   const out = []
   for (const c of classes || []) {
@@ -82,7 +118,11 @@ export function postedSince(seen, classes) {
     for (const a of c.assignments || []) if (a.assignmentName) catByName[a.assignmentName] = a.category
     const cur = assignmentsOf(c)
     for (const [name, grade] of Object.entries(cur)) {
-      if (e.a[name] !== grade) out.push({ course: cleanCourseName(c.courseName), name, grade, isNew: !(name in e.a), category: catByName[name] })
+      if (e.a[name] !== grade) out.push({
+        course: cleanCourseName(c.courseName), name, grade,
+        isNew: !(name in e.a), category: catByName[name],
+        postedAt: (postedMap && postedMap[idOf(c.courseName, name)]) || 0,
+      })
     }
   }
   return out
