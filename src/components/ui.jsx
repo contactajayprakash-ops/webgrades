@@ -115,6 +115,7 @@ export function OfflineBanner() {
 }
 
 // "grades as of 2m ago", ticking. `at` is a ms epoch (0 = never).
+export function timeAgo(at, nowTs = Date.now()) { return agoLabel(at, nowTs) }
 function agoLabel(at, nowTs) {
   if (!at) return 'not synced yet'
   const s = Math.max(0, Math.round((nowTs - at) / 1000))

@@ -4,12 +4,12 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useHacData } from '../hooks/useHacData.js'
 import { useGpaMetrics, GPA_METRICS, findMetric } from '../hooks/useGpaMetrics.js'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
-import { PageHead, Loading, Empty, GradeBadge, LastUpdated } from '../components/ui.jsx'
+import { PageHead, Loading, Empty, GradeBadge, LastUpdated, timeAgo } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import { parseGrade, letterGrade } from '../lib/gpa.js'
 import { cleanCourseName, courseKey, QUARTERS, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
-import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince } from '../lib/seen.js'
+import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince, loadPosted, recordPosted } from '../lib/seen.js'
 import { officialAverage, isAssessment, isProgress } from '../lib/whatif.js'
 import { loadTheme } from '../lib/theme.js'
 import { markSettingsChanged } from '../lib/settingsMeta.js'
@@ -64,13 +64,23 @@ function useRecentGrades() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classes.length, activeUsername])
 
+  // Per-assignment first-seen time ("posted" proxy). Recorded whenever the grade
+  // data changes, so a grade that arrives mid-session gets stamped with its real
+  // arrival time; re-run on account switch too.
+  const [posted, setPosted] = useState(() => loadPosted(activeUsername) || {})
+  useEffect(() => {
+    if (classes.length) setPosted(recordPosted(activeUsername, classes))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classes, activeUsername])
+
   const changed = useMemo(() => new Set(changedSince(seen, classes)), [seen, classes])
   const markSeen = () => { const snap = snapshotOf(classes); saveSeen(activeUsername, snap); setSeen(snap) }
 
   // Assignment-level feed for "Recently posted": the exact assignments that were
   // graded since last visit (class · assignment · grade), newest first. Empty
-  // until there's a snapshot to compare against.
-  const feed = useMemo(() => postedSince(seen, classes), [seen, classes])
+  // until there's a snapshot to compare against. Each row carries its own
+  // first-seen `postedAt` so the UI shows when it posted, not the global sync time.
+  const feed = useMemo(() => postedSince(seen, classes, posted), [seen, classes, posted])
 
   return { quarter, classes, seen, changed, markSeen, feed }
 }
@@ -110,6 +120,7 @@ function RecentlyPosted({ recent }) {
                     {f.course}
                     {kind && <span className={`recent-cat ${kind}`}>{kind === 'aol' ? 'AOL' : 'PC'}</span>}
                     {f.isNew ? '' : ' · updated'}
+                    {f.postedAt ? ` · ${timeAgo(f.postedAt)}` : ''}
                   </div>
                 </div>
                 <div className="recent-right">
