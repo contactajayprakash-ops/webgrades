@@ -1185,7 +1185,10 @@ html[data-theme="light"] .app-shell.v2 .grade-tile {
   position: absolute; top: calc(100% + 10px); right: 0; z-index: 61;
   width: 276px; max-height: min(72vh, 580px); overflow-y: auto; overscroll-behavior: contain;
   padding: 8px; border-radius: 24px;
-  background: var(--menu-bg);
+  /* Frosted glass, not the near-opaque --menu-bg (rgba .97) which reads as plain
+     gray. --mat-thick (0.72) is the app's readable glass material — same system
+     as the nav pill/cards — so the backdrop blur shows the background through it. */
+  background: var(--mat-thick);
   -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
   border: 0.5px solid var(--glass-border-strong);
   box-shadow: var(--rim), var(--drop-lg);
