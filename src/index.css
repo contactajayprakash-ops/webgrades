@@ -1190,9 +1190,14 @@ html[data-theme="light"] .app-shell.v2 .grade-tile {
   border: 0.5px solid var(--glass-border-strong);
   box-shadow: var(--rim), var(--drop-lg);
   transform-origin: top right;
-  animation: menupop .22s var(--spring) backwards;
+  animation: menupop .2s var(--ease) backwards;
 }
-@keyframes menupop { from { opacity: 0; transform: translateY(-8px) scale(.96); } to { opacity: 1; transform: none; } }
+/* Fade in ONLY — do not animate `transform` here. This element has
+   `backdrop-filter`, and animating transform on a backdrop-filtered element makes
+   Chrome intermittently drop the filter (the menu renders flat/opaque instead of
+   glass). Since the menu re-runs this on every open, a transform animation meant
+   "every once in a while the More dropdown loses its glass". Opacity is safe. */
+@keyframes menupop { from { opacity: 0; } to { opacity: 1; } }
 .app-shell.v2 .nav-menu-list { display: flex; flex-direction: column; gap: 1px; }
 .app-shell.v2 .menu-row {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 13px;
