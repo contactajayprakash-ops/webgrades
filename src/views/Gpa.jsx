@@ -295,7 +295,7 @@ function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
                   <span className="mi-sub">Load this setup</span>
                 </button>
                 <button className="circle-btn" style={{ width: 26, height: 26 }} title="Overwrite with current setup" onClick={() => onOverwrite(s)}>
-                  <Icon.refresh width={13} height={13} />
+                  <Icon.save width={13} height={13} />
                 </button>
                 <button className="circle-btn" style={{ width: 26, height: 26, color: 'var(--red-text)' }} title="Delete" onClick={() => onDelete(s)}>
                   <Icon.trash width={13} height={13} />
