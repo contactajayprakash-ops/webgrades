@@ -5,6 +5,22 @@ import { estimateAverage } from './courses.js'
 // (or "extraN" for hypothetical rows the student adds).
 export const editKey = (quarter, courseName, i) => `${quarter}::${courseName}::${i}`
 
+// HAC sometimes posts a non-numeric grade — a letter code with a description,
+// e.g. "T     - Turned in but Not Yet Graded", "M - Missing", "X - Exempt". These
+// have no number so parseGrade() drops them and the row showed blank. Pull out a
+// short code + readable label so the UI can display them. Returns null for a
+// numeric or empty grade (nothing to show as a mark).
+export function gradeMark(raw) {
+  if (raw == null) return null
+  const s = String(raw).trim()
+  if (!s || /\d/.test(s)) return null // numeric or empty → not a letter mark
+  const codeM = s.match(/^[A-Za-z]{1,4}/)
+  const code = (codeM ? codeM[0] : s.slice(0, 3)).toUpperCase()
+  const dash = s.search(/[-–—:]/)
+  const label = (dash >= 0 ? s.slice(dash + 1) : s).trim() || s
+  return { code, label }
+}
+
 // Build a class's assignment rows for a quarter, applying any what-if edits.
 export function classRows(quarter, course, edits) {
   const rows = (course.assignments || []).map((a, i) => {
@@ -17,6 +33,8 @@ export function classRows(quarter, course, edits) {
       dateDue: a.dateDue,
       score: e && e.score !== undefined ? e.score : parseGrade(a.grade),
       total: e && e.total !== undefined ? e.total : (parseGrade(a.totalPoints) ?? 100),
+      // Non-numeric HAC mark (T/M/X/…), shown when there's no numeric score and no edit.
+      mark: e ? null : gradeMark(a.grade),
       edited: !!e,
     }
   })

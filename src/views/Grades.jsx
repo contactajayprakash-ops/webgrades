@@ -352,7 +352,11 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew 
                             <input className="input mini" type="number" step="1" value={r.total ?? ''}
                               onChange={(e) => setEdit(r.key, { total: e.target.value === '' ? null : Number(e.target.value) })} />
                           </td>
-                          <td className="num"><GradeBadge value={pct} showLetter={false} /></td>
+                          <td className="num">
+                            {pct == null && r.mark
+                              ? <span className="mark-tag" title={r.mark.label}>{r.mark.code}</span>
+                              : <GradeBadge value={pct} showLetter={false} />}
+                          </td>
                         </tr>
                       )
                     })}
