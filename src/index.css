@@ -797,6 +797,11 @@ html[data-theme="light"] .seg-indicator { background: #ffffff; }
 .cat-tag.aol { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-text); }
 .cat-tag.pc { background: var(--fill-4); color: var(--text-faint); font-weight: 400; }
 tr.aol-row td:first-child { font-weight: 600; }
+/* Non-numeric HAC grade mark (T = turned in, M = missing, X = exempt, …). Shown
+   in the grade column when there's no number. Neutral pill; full label on hover. */
+.mark-tag { display: inline-block; min-width: 22px; padding: 2px 8px; border-radius: var(--pill);
+  font-size: var(--t-caption2); font-weight: 700; letter-spacing: .02em; text-align: center;
+  background: var(--fill-3); color: var(--text-dim); cursor: default; }
 tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 
 .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
