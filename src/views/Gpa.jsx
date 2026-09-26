@@ -9,9 +9,9 @@ import {
   detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
   WEIGHT_OPTIONS, weightTagClass, weightLabel, letterGrade,
 } from '../lib/gpa.js'
-import { courseKey, transcriptGrade, isNonGpaCourse, PERIODS, guessCurrentQuarter, semesterOfQuarter } from '../lib/courses.js'
+import { courseKey, transcriptGrade, isNonGpaCourse, PERIODS } from '../lib/courses.js'
 import {
-  PERIOD_QUARTERS, buildLiveRows, buildCurrentLiveRaw, buildCurrentLive,
+  PERIOD_QUARTERS, buildCurrentLiveRaw, buildCurrentLive,
   buildPriorCourses, buildCumRows, splitTranscript, resolvedPeriod,
 } from '../lib/gpaCompute.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
@@ -58,8 +58,7 @@ const CUM_TOUR_STEPS = [
 export default function Gpa() {
   const { getData, peekData, dataVersion, activeUsername } = useAuth()
   const [prefs, setPrefsState] = useState(() => loadPrefs(activeUsername))
-  const [period, setPeriod] = useState(() => semesterOfQuarter(guessCurrentQuarter())) // default to the current semester
-  const [view, setView] = useState('live')
+  const [period, setPeriod] = useState('year') // cumulative is a running full-year total by default
 
   // seed from the (prefetched/persisted) cache so it renders instantly
   const [quarters, setQuarters] = useState(() => {
@@ -75,8 +74,6 @@ export default function Gpa() {
     const d = peekData('transcript')
     return d ? (d.transcript || []) : undefined
   })
-  const [liveGrades, setLiveGrades] = useState({}) // courseName -> grade override
-  const [liveExcluded, setLiveExcluded] = useState({}) // courseName -> true
   const { edits, count: whatIfCount } = useWhatIf()
 
   const updatePrefs = useCallback((mut) => {
@@ -134,14 +131,6 @@ export default function Gpa() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataVersion])
 
-  // ---- LIVE rows (classwork) ----
-  const liveBuild = useMemo(
-    () => buildLiveRows({ quarters, period, edits, weights: prefs.weights, liveGrades, liveExcluded }),
-    [quarters, period, liveGrades, liveExcluded, prefs.weights, edits]
-  )
-
-  const liveResult = weightedGpa(liveBuild.rows)
-
   // ---- CUMULATIVE rows ----
   // Current-year courses come from LIVE classwork (real names + both semesters,
   // since the transcript only posts sem1 mid-year). PRIOR years come from the
@@ -167,85 +156,53 @@ export default function Gpa() {
   )
 
   const cumResult = weightedGpa(cumRows)
+  const cumUnweighted = useMemo(() => unweightedGpa(cumRows), [cumRows])
 
   // ---- handlers ----
-  const setLiveGrade = (key, v) => setLiveGrades((s) => ({ ...s, [key]: v }))
-  const setLiveWeight = (name, w) => updatePrefs((p) => { p.weights[courseKey(name)] = Number(w) })
-  const resetLive = () => { setLiveGrades({}); setLiveExcluded({}) }
-  const hasLiveEdits = Object.keys(liveGrades).length > 0 || Object.keys(liveExcluded).length > 0
-
   const toggleCum = (code) => updatePrefs((p) => {
     if (p.cumulative.included[code]) delete p.cumulative.included[code]
     else p.cumulative.included[code] = true
   })
+  const editSelection = () => updatePrefs((p) => { p.cumulative.confirmed = false })
 
   return (
     <>
-      <PageHead title="GPA" sub="Weighted GPA by time period — live from current grades, or cumulative across your transcript." />
+      <PageHead title="GPA" sub="Your cumulative GPA across every year — predict any quarter to see where you land." />
 
       <WhatIfBanner />
 
-      {/* time-period axis */}
-      <Segmented
-        className="mb-3"
-        value={period}
-        onChange={setPeriod}
-        ariaLabel="Time period"
-        options={PERIODS.map((p) => ({ value: p.id, label: p.label }))}
-      />
-
-      {/* dual headline cards — click to choose which breakdown shows */}
+      {/* headline cards — weighted + 4.0 cumulative, both from your selections.
+          Tap the left card to change what's included. */}
       <div className="grid grid-2 mb-3">
         <HeadlineCard
-          active={view === 'live'} onClick={() => setView('live')}
-          label="Live GPA" accent="var(--accent)"
-          value={liveBuild.ready ? fmtGpa(liveResult.gpa) : null}
-          note={`This year’s grades · ${liveResult.credits.toFixed(1)} cr`}
-          whatIf={hasLiveEdits || whatIfCount > 0}
+          active onClick={cumConfirmed ? editSelection : undefined} accent="var(--accent)"
+          label="Cumulative GPA"
+          value={!cumConfirmed ? 'Set up' : (Array.isArray(transcript) ? fmtGpa(cumResult.gpa) : null)}
+          note={!cumConfirmed ? 'Pick which courses count →' : `Weighted · ${cumRows.length} courses · ${cumResult.credits.toFixed(1)} cr · tap to edit`}
+          whatIf={whatIfCount > 0}
         />
         <HeadlineCard
-          active={view === 'cumulative'} onClick={() => setView('cumulative')}
-          label="Cumulative GPA" accent="var(--accent-2)"
-          value={!cumConfirmed ? 'Set up' : (Array.isArray(transcript) ? fmtGpa(cumResult.gpa) : null)}
-          note={!cumConfirmed ? 'Pick which courses count →' : `Incl. transcript · ${cumRows.length} courses · ${cumResult.credits.toFixed(1)} cr`}
+          active accent="var(--accent-2)"
+          label="4.0 Cumulative"
+          value={!cumConfirmed ? '—' : (Array.isArray(transcript) ? fmtGpa(cumUnweighted.gpa) : null)}
+          note={!cumConfirmed ? 'Unweighted, based on your selections' : `Unweighted 4.0 scale · ${cumUnweighted.credits.toFixed(1)} cr`}
           whatIf={whatIfCount > 0}
         />
       </div>
 
-      {/* breakdown for the selected view */}
-      {view === 'live' ? (
-        liveBuild.anyError ? <ErrorBox message={liveBuild.error} onRetry={() => PERIOD_QUARTERS[period].forEach((q) => loadQuarter(q, true))} />
-          : !liveBuild.ready ? <Loading label="Averaging quarters…" />
-          : liveBuild.rows.length === 0 ? <Empty>No classwork found for this period.</Empty>
-          : (
-            <>
-              <div className="row-between mb-3">
-                <div className="small faint">Edit any grade or weight to model a what-if.</div>
-                {hasLiveEdits && <button className="btn ghost sm" onClick={resetLive}>Reset</button>}
-              </div>
-              <GpaTable
-                rows={liveBuild.rows} whatIf={hasLiveEdits} editableGrade
-                result={liveResult}
-                onGrade={(k, v) => setLiveGrade(k, v)}
-                onWeight={setLiveWeight}
-                onInclude={(k, inc) => setLiveExcluded((s) => { const n = { ...s }; if (inc) delete n[k]; else n[k] = true; return n })}
-              />
-            </>
-          )
-      ) : (
-        <CumulativeView
-          transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
-          priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade} period={period}
-          confirmed={cumConfirmed} included={cumIncluded}
-          weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
-          quarters={prefs.cumulative.quarters || {}}
-          manual={prefs.cumulative.manual || []}
-          saves={prefs.cumulative.saves || []}
-          rows={cumRows} result={cumResult}
-          onToggle={toggleCum} updatePrefs={updatePrefs}
-          onRetry={() => loadTranscript(true)}
-        />
-      )}
+      <CumulativeView
+        transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
+        priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade}
+        confirmed={cumConfirmed} included={cumIncluded}
+        weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
+        quarters={prefs.cumulative.quarters || {}}
+        manual={prefs.cumulative.manual || []}
+        saves={prefs.cumulative.saves || []}
+        rows={cumRows} result={cumResult}
+        period={period} onPeriod={setPeriod}
+        onToggle={toggleCum} updatePrefs={updatePrefs}
+        onRetry={() => loadTranscript(true)}
+      />
     </>
   )
 }
@@ -253,7 +210,7 @@ export default function Gpa() {
 function HeadlineCard({ active, onClick, label, value, note, accent, whatIf }) {
   return (
     <button className="card stat" onClick={onClick}
-      style={{ textAlign: 'left', cursor: 'pointer', border: active ? `1px solid ${accent}` : undefined, background: active ? undefined : 'var(--bg-soft)' }}>
+      style={{ textAlign: 'left', cursor: onClick ? 'pointer' : 'default', border: active ? `1px solid ${accent}` : undefined, background: active ? undefined : 'var(--bg-soft)' }}>
       {active && <span className="glow" style={{ background: accent }} />}
       <span className="label">{label} {whatIf && <em style={{ color: 'var(--yellow-text)' }}>· what-if</em>}</span>
       {value == null
@@ -316,8 +273,12 @@ function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, quarters = {}, manual = [], saves = [], rows, result, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, onPeriod, confirmed, included, weights, credits, grades, quarters = {}, manual = [], saves = [], rows, result, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
+  const periodSeg = (
+    <Segmented value={period} onChange={onPeriod} ariaLabel="Time period"
+      options={PERIODS.map((p) => ({ value: p.id, label: p.label }))} />
+  )
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
 
   // First-time walkthrough — auto-opens once the setup table is on screen.
@@ -434,6 +395,9 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
             {savedMenu}
             <span className="small faint">{selectedCount} selected</span>
           </div>
+          <div className="flex mt-3" style={{ alignItems: 'center', gap: 10 }}>
+            <span className="small faint">Count:</span>{periodSeg}
+          </div>
         </div>
 
         {/* current year — from live classwork */}
@@ -450,8 +414,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
             <div className="faint small" style={{ padding: '14px 20px' }}>Loading current classes…</div>
           ) : currentLive.map((c) => {
             const w = weights[c.key] ?? detectWeight(c.rawName)
-            const defCr = c.s1 != null && c.s2 != null ? 1 : 0.5
-            const cr = credits[c.key] ?? defCr
+            const cr = credits[c.key] ?? c.credit // 0.25 per graded quarter (see buildCurrentLive)
             const qov = quarters[c.key] || {}
             const on = !!included[c.key]
             const rp = resolvedPeriod(c, period)
@@ -497,41 +460,45 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
         <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
           Added courses · summer / not yet on your transcript
         </div>
-        <table className="table">
-          <tbody>
-            {manual.map((m) => {
-              const key = `manual:${m.id}`
-              return (
-                <tr key={m.id}>
-                  <td style={{ width: 40 }}>
-                    <input type="checkbox" checked={!!included[key]} onChange={() => onToggle(key)}
-                      style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                  </td>
-                  <td>
-                    <input className="input mini" style={{ width: 150, textAlign: 'left' }} placeholder="Course name"
+        <div className="cum-courses">
+          {manual.map((m) => {
+            const key = `manual:${m.id}`
+            const on = !!included[key]
+            return (
+              <div key={m.id} className={`cum-course ${on ? '' : 'off'}`}>
+                <div className="cum-course-head">
+                  <label className="cum-check">
+                    <input type="checkbox" checked={on} onChange={() => onToggle(key)} />
+                    <input className="input mini cum-name-input" placeholder="Course name"
                       value={m.name || ''} onChange={(e) => setManualName(m.id, e.target.value)} />
-                    <button onClick={() => removeManual(m.id)} title="Remove course"
-                      style={{ background: 'transparent', border: 0, color: 'var(--red-text)', cursor: 'pointer', marginLeft: 6, verticalAlign: 'middle' }}>
-                      <Icon.trash width={14} height={14} />
+                  </label>
+                  <div className="cum-course-right">
+                    <WeightSelect value={weights[key] ?? 5} onChange={(e) => setWeight(key, e.target.value)} />
+                    <button className="cum-remove" onClick={() => removeManual(m.id)} title="Remove course">
+                      <Icon.trash width={15} height={15} />
                     </button>
-                  </td>
-                  <td><WeightSelect value={weights[key] ?? 5} onChange={(e) => setWeight(key, e.target.value)} /></td>
-                  <td className="num faint small">—</td>
-                  <td className="num"><input className="input mini" type="number" step="1" placeholder="grade"
-                    value={grades[key] ?? ''} onChange={(e) => setGrade(key, e.target.value === '' ? null : Number(e.target.value))} /></td>
-                  <td className="num"><input className="input mini" type="number" step="0.5" min="0" title="Credit"
-                    value={credits[key] ?? 1} onChange={(e) => setCredit(key, e.target.value)} /></td>
-                </tr>
-              )
-            })}
-            <tr>
-              <td colSpan={6} style={{ padding: '12px 20px' }}>
-                <button className="btn ghost sm" onClick={addManual}><Icon.plus width={14} height={14} /> Add course</button>
-                <span className="small faint" style={{ marginLeft: 10 }}>For summer or missing classes not yet on your transcript — not for a whole missing year.</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                  </div>
+                </div>
+                <div className="cum-quarters cum-simple">
+                  <label className="cum-q">
+                    <span className="cum-q-label">Grade</span>
+                    <input className="input mini" type="number" step="1" inputMode="numeric" placeholder="grade"
+                      value={grades[key] ?? ''} onChange={(e) => setGrade(key, e.target.value === '' ? null : Number(e.target.value))} />
+                  </label>
+                  <label className="cum-q cum-cr">
+                    <span className="cum-q-label">Cr</span>
+                    <input className="input mini" type="number" step="0.5" min="0" title="Credit"
+                      value={credits[key] ?? 1} onChange={(e) => setCredit(key, e.target.value)} />
+                  </label>
+                </div>
+              </div>
+            )
+          })}
+          <div style={{ padding: '12px 20px' }}>
+            <button className="btn ghost sm" onClick={addManual}><Icon.plus width={14} height={14} /> Add course</button>
+            <span className="small faint" style={{ marginLeft: 10 }}>For summer or missing classes not yet on your transcript — not for a whole missing year.</span>
+          </div>
+        </div>
 
         {/* prior years — from transcript */}
         {priorGroups.map((g, gi) => (
@@ -539,30 +506,44 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
             <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
               {g.year} · Grade {g.grade} · {g.building}
             </div>
-            <table className="table">
-              <tbody>
-                {(g.courses || []).map((c, ci) => {
-                  const code = c.courseCode || `${g.year}-${c.description}`
-                  const grade = transcriptGrade(c)
-                  const numeric = grade != null
-                  const w = weights[code] ?? detectWeight(c.description, c.courseCode)
-                  const cr = credits[code] ?? (parseGrade(c.credit) ?? 0.5)
-                  return (
-                    <tr key={ci} className={numeric ? '' : 'dim'}>
-                      <td style={{ width: 40 }}>
-                        <input type="checkbox" disabled={!numeric} checked={!!included[code]} onChange={() => onToggle(code)}
-                          style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                      </td>
-                      <td>{transcriptCourseName(c.description)}<span className="faint small"> · {c.description}</span></td>
-                      <td>{numeric && <WeightSelect value={w} onChange={(e) => setWeight(code, e.target.value)} />}</td>
-                      <td className="num faint small">{[c.sem1, c.sem2].filter((v) => v).join(' / ') || '—'}</td>
-                      <td className="num mono">{numeric ? grade : (c.sem1 || '—')}</td>
-                      <td className="num">{numeric && <input className="input mini" type="number" step="0.5" min="0" title="Credit" value={cr} onChange={(e) => setCredit(code, e.target.value)} />}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="cum-courses">
+              {(g.courses || []).map((c, ci) => {
+                const code = c.courseCode || `${g.year}-${c.description}`
+                const grade = transcriptGrade(c)
+                const numeric = grade != null
+                const w = weights[code] ?? detectWeight(c.description, c.courseCode)
+                const cr = credits[code] ?? (parseGrade(c.credit) ?? 0.5)
+                const on = !!included[code]
+                const lg = letterGrade(grade)
+                return (
+                  <div key={ci} className={`cum-course ${numeric && on ? '' : 'off'}`}>
+                    <div className="cum-course-head">
+                      <label className="cum-check">
+                        <input type="checkbox" disabled={!numeric} checked={on} onChange={() => onToggle(code)} />
+                        <span className="cum-course-name">{transcriptCourseName(c.description)}</span>
+                      </label>
+                      <div className="cum-course-right">
+                        {numeric && <WeightSelect value={w} onChange={(e) => setWeight(code, e.target.value)} />}
+                        <span className={`cum-year ${numeric ? lg.cls : ''}`} title="Transcript year grade">{numeric ? grade : (c.sem1 || '—')}</span>
+                      </div>
+                    </div>
+                    {numeric && (
+                      <div className="cum-quarters cum-simple">
+                        <div className="cum-q">
+                          <span className="cum-q-label">S1 / S2</span>
+                          <span className="cum-static">{[c.sem1, c.sem2].filter((v) => v).join(' / ') || '—'}</span>
+                        </div>
+                        <label className="cum-q cum-cr">
+                          <span className="cum-q-label">Cr</span>
+                          <input className="input mini" type="number" step="0.5" min="0" title="Credit"
+                            value={cr} onChange={(e) => setCredit(code, e.target.value)} />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         ))}
 
@@ -576,10 +557,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
 
   return (
     <>
-      <div className="row-between mb-3">
-        <div className="small faint">
-          {PERIODS.find((p) => p.id === period)?.label} · {rows.length} of your selected courses have a grade for this period.
-        </div>
+      <div className="row-between mb-3" style={{ flexWrap: 'wrap', gap: 10 }}>
+        {periodSeg}
         <div className="flex">
           {savedMenu}
           {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
@@ -590,10 +569,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
       {rows.length === 0
         ? <Empty>None of your selected courses have a grade for this period. Try Full Year.</Empty>
         : <GpaTable
-            rows={rows} result={result} showYear editableGrade
-            onGrade={(k, v) => updatePrefs((p) => { p.cumulative.grades = p.cumulative.grades || {}; p.cumulative.grades[k] = v })}
+            rows={rows} result={result} showYear semesterView
             onWeight={(k, w) => updatePrefs((p) => { p.cumulative.weights[k] = Number(w) })}
-            onCredit={(k, v) => setCredit(k, v)}
             onInclude={(k) => onToggle(k)}
           />}
     </>
@@ -645,7 +622,7 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, onGrade, onWe
               return (
                 <tr key={r.key} className={r.include ? '' : 'dim'}>
                   <td>
-                    <input type="checkbox" checked={r.include} onChange={(e) => onInclude?.(r.key, e.target.checked)}
+                    <input type="checkbox" checked={r.include} onChange={(e) => onInclude?.(r.baseKey || r.key, e.target.checked)}
                       style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
                   </td>
                   <td>{r.name}{edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow-text)' }}>edited</span>}</td>
@@ -656,7 +633,7 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, onGrade, onWe
                       : <span className="mono">{r.grade ?? '—'}</span>}
                   </td>
                   <td>
-                    <select className={`select mini ${weightTagClass(r.weight)}`} value={r.weight} onChange={(e) => onWeight?.(r.key, e.target.value)}>
+                    <select className={`select mini ${weightTagClass(r.weight)}`} value={r.weight} onChange={(e) => onWeight?.(r.baseKey || r.key, e.target.value)}>
                       {WEIGHT_OPTIONS.map((w) => <option key={w.value} value={w.value}>{w.value} · {weightLabel(w.value)}</option>)}
                     </select>
                   </td>

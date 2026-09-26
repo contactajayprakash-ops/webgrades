@@ -123,8 +123,13 @@ export function buildCurrentLive({ currentLiveRaw, currentGroup, latestYear, qua
     const qS2 = semesterGrade([qEff['3'], qEff['4']])
     const s1 = o && o.sem1 != null ? o.sem1 : qS1
     const s2 = o && o.sem2 != null ? o.sem2 : qS2
-    const credit = o && o.credit != null && s1 != null && s2 != null ? o.credit : (s1 != null && s2 != null ? 1 : 0.5)
-    return { ...c, qEff, s1, s2, credit, official: !!o, sems: [s1, s2].filter((x) => x != null).join(' / ') || '—' }
+    // Credit reflects how much of the (full-year) course is done: 0.25 per
+    // quarter that has a grade — so a course with only Q1 counts 0.25 toward the
+    // running cumulative, and grows to 1.0 as all four quarters fill in. Official
+    // posted transcript credit wins when the year is finalized.
+    const nQ = ['1', '2', '3', '4'].filter((n) => qEff[n] != null).length
+    const credit = o && o.credit != null && s1 != null && s2 != null ? o.credit : (nQ * 0.25 || 0.5)
+    return { ...c, qEff, nQ, s1, s2, credit, official: !!o, sems: [s1, s2].filter((x) => x != null).join(' / ') || '—' }
   })
 }
 
@@ -136,55 +141,65 @@ export function buildPriorCourses(priorGroups) {
   return out
 }
 
+// Cumulative rows — ONE ROW PER SEMESTER, because Frisco computes GPA on
+// semester grades, not on a course's year average. This matters for the
+// UNWEIGHTED 4.0: an 89 in a semester is a B (3.0), and averaging it with a 9x
+// other semester into a 9x "year grade" would hide it (reading 4.0 instead of
+// 3.5). Splitting per semester also leaves the WEIGHTED 6.0 unchanged — its
+// formula is linear, so two 0.5-credit semesters equal one 1.0-credit year
+// average. Selection stays per COURSE (baseKey); the GPA is computed per row.
 export function buildCumRows({ currentLive, priorCourses, included, period, prefs, latestYear }) {
   const rows = []
+  const weights = prefs.cumulative.weights || {}
+  const creditsOv = prefs.cumulative.credits || {}
   const grades = prefs.cumulative.grades || {}
-  // current year — official transcript grades when posted, else live estimate.
-  // A manual grade override lets a class with no posted grade (a 0/F ungraded
-  // class) still count with a predicted grade, so cumulative "what-if" works.
+  const wantS1 = period !== 's2'
+  const wantS2 = period !== 's1'
+  const push = (baseKey, name, year, semTag, grade, credit, weight, manual) => {
+    if (grade == null || !(credit > 0)) return
+    rows.push({
+      key: semTag ? `${baseKey}#${semTag}` : baseKey, baseKey,
+      name: semTag ? `${name} · ${semTag}` : name, year, grade, autoGrade: grade,
+      weight, credit, include: true, manual,
+    })
+  }
+
+  // Current year — each semester's grade (from the quarters) at 0.25 credit per
+  // graded quarter in it, so S1 = 0.25 (Q1 only) … 0.5 (Q1+Q2), and likewise S2.
   for (const c of currentLive) {
     if (!included[c.key]) continue
-    const pg = resolvedPeriod(c, period)
-    // Current-year grade comes from the (auto-filled + per-quarter-editable)
-    // quarters via s1/s2 — NOT the legacy single-grade override, which the UI no
-    // longer sets for current courses.
-    const grade = pg?.grade
-    if (grade == null) continue
-    const credit = prefs.cumulative.credits?.[c.key] ?? pg?.credit ?? (period === 'year' ? 1 : 0.5)
-    rows.push({
-      key: c.key, name: c.name, year: latestYear,
-      grade, autoGrade: pg?.grade ?? null,
-      weight: prefs.cumulative.weights[c.key] ?? detectWeight(c.rawName),
-      credit, include: true,
-    })
+    const weight = weights[c.key] ?? detectWeight(c.rawName)
+    let cS1 = ['1', '2'].filter((n) => c.qEff?.[n] != null).length * 0.25
+    let cS2 = ['3', '4'].filter((n) => c.qEff?.[n] != null).length * 0.25
+    // A full-credit override scales the two semesters proportionally.
+    if (creditsOv[c.key] != null && cS1 + cS2 > 0) {
+      const k = creditsOv[c.key] / (cS1 + cS2); cS1 *= k; cS2 *= k
+    }
+    const curYear = currentSchoolYear()
+    if (wantS1) push(c.key, c.name, curYear, 'S1', c.s1, cS1, weight)
+    if (wantS2) push(c.key, c.name, curYear, 'S2', c.s2, cS2, weight)
   }
-  // prior years — completed, so they ALWAYS count at their full-year grade
-  // and full credit, in every period (a cumulative GPA is a running total).
+
+  // Prior years — the transcript's two SEMESTER grades, each at half the course
+  // credit (or full credit for a one-semester course).
   for (const c of priorCourses) {
     if (!included[c.code]) continue
-    const pg = transcriptPeriod(c, 'year')
-    if (!pg) continue
-    rows.push({
-      key: c.code, name: transcriptCourseName(c.description) || c.code, year: c.year,
-      grade: prefs.cumulative.grades?.[c.code] ?? pg.grade, autoGrade: pg.grade,
-      weight: prefs.cumulative.weights[c.code] ?? detectWeight(c.description, c.courseCode),
-      credit: prefs.cumulative.credits?.[c.code] ?? pg.credit, include: true,
-    })
+    const weight = weights[c.code] ?? detectWeight(c.description, c.courseCode)
+    const s1 = parseGrade(c.sem1), s2 = parseGrade(c.sem2)
+    const full = creditsOv[c.code] ?? parseGrade(c.credit) ?? 1
+    const both = s1 != null && s2 != null
+    const half = both ? Math.round((full / 2) * 100) / 100 : full
+    const name = transcriptCourseName(c.description) || c.code
+    if (wantS1 && s1 != null) push(c.code, name, c.year, both ? 'S1' : '', s1, half, weight)
+    if (wantS2 && s2 != null) push(c.code, name, c.year, both ? 'S2' : '', s2, half, weight)
   }
-  // manually-added courses (summer / not-yet-transcripted). Grade, weight, and
-  // credit live in the same override maps, keyed `manual:<id>`. Completed work,
-  // so they count in every period at their full grade + credit.
+
+  // Manually-added courses — a single user grade at full credit (one entry).
   for (const m of prefs.cumulative.manual || []) {
     const key = `manual:${m.id}`
     if (!included[key]) continue
-    const grade = parseGrade(grades[key])
-    if (grade == null) continue
-    rows.push({
-      key, name: m.name || 'Added course', year: 'Added', manual: true,
-      grade, autoGrade: grade,
-      weight: prefs.cumulative.weights[key] ?? 5,
-      credit: prefs.cumulative.credits?.[key] ?? 1, include: true,
-    })
+    push(key, m.name || 'Added course', 'Added', '', parseGrade(grades[key]),
+      creditsOv[key] ?? 1, weights[key] ?? 5, true)
   }
   return rows
 }
