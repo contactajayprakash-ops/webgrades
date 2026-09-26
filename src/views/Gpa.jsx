@@ -338,7 +338,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     if (p.cumulative.weights) delete p.cumulative.weights[key]
     if (p.cumulative.credits) delete p.cumulative.credits[key]
   })
-  const hasOverrides = Object.keys(weights).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0
+  const hasOverrides = Object.keys(weights).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0 || Object.keys(quarters).length > 0
   const selectedCount = Object.keys(included).length
 
   // Named saved setups — snapshot/restore the whole cumulative config, so a
