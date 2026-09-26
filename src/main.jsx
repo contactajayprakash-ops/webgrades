@@ -10,6 +10,18 @@ import './index.css'
 // Apply saved appearance prefs before first paint (defaults = original look).
 applyTheme(loadTheme())
 
+// Number <input>s change their value on mouse-wheel scroll by default — so
+// scrolling the page while a grade field is focused silently edits it (buggy and
+// surprising). Blur any focused number input on wheel: the value never changes
+// and the page scrolls normally. Global so it covers every number field (Grades,
+// GPA, what-if).
+if (typeof document !== 'undefined') {
+  document.addEventListener('wheel', () => {
+    const el = document.activeElement
+    if (el && el.tagName === 'INPUT' && el.type === 'number') el.blur()
+  }, { passive: true })
+}
+
 // Auto-refresh on deploy: registerType is 'autoUpdate' (skipWaiting + clientsClaim),
 // so a new build's service worker activates and takes control on the next load —
 // but the OPEN tab keeps running the old JS until it reloads. Without this, people
