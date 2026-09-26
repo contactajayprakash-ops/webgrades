@@ -4,12 +4,11 @@ import { useWhatIf } from '../context/WhatIfContext.jsx'
 import { PageHead, Loading, ErrorBox, Empty, WhatIfBanner } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Tour from '../components/Tour.jsx'
-import Segmented from '../components/Segmented.jsx'
 import {
   detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
   WEIGHT_OPTIONS, weightTagClass, weightLabel, letterGrade,
 } from '../lib/gpa.js'
-import { courseKey, transcriptGrade, isNonGpaCourse, PERIODS } from '../lib/courses.js'
+import { transcriptGrade, isNonGpaCourse } from '../lib/courses.js'
 import {
   PERIOD_QUARTERS, buildCurrentLiveRaw, buildCurrentLive,
   buildPriorCourses, buildCumRows, splitTranscript, resolvedPeriod,
@@ -58,7 +57,7 @@ const CUM_TOUR_STEPS = [
 export default function Gpa() {
   const { getData, peekData, dataVersion, activeUsername } = useAuth()
   const [prefs, setPrefsState] = useState(() => loadPrefs(activeUsername))
-  const [period, setPeriod] = useState('year') // cumulative is a running full-year total by default
+  const period = 'year' // cumulative is a running full-year total — no S1/S2 slider; the year is dynamic from the quarters you type
 
   // seed from the (prefetched/persisted) cache so it renders instantly
   const [quarters, setQuarters] = useState(() => {
@@ -201,7 +200,7 @@ export default function Gpa() {
         manual={prefs.cumulative.manual || []}
         saves={prefs.cumulative.saves || []}
         rows={cumRows} result={cumResult} officialGpa={officialGpa}
-        period={period} onPeriod={setPeriod}
+        period={period}
         onToggle={toggleCum} updatePrefs={updatePrefs}
         onRetry={() => loadTranscript(true)}
       />
@@ -275,12 +274,8 @@ function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, onPeriod, confirmed, included, weights, credits, grades, quarters = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, quarters = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
-  const periodSeg = (
-    <Segmented value={period} onChange={onPeriod} ariaLabel="Time period"
-      options={PERIODS.map((p) => ({ value: p.id, label: p.label }))} />
-  )
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
 
   // First-time walkthrough — auto-opens once the setup table is on screen.
@@ -396,9 +391,6 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
             {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
             {savedMenu}
             <span className="small faint">{selectedCount} selected</span>
-          </div>
-          <div className="flex mt-3" style={{ alignItems: 'center', gap: 10 }}>
-            <span className="small faint">Count:</span>{periodSeg}
           </div>
         </div>
 
@@ -560,7 +552,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   return (
     <>
       <div className="row-between mb-3" style={{ flexWrap: 'wrap', gap: 10 }}>
-        {periodSeg}
+        <span className="small faint">Full-year cumulative · {rows.length} semester grades</span>
         <div className="flex">
           {savedMenu}
           {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
