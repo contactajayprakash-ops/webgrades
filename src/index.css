@@ -141,7 +141,10 @@ html[data-theme="light"] {
 
   --accent: #007aff;            /* systemBlue (light) */
   --accent-bright: color-mix(in srgb, var(--accent) 92%, #000000);
-  --accent-text: color-mix(in srgb, var(--accent) 82%, #000000);
+  /* Darken enough for accent-colored text/buttons to read on WHITE glass. 82%
+     left a mid-tone accent (e.g. green) too light — it blended into the button.
+     Symmetric with dark theme's 60% mix. */
+  --accent-text: color-mix(in srgb, var(--accent) 60%, #000000);
   --green: #34c759; --yellow: #ffcc00; --orange: #ff9500; --red: #ff3b30;
   --green-text: #1f9d43; --red-text: #d1342a; --yellow-text: #9a7500; --orange-text: #b96b00;
   color-scheme: light;
