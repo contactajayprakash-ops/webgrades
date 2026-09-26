@@ -33,6 +33,8 @@ export const Icon = {
   trash: (p) => (<svg {...base} {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>),
   beaker: (p) => (<svg {...base} {...p}><path d="M4.5 3h15M6 3v7.5L3.5 19a2 2 0 0 0 1.8 3h13.4a2 2 0 0 0 1.8-3L18 10.5V3"/><line x1="6.5" y1="13" x2="17.5" y2="13"/></svg>),
   edit: (p) => (<svg {...base} {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>),
+  // Diverging arrows — a course that splits into a different weight/course at the semester.
+  split: (p) => (<svg {...base} {...p}><polyline points="16 3 21 3 21 8"/><polyline points="8 3 3 3 3 8"/><line x1="21" y1="3" x2="12" y2="12"/><line x1="3" y1="3" x2="12" y2="12"/><line x1="12" y1="12" x2="12" y2="21"/></svg>),
   target: (p) => (<svg {...base} {...p}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>),
   clipboard: (p) => (<svg {...base} {...p}><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>),
   agenda: (p) => (<svg {...base} {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/></svg>),

@@ -594,6 +594,16 @@ body { overscroll-behavior-y: contain; } /* replace the browser's native pull-to
 .cum-cr .input.mini { color: var(--text-dim); }
 .cum-simple .cum-q:first-child { flex: 2 1 0; }
 .cum-static { padding: 7px 4px; text-align: center; color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: var(--t-footnote); }
+/* Per-semester weight — split toggle in the head + the S1/S2 weight row that
+   appears when a class changes course mid-year (e.g. SS Research → AP Psych). */
+.cum-split-toggle { background: transparent; border: 0.5px solid var(--hairline); border-radius: 8px;
+  color: var(--text-faint); cursor: pointer; padding: 5px; display: inline-flex; align-items: center; }
+.cum-split-toggle:hover { color: var(--text-dim); border-color: var(--text-faint); }
+.cum-split-toggle.on { color: var(--accent-text); border-color: var(--accent); background: var(--bg-soft); }
+.cum-sem-chip { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; color: var(--accent-text);
+  border: 0.5px solid var(--accent); border-radius: var(--pill); padding: 4px 9px; white-space: nowrap; }
+.cum-weightsem { margin-bottom: 9px; }
+.cum-weightsem .select.mini { width: 100%; }
 .grades-search { width: 200px; } /* desktop; goes full-width (flex:1) on mobile */
 
 /* ============================================================================
