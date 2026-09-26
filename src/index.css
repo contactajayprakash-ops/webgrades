@@ -1156,7 +1156,27 @@ html[data-theme="light"] .app-shell.v2 .grade-tile {
 .app-shell.v2 .dash-tiles .stat { min-height: 130px; }
 /* Make the grades card the clear focus. */
 .app-shell.v2 .dash-v2 .cur-classes, .app-shell.v2 .dash-v2 > .card:last-child { box-shadow: var(--rim-strong), var(--card-shadow); }
-@media (max-width: 760px) { .app-shell.v2 .dash-tiles { grid-template-columns: 1fr; } }
+/* Mobile-only compact value on tiles whose desktop content is a list (Upcoming). */
+.dash-compact { display: none; }
+@media (max-width: 760px) {
+  /* The three top tiles become one compact row instead of three stacked full
+     -width cards — that's ~420px of scrolling removed, so the current grades
+     (what people open the app for) sit near the top. */
+  .app-shell.v2 .dash-tiles { grid-template-columns: repeat(3, 1fr); gap: 9px; }
+  .app-shell.v2 .dash-tiles .stat { min-height: 0; padding: 13px 13px 14px; }
+  .app-shell.v2 .dash-tiles .stat .label { font-size: 11px; }
+  .app-shell.v2 .dash-tiles .stat .value { font-size: 20px !important; gap: 3px !important; margin-top: 4px; }
+  .app-shell.v2 .dash-tiles .stat .value svg { width: 15px; height: 15px; }
+  .app-shell.v2 .dash-tiles .stat .meta,
+  .app-shell.v2 .dash-tiles .upcoming-list { display: none; }
+  .app-shell.v2 .dash-tiles .dash-compact { display: block; }
+
+  /* Grades: two per row so twice as many fit per screen — still big/readable. */
+  .app-shell.v2 .grade-grid { grid-template-columns: 1fr 1fr; gap: 10px; padding: 4px 14px 20px; }
+  .app-shell.v2 .grade-tile { min-height: 114px; padding: 13px 14px; border-radius: 20px; gap: 6px; }
+  .app-shell.v2 .gt-pct { font-size: 29px; }
+  .app-shell.v2 .gt-name { font-size: var(--t-footnote); }
+}
 
 /* Current grades → a bento grid of class tiles, each tinted by its grade.
    The number is huge, the color reads at a glance — nothing like a table. */

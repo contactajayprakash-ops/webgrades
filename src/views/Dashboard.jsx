@@ -250,14 +250,18 @@ function UpcomingCard() {
       {items.length === 0 ? (
         <span className="value" style={{ fontSize: 22 }}>All clear</span>
       ) : (
-        <ul className="upcoming-list">
-          {items.slice(0, 3).map((it, i) => (
-            <li key={i} className="upcoming-item">
-              <span className="up-day">{rel(it.date)}</span>
-              <span className="up-text">{it.title}{it.course ? <span className="faint"> · {cleanCourseName(it.course)}</span> : null}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          {/* Mobile-compact value replaces the full list on small screens. */}
+          <span className="value dash-compact">{items.length} due</span>
+          <ul className="upcoming-list">
+            {items.slice(0, 3).map((it, i) => (
+              <li key={i} className="upcoming-item">
+                <span className="up-day">{rel(it.date)}</span>
+                <span className="up-text">{it.title}{it.course ? <span className="faint"> · {cleanCourseName(it.course)}</span> : null}</span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       <span className="meta">
         {items.length === 0 ? 'nothing due — agenda + this week'
