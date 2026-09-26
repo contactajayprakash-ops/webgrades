@@ -20,7 +20,8 @@ const DEFAULT = {
   cumulative: {        // cumulative GPA config
     v: CUMULATIVE_VERSION,
     included: {},      // key (courseKey for current, transcript code for prior) -> true
-    weights: {},       // key -> weight
+    weights: {},       // key -> weight (whole course, both semesters)
+    weightsSem: {},    // current-year key -> { s1, s2 } when a class changes weight/course mid-year (e.g. SS Research 5.0 → AP Psych 6.0); overrides `weights` per semester
     grades: {},        // key -> grade override
     credits: {},       // key -> credit override
     quarters: {},      // current-year key -> { '1':n,'2':n,'3':n,'4':n } per-quarter grade override (auto-filled from live, editable); s1/s2 derive from these w/ HAC-official rounding
@@ -39,6 +40,7 @@ const normalize = (raw) => {
   // Additive fields introduced after v2 — backfill without wiping selections.
   if (!Array.isArray(p.cumulative.manual)) p.cumulative.manual = []
   if (!Array.isArray(p.cumulative.saves)) p.cumulative.saves = []
+  if (!p.cumulative.weightsSem || typeof p.cumulative.weightsSem !== 'object') p.cumulative.weightsSem = {}
   return p
 }
 

@@ -151,6 +151,7 @@ export function buildPriorCourses(priorGroups) {
 export function buildCumRows({ currentLive, priorCourses, included, period, prefs, latestYear }) {
   const rows = []
   const weights = prefs.cumulative.weights || {}
+  const weightsSem = prefs.cumulative.weightsSem || {}
   const creditsOv = prefs.cumulative.credits || {}
   const grades = prefs.cumulative.grades || {}
   const wantS1 = period !== 's2'
@@ -169,6 +170,12 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
   for (const c of currentLive) {
     if (!included[c.key]) continue
     const weight = weights[c.key] ?? detectWeight(c.rawName)
+    // Per-semester weight when a class changes course mid-year (e.g. SS Research
+    // 5.0 in S1 becomes AP Psych 6.0 in S2). Each semester is its own GPA row, so
+    // splitting the weight is exact — no averaging hack.
+    const ws = weightsSem[c.key]
+    const w1 = ws && ws.s1 != null ? ws.s1 : weight
+    const w2 = ws && ws.s2 != null ? ws.s2 : weight
     let cS1 = ['1', '2'].filter((n) => c.qEff?.[n] != null).length * 0.25
     let cS2 = ['3', '4'].filter((n) => c.qEff?.[n] != null).length * 0.25
     // A full-credit override scales the two semesters proportionally.
@@ -176,8 +183,8 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
       const k = creditsOv[c.key] / (cS1 + cS2); cS1 *= k; cS2 *= k
     }
     const curYear = currentSchoolYear()
-    if (wantS1) push(c.key, c.name, curYear, 'S1', c.s1, cS1, weight)
-    if (wantS2) push(c.key, c.name, curYear, 'S2', c.s2, cS2, weight)
+    if (wantS1) push(c.key, c.name, curYear, 'S1', c.s1, cS1, w1)
+    if (wantS2) push(c.key, c.name, curYear, 'S2', c.s2, cS2, w2)
   }
 
   // Prior years — the transcript's two SEMESTER grades, each at half the course

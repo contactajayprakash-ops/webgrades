@@ -195,7 +195,8 @@ export default function Gpa() {
         transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
         priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade}
         confirmed={cumConfirmed} included={cumIncluded}
-        weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
+        weights={prefs.cumulative.weights} weightsSem={prefs.cumulative.weightsSem || {}}
+        credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
         quarters={prefs.cumulative.quarters || {}}
         manual={prefs.cumulative.manual || []}
         saves={prefs.cumulative.saves || []}
@@ -222,9 +223,10 @@ function HeadlineCard({ active, onClick, label, value, note, accent, whatIf }) {
   )
 }
 
-function WeightSelect({ value, onChange }) {
+function WeightSelect({ value, onChange, full }) {
   return (
-    <select className={`select mini ${weightTagClass(value)}`} value={value} onChange={onChange}>
+    <select className={`select mini ${weightTagClass(value)}`} value={value} onChange={onChange}
+      style={full ? { width: '100%' } : undefined}>
       {WEIGHT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value} · {weightLabel(o.value)}</option>)}
     </select>
   )
@@ -274,7 +276,7 @@ function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, quarters = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, weightsSem = {}, credits, grades, quarters = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
 
@@ -308,6 +310,22 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const confirm = () => updatePrefs((p) => { p.cumulative.confirmed = true })
   const editSelection = () => updatePrefs((p) => { p.cumulative.confirmed = false })
   const setWeight = (key, w) => updatePrefs((p) => { p.cumulative.weights[key] = Number(w) })
+  // Per-semester weight — for a class that changes into a different course at the
+  // semester (e.g. SS Research 5.0 → AP Psych 6.0). Splitting seeds both sems from
+  // the current weight; merging collapses back to one, keeping the S1 value.
+  const setWeightSem = (key, sem, w) => updatePrefs((p) => {
+    p.cumulative.weightsSem = p.cumulative.weightsSem || {}
+    p.cumulative.weightsSem[key] = { ...(p.cumulative.weightsSem[key] || {}), [sem]: Number(w) }
+  })
+  const splitWeight = (key, base) => updatePrefs((p) => {
+    p.cumulative.weightsSem = p.cumulative.weightsSem || {}
+    p.cumulative.weightsSem[key] = { s1: Number(base), s2: Number(base) }
+  })
+  const mergeWeight = (key) => updatePrefs((p) => {
+    const ws = (p.cumulative.weightsSem || {})[key]
+    if (ws && ws.s1 != null) p.cumulative.weights[key] = Number(ws.s1)
+    if (p.cumulative.weightsSem) delete p.cumulative.weightsSem[key]
+  })
   const setCredit = (key, v) => updatePrefs((p) => { p.cumulative.credits = p.cumulative.credits || {}; p.cumulative.credits[key] = v === '' ? null : Number(v) })
   const setGrade = (key, v) => updatePrefs((p) => { p.cumulative.grades = p.cumulative.grades || {}; p.cumulative.grades[key] = v })
   // Per-quarter override for a current-year course. Empty clears just that quarter
@@ -318,7 +336,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     if (v === '' || v == null) delete cur[q]; else cur[q] = Number(v)
     if (Object.keys(cur).length) p.cumulative.quarters[key] = cur; else delete p.cumulative.quarters[key]
   })
-  const resetOverrides = () => updatePrefs((p) => { p.cumulative.weights = {}; p.cumulative.grades = {}; p.cumulative.credits = {}; p.cumulative.quarters = {} })
+  const resetOverrides = () => updatePrefs((p) => { p.cumulative.weights = {}; p.cumulative.weightsSem = {}; p.cumulative.grades = {}; p.cumulative.credits = {}; p.cumulative.quarters = {} })
 
   // Manually-added courses (summer / not-yet-transcripted). Auto-included on add.
   const addManual = () => updatePrefs((p) => {
@@ -338,13 +356,13 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     if (p.cumulative.weights) delete p.cumulative.weights[key]
     if (p.cumulative.credits) delete p.cumulative.credits[key]
   })
-  const hasOverrides = Object.keys(weights).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0 || Object.keys(quarters).length > 0
+  const hasOverrides = Object.keys(weights).length > 0 || Object.keys(weightsSem).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0 || Object.keys(quarters).length > 0
   const selectedCount = Object.keys(included).length
 
   // Named saved setups — snapshot/restore the whole cumulative config, so a
   // complex setup can be reused across scenarios or reverted after a mistake.
   const snapConfig = (cum) => ({
-    included: { ...cum.included }, weights: { ...cum.weights },
+    included: { ...cum.included }, weights: { ...cum.weights }, weightsSem: { ...(cum.weightsSem || {}) },
     grades: { ...(cum.grades || {}) }, credits: { ...(cum.credits || {}) },
     quarters: { ...(cum.quarters || {}) }, manual: [...(cum.manual || [])],
   })
@@ -356,7 +374,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const loadConfig = (s) => {
     if (!window.confirm(`Load “${s.name}”? This replaces your current selection, weights, grades, credits and added classes.`)) return
     updatePrefs((p) => { Object.assign(p.cumulative, {
-      included: { ...s.config.included }, weights: { ...s.config.weights },
+      included: { ...s.config.included }, weights: { ...s.config.weights }, weightsSem: { ...(s.config.weightsSem || {}) },
       grades: { ...s.config.grades }, credits: { ...s.config.credits },
       quarters: { ...(s.config.quarters || {}) }, manual: [...(s.config.manual || [])],
     }) })
@@ -408,6 +426,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
             <div className="faint small" style={{ padding: '14px 20px' }}>Loading current classes…</div>
           ) : currentLive.map((c) => {
             const w = weights[c.key] ?? detectWeight(c.rawName)
+            const ws = weightsSem[c.key]
+            const split = !!ws
             const cr = credits[c.key] ?? c.credit // 0.25 per graded quarter (see buildCurrentLive)
             const qov = quarters[c.key] || {}
             const on = !!included[c.key]
@@ -422,10 +442,31 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                     <span className="cum-course-name">{c.name}</span>
                   </label>
                   <div className="cum-course-right">
-                    <WeightSelect value={w} onChange={(e) => setWeight(c.key, e.target.value)} />
+                    {split
+                      ? <span className="cum-sem-chip" title="This class uses a different weight each semester — set them below">S1 · S2</span>
+                      : <WeightSelect value={w} onChange={(e) => setWeight(c.key, e.target.value)} />}
+                    <button type="button" className={`cum-split-toggle ${split ? 'on' : ''}`}
+                      title={split
+                        ? 'Use one weight for the whole year'
+                        : 'Weight changes at the semester — for a class that turns into a different course (e.g. SS Research 5.0 → AP Psych 6.0)'}
+                      onClick={() => (split ? mergeWeight(c.key) : splitWeight(c.key, w))}>
+                      <Icon.split width={15} height={15} />
+                    </button>
                     <span className={`cum-year ${lg.cls}`} title="Year grade that feeds your GPA">{yr ?? '—'}</span>
                   </div>
                 </div>
+                {split && (
+                  <div className="cum-quarters cum-weightsem">
+                    <label className="cum-q">
+                      <span className="cum-q-label">S1 weight</span>
+                      <WeightSelect full value={ws.s1 ?? w} onChange={(e) => setWeightSem(c.key, 's1', e.target.value)} />
+                    </label>
+                    <label className="cum-q">
+                      <span className="cum-q-label">S2 weight</span>
+                      <WeightSelect full value={ws.s2 ?? w} onChange={(e) => setWeightSem(c.key, 's2', e.target.value)} />
+                    </label>
+                  </div>
+                )}
                 <div className="cum-quarters">
                   {['1', '2', '3', '4'].map((q) => {
                     const auto = c.q?.[q] != null ? Math.round(c.q[q]) : null
@@ -564,7 +605,16 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
         ? <Empty>None of your selected courses have a grade for this period. Try Full Year.</Empty>
         : <GpaTable
             rows={rows} result={result} showYear semesterView officialGpa={officialGpa}
-            onWeight={(k, w) => updatePrefs((p) => { p.cumulative.weights[k] = Number(w) })}
+            onWeight={(k, w, row) => updatePrefs((p) => {
+              // A course that's split per semester keeps editing the row's own
+              // semester here; everything else sets the whole-course weight.
+              const tag = typeof row?.key === 'string' && row.key.includes('#S') ? row.key.split('#')[1].toLowerCase() : null
+              if (tag && p.cumulative.weightsSem && p.cumulative.weightsSem[k]) {
+                p.cumulative.weightsSem[k] = { ...p.cumulative.weightsSem[k], [tag]: Number(w) }
+              } else {
+                p.cumulative.weights[k] = Number(w)
+              }
+            })}
             onInclude={(k) => onToggle(k)}
           />}
     </>
@@ -627,7 +677,7 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, officialGpa, 
                       : <span className="mono">{r.grade ?? '—'}</span>}
                   </td>
                   <td>
-                    <select className={`select mini ${weightTagClass(r.weight)}`} value={r.weight} onChange={(e) => onWeight?.(r.baseKey || r.key, e.target.value)}>
+                    <select className={`select mini ${weightTagClass(r.weight)}`} value={r.weight} onChange={(e) => onWeight?.(r.baseKey || r.key, e.target.value, r)}>
                       {WEIGHT_OPTIONS.map((w) => <option key={w.value} value={w.value}>{w.value} · {weightLabel(w.value)}</option>)}
                     </select>
                   </td>
