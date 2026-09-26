@@ -21,7 +21,8 @@ const DEFAULT = {
     v: CUMULATIVE_VERSION,
     included: {},      // key (courseKey for current, transcript code for prior) -> true
     weights: {},       // key -> weight (whole course, both semesters)
-    weightsSem: {},    // current-year key -> { s1, s2 } when a class changes weight/course mid-year (e.g. SS Research 5.0 → AP Psych 6.0); overrides `weights` per semester
+    links: {},         // current-year baseKey -> s2 courseKey: a period that changes course mid-year (S1 = base, S2 = the linked course, its own name+weight+grades). e.g. SS Research 5.0 → AP Psychology 6.0
+    unlinked: {},      // baseKey -> true: user disconnected an auto-detected continuation (suppresses the auto link)
     grades: {},        // key -> grade override
     credits: {},       // key -> credit override
     quarters: {},      // current-year key -> { '1':n,'2':n,'3':n,'4':n } per-quarter grade override (auto-filled from live, editable); s1/s2 derive from these w/ HAC-official rounding
@@ -40,7 +41,9 @@ const normalize = (raw) => {
   // Additive fields introduced after v2 — backfill without wiping selections.
   if (!Array.isArray(p.cumulative.manual)) p.cumulative.manual = []
   if (!Array.isArray(p.cumulative.saves)) p.cumulative.saves = []
-  if (!p.cumulative.weightsSem || typeof p.cumulative.weightsSem !== 'object') p.cumulative.weightsSem = {}
+  if (!p.cumulative.links || typeof p.cumulative.links !== 'object') p.cumulative.links = {}
+  if (!p.cumulative.unlinked || typeof p.cumulative.unlinked !== 'object') p.cumulative.unlinked = {}
+  delete p.cumulative.weightsSem // removed: replaced by course links
   return p
 }
 
