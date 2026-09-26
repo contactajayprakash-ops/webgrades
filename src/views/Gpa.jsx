@@ -11,7 +11,7 @@ import {
 import { transcriptGrade, isNonGpaCourse } from '../lib/courses.js'
 import {
   PERIOD_QUARTERS, buildCurrentLiveRaw, buildCurrentLive,
-  buildPriorCourses, buildCumRows, splitTranscript, resolvedPeriod,
+  buildPriorCourses, buildCumRows, splitTranscript, resolvedPeriod, effectiveLinks,
 } from '../lib/gpaCompute.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { transcriptCourseName } from '../lib/courseCatalog.js'
@@ -145,6 +145,8 @@ export default function Gpa() {
     [currentLiveRaw, currentGroup, latestYear, prefs.cumulative.quarters]
   )
   const priorCourses = useMemo(() => buildPriorCourses(priorGroups), [priorGroups])
+  // Effective mid-year course links (auto SS Research→AP Psych + any manual ones).
+  const links = useMemo(() => effectiveLinks(currentLive, prefs), [currentLive, prefs])
 
   const cumConfirmed = prefs.cumulative.confirmed
   const cumIncluded = prefs.cumulative.included
@@ -195,9 +197,10 @@ export default function Gpa() {
         transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
         priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade}
         confirmed={cumConfirmed} included={cumIncluded}
-        weights={prefs.cumulative.weights} weightsSem={prefs.cumulative.weightsSem || {}}
+        weights={prefs.cumulative.weights}
         credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
         quarters={prefs.cumulative.quarters || {}}
+        links={links} explicitLinks={prefs.cumulative.links || {}}
         manual={prefs.cumulative.manual || []}
         saves={prefs.cumulative.saves || []}
         rows={cumRows} result={cumResult} officialGpa={officialGpa}
@@ -276,9 +279,138 @@ function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, weightsSem = {}, credits, grades, quarters = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
+// One current-year course: Q1–Q4 auto-filled from live grades, weight, credit,
+// plus a "merge" affordance for a period that changes course at the semester.
+function SingleCard({ c, on, w, cr, qov, period, candidates, onToggle, setWeight, setCredit, setQuarter, onLink }) {
+  const [picking, setPicking] = useState(false)
+  const rp = resolvedPeriod(c, period)
+  const yr = rp?.grade != null ? Math.round(rp.grade) : null
+  const lg = letterGrade(yr)
+  return (
+    <div className={`cum-course ${on ? '' : 'off'}`}>
+      <div className="cum-course-head">
+        <label className="cum-check">
+          <input type="checkbox" checked={on} onChange={() => onToggle(c.key)} />
+          <span className="cum-course-name">{c.name}</span>
+        </label>
+        <div className="cum-course-right">
+          <WeightSelect value={w} onChange={(e) => setWeight(c.key, e.target.value)} />
+          {candidates.length > 0 && (
+            <button type="button" className={`cum-split-toggle ${picking ? 'on' : ''}`}
+              title="Merges into a different course next semester — for a period that changes course (e.g. SS Research → AP Psychology)"
+              onClick={() => setPicking((v) => !v)}>
+              <Icon.split width={15} height={15} />
+            </button>
+          )}
+          <span className={`cum-year ${lg.cls}`} title="Year grade that feeds your GPA">{yr ?? '—'}</span>
+        </div>
+      </div>
+      {picking && (
+        <div className="cum-mergepick">
+          <span className="small faint">Changes into this course at S2:</span>
+          <select className="select mini" defaultValue=""
+            onChange={(e) => { if (e.target.value) { onLink(c.key, e.target.value); setPicking(false) } }}>
+            <option value="" disabled>Pick a class…</option>
+            {candidates.map((k) => <option key={k.key} value={k.key}>{k.name}</option>)}
+          </select>
+          <button className="btn ghost sm" onClick={() => setPicking(false)}>Cancel</button>
+        </div>
+      )}
+      <div className="cum-quarters">
+        {['1', '2', '3', '4'].map((q) => {
+          const auto = c.q?.[q] != null ? Math.round(c.q[q]) : null
+          const val = qov[q] != null ? qov[q] : (auto != null ? auto : '')
+          return (
+            <label key={q} className={`cum-q ${qov[q] != null ? 'edited' : ''}`}>
+              <span className="cum-q-label">Q{q}</span>
+              <input className="input mini" type="number" step="1" inputMode="numeric"
+                placeholder={auto != null ? String(auto) : '—'}
+                value={val} onChange={(e) => setQuarter(c.key, q, e.target.value)} />
+            </label>
+          )
+        })}
+        <label className="cum-q cum-cr">
+          <span className="cum-q-label">Cr</span>
+          <input className="input mini" type="number" step="0.5" min="0" title="Credit"
+            value={cr} onChange={(e) => setCredit(c.key, e.target.value)} />
+        </label>
+      </div>
+    </div>
+  )
+}
+
+// A merged year-long course: S1 is the base class, S2 is a DIFFERENT course it
+// turns into (its own name, weight, grades). e.g. SS Research 5.0 → AP Psych 6.0.
+function MergedCard({ base, cont, on, weightBase, weightCont, cr, qBase, qCont, isAuto, onToggle, setWeight, setCredit, setQuarter, onDisconnect }) {
+  const g1 = base.s1 != null ? Math.round(base.s1) : null
+  const g2 = cont.s2 != null ? Math.round(cont.s2) : null
+  const seg = (course, tag, name, weight, qs, grade, ovMap) => {
+    const lg = letterGrade(grade)
+    return (
+      <div className="cum-mergeseg">
+        <div className="cum-seg-head">
+          <span className="cum-seg-tag">{tag}</span>
+          <span className="cum-seg-name" title={name}>{name}</span>
+          <WeightSelect value={weight} onChange={(e) => setWeight(course.key, e.target.value)} />
+          <span className={`cum-year ${lg.cls}`}>{grade ?? '—'}</span>
+        </div>
+        <div className="cum-quarters">
+          {qs.map((q) => {
+            const auto = course.q?.[q] != null ? Math.round(course.q[q]) : null
+            const val = ovMap[q] != null ? ovMap[q] : (auto != null ? auto : '')
+            return (
+              <label key={q} className={`cum-q ${ovMap[q] != null ? 'edited' : ''}`}>
+                <span className="cum-q-label">Q{q}</span>
+                <input className="input mini" type="number" step="1" inputMode="numeric"
+                  placeholder={auto != null ? String(auto) : '—'}
+                  value={val} onChange={(e) => setQuarter(course.key, q, e.target.value)} />
+              </label>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className={`cum-course cum-merged ${on ? '' : 'off'}`}>
+      <div className="cum-course-head">
+        <label className="cum-check">
+          <input type="checkbox" checked={on} onChange={() => onToggle(base.key)} />
+          <span className="cum-course-name">{base.name} <span className="cum-arrow">→</span> {cont.name}</span>
+        </label>
+        <div className="cum-course-right">
+          <span className="cum-merge-badge" title={isAuto
+            ? 'Auto-linked — this class continues as a different course next semester. Disconnect to treat them separately.'
+            : 'Merged — two classes counted as one year-long course.'}>
+            {isAuto ? 'Auto' : 'Merged'}
+          </span>
+          <button type="button" className="cum-split-toggle" title="Disconnect — treat these as two separate classes"
+            onClick={() => onDisconnect(base.key)}>
+            <Icon.split width={15} height={15} />
+          </button>
+        </div>
+      </div>
+      {seg(base, 'S1', base.name, weightBase, ['1', '2'], g1, qBase)}
+      {seg(cont, 'S2', cont.name, weightCont, ['3', '4'], g2, qCont)}
+      <div className="cum-quarters cum-merge-foot">
+        <span className="small faint">Full-year course · S1 + S2 counted separately</span>
+        <label className="cum-q cum-cr">
+          <span className="cum-q-label">Yr Cr</span>
+          <input className="input mini" type="number" step="0.5" min="0" title="Whole-year credit (split evenly across the two semesters)"
+            value={cr} onChange={(e) => setCredit(base.key, e.target.value)} />
+        </label>
+      </div>
+    </div>
+  )
+}
+
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, quarters = {}, links = {}, explicitLinks = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
+  // Mid-year course links: `absorbed` are the S2 courses hidden inside a merged
+  // card; `byKey` resolves a link target to its live course.
+  const byKey = new Map(currentLive.map((c) => [c.key, c]))
+  const absorbed = new Set(Object.values(links))
 
   // First-time walkthrough — auto-opens once the setup table is on screen.
   useEffect(() => {
@@ -310,21 +442,20 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const confirm = () => updatePrefs((p) => { p.cumulative.confirmed = true })
   const editSelection = () => updatePrefs((p) => { p.cumulative.confirmed = false })
   const setWeight = (key, w) => updatePrefs((p) => { p.cumulative.weights[key] = Number(w) })
-  // Per-semester weight — for a class that changes into a different course at the
-  // semester (e.g. SS Research 5.0 → AP Psych 6.0). Splitting seeds both sems from
-  // the current weight; merging collapses back to one, keeping the S1 value.
-  const setWeightSem = (key, sem, w) => updatePrefs((p) => {
-    p.cumulative.weightsSem = p.cumulative.weightsSem || {}
-    p.cumulative.weightsSem[key] = { ...(p.cumulative.weightsSem[key] || {}), [sem]: Number(w) }
+  // Merge a period that changes course mid-year: S1 stays `baseKey`, S2 becomes
+  // `s2Key` (its own name/weight/grades). e.g. SS Research → AP Psychology.
+  const linkCourse = (baseKey, s2Key) => updatePrefs((p) => {
+    p.cumulative.links = p.cumulative.links || {}
+    p.cumulative.unlinked = p.cumulative.unlinked || {}
+    p.cumulative.links[baseKey] = s2Key
+    delete p.cumulative.unlinked[baseKey]
+    p.cumulative.included[baseKey] = true // keep the merged course counted
   })
-  const splitWeight = (key, base) => updatePrefs((p) => {
-    p.cumulative.weightsSem = p.cumulative.weightsSem || {}
-    p.cumulative.weightsSem[key] = { s1: Number(base), s2: Number(base) }
-  })
-  const mergeWeight = (key) => updatePrefs((p) => {
-    const ws = (p.cumulative.weightsSem || {})[key]
-    if (ws && ws.s1 != null) p.cumulative.weights[key] = Number(ws.s1)
-    if (p.cumulative.weightsSem) delete p.cumulative.weightsSem[key]
+  const unlinkCourse = (baseKey) => updatePrefs((p) => {
+    p.cumulative.links = p.cumulative.links || {}
+    p.cumulative.unlinked = p.cumulative.unlinked || {}
+    delete p.cumulative.links[baseKey]
+    p.cumulative.unlinked[baseKey] = true // also suppress the auto-link
   })
   const setCredit = (key, v) => updatePrefs((p) => { p.cumulative.credits = p.cumulative.credits || {}; p.cumulative.credits[key] = v === '' ? null : Number(v) })
   const setGrade = (key, v) => updatePrefs((p) => { p.cumulative.grades = p.cumulative.grades || {}; p.cumulative.grades[key] = v })
@@ -336,7 +467,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     if (v === '' || v == null) delete cur[q]; else cur[q] = Number(v)
     if (Object.keys(cur).length) p.cumulative.quarters[key] = cur; else delete p.cumulative.quarters[key]
   })
-  const resetOverrides = () => updatePrefs((p) => { p.cumulative.weights = {}; p.cumulative.weightsSem = {}; p.cumulative.grades = {}; p.cumulative.credits = {}; p.cumulative.quarters = {} })
+  const resetOverrides = () => updatePrefs((p) => { p.cumulative.weights = {}; p.cumulative.grades = {}; p.cumulative.credits = {}; p.cumulative.quarters = {}; p.cumulative.links = {}; p.cumulative.unlinked = {} })
 
   // Manually-added courses (summer / not-yet-transcripted). Auto-included on add.
   const addManual = () => updatePrefs((p) => {
@@ -356,13 +487,14 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     if (p.cumulative.weights) delete p.cumulative.weights[key]
     if (p.cumulative.credits) delete p.cumulative.credits[key]
   })
-  const hasOverrides = Object.keys(weights).length > 0 || Object.keys(weightsSem).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0 || Object.keys(quarters).length > 0
+  const hasOverrides = Object.keys(weights).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0 || Object.keys(quarters).length > 0 || Object.keys(explicitLinks).length > 0
   const selectedCount = Object.keys(included).length
 
   // Named saved setups — snapshot/restore the whole cumulative config, so a
   // complex setup can be reused across scenarios or reverted after a mistake.
   const snapConfig = (cum) => ({
-    included: { ...cum.included }, weights: { ...cum.weights }, weightsSem: { ...(cum.weightsSem || {}) },
+    included: { ...cum.included }, weights: { ...cum.weights },
+    links: { ...(cum.links || {}) }, unlinked: { ...(cum.unlinked || {}) },
     grades: { ...(cum.grades || {}) }, credits: { ...(cum.credits || {}) },
     quarters: { ...(cum.quarters || {}) }, manual: [...(cum.manual || [])],
   })
@@ -374,7 +506,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const loadConfig = (s) => {
     if (!window.confirm(`Load “${s.name}”? This replaces your current selection, weights, grades, credits and added classes.`)) return
     updatePrefs((p) => { Object.assign(p.cumulative, {
-      included: { ...s.config.included }, weights: { ...s.config.weights }, weightsSem: { ...(s.config.weightsSem || {}) },
+      included: { ...s.config.included }, weights: { ...s.config.weights },
+      links: { ...(s.config.links || {}) }, unlinked: { ...(s.config.unlinked || {}) },
       grades: { ...s.config.grades }, credits: { ...s.config.credits },
       quarters: { ...(s.config.quarters || {}) }, manual: [...(s.config.manual || [])],
     }) })
@@ -424,69 +557,26 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
         <div className="cum-courses" data-tour="quarters">
           {currentLive.length === 0 ? (
             <div className="faint small" style={{ padding: '14px 20px' }}>Loading current classes…</div>
-          ) : currentLive.map((c) => {
-            const w = weights[c.key] ?? detectWeight(c.rawName)
-            const ws = weightsSem[c.key]
-            const split = !!ws
-            const cr = credits[c.key] ?? c.credit // 0.25 per graded quarter (see buildCurrentLive)
-            const qov = quarters[c.key] || {}
+          ) : currentLive.filter((c) => !absorbed.has(c.key)).map((c) => {
             const on = !!included[c.key]
-            const rp = resolvedPeriod(c, period)
-            const yr = rp?.grade != null ? Math.round(rp.grade) : null
-            const lg = letterGrade(yr)
+            const w = weights[c.key] ?? detectWeight(c.rawName)
+            const L = links[c.key] ? byKey.get(links[c.key]) : null
+            if (L) {
+              return (
+                <MergedCard key={c.key} base={c} cont={L} on={on}
+                  weightBase={w} weightCont={weights[L.key] ?? detectWeight(L.rawName)}
+                  cr={credits[c.key] ?? 1} qBase={quarters[c.key] || {}} qCont={quarters[L.key] || {}}
+                  isAuto={!explicitLinks[c.key]}
+                  onToggle={onToggle} setWeight={setWeight} setCredit={setCredit} setQuarter={setQuarter} onDisconnect={unlinkCourse} />
+              )
+            }
+            const candidates = currentLive
+              .filter((x) => x.key !== c.key && !absorbed.has(x.key) && !links[x.key])
+              .map((x) => ({ key: x.key, name: x.name }))
             return (
-              <div key={c.key} className={`cum-course ${on ? '' : 'off'}`}>
-                <div className="cum-course-head">
-                  <label className="cum-check">
-                    <input type="checkbox" checked={on} onChange={() => onToggle(c.key)} />
-                    <span className="cum-course-name">{c.name}</span>
-                  </label>
-                  <div className="cum-course-right">
-                    {split
-                      ? <span className="cum-sem-chip" title="This class uses a different weight each semester — set them below">S1 · S2</span>
-                      : <WeightSelect value={w} onChange={(e) => setWeight(c.key, e.target.value)} />}
-                    <button type="button" className={`cum-split-toggle ${split ? 'on' : ''}`}
-                      title={split
-                        ? 'Use one weight for the whole year'
-                        : 'Weight changes at the semester — for a class that turns into a different course (e.g. SS Research 5.0 → AP Psych 6.0)'}
-                      onClick={() => (split ? mergeWeight(c.key) : splitWeight(c.key, w))}>
-                      <Icon.split width={15} height={15} />
-                    </button>
-                    <span className={`cum-year ${lg.cls}`} title="Year grade that feeds your GPA">{yr ?? '—'}</span>
-                  </div>
-                </div>
-                {split && (
-                  <div className="cum-quarters cum-weightsem">
-                    <label className="cum-q">
-                      <span className="cum-q-label">S1 weight</span>
-                      <WeightSelect full value={ws.s1 ?? w} onChange={(e) => setWeightSem(c.key, 's1', e.target.value)} />
-                    </label>
-                    <label className="cum-q">
-                      <span className="cum-q-label">S2 weight</span>
-                      <WeightSelect full value={ws.s2 ?? w} onChange={(e) => setWeightSem(c.key, 's2', e.target.value)} />
-                    </label>
-                  </div>
-                )}
-                <div className="cum-quarters">
-                  {['1', '2', '3', '4'].map((q) => {
-                    const auto = c.q?.[q] != null ? Math.round(c.q[q]) : null
-                    const val = qov[q] != null ? qov[q] : (auto != null ? auto : '')
-                    return (
-                      <label key={q} className={`cum-q ${qov[q] != null ? 'edited' : ''}`}>
-                        <span className="cum-q-label">Q{q}</span>
-                        <input className="input mini" type="number" step="1" inputMode="numeric"
-                          placeholder={auto != null ? String(auto) : '—'}
-                          value={val} onChange={(e) => setQuarter(c.key, q, e.target.value)} />
-                      </label>
-                    )
-                  })}
-                  <label className="cum-q cum-cr">
-                    <span className="cum-q-label">Cr</span>
-                    <input className="input mini" type="number" step="0.5" min="0" title="Credit"
-                      value={cr} onChange={(e) => setCredit(c.key, e.target.value)} />
-                  </label>
-                </div>
-              </div>
+              <SingleCard key={c.key} c={c} on={on} w={w}
+                cr={credits[c.key] ?? c.credit} qov={quarters[c.key] || {}} period={period} candidates={candidates}
+                onToggle={onToggle} setWeight={setWeight} setCredit={setCredit} setQuarter={setQuarter} onLink={linkCourse} />
             )
           })}
         </div>
@@ -605,16 +695,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
         ? <Empty>None of your selected courses have a grade for this period. Try Full Year.</Empty>
         : <GpaTable
             rows={rows} result={result} showYear semesterView officialGpa={officialGpa}
-            onWeight={(k, w, row) => updatePrefs((p) => {
-              // A course that's split per semester keeps editing the row's own
-              // semester here; everything else sets the whole-course weight.
-              const tag = typeof row?.key === 'string' && row.key.includes('#S') ? row.key.split('#')[1].toLowerCase() : null
-              if (tag && p.cumulative.weightsSem && p.cumulative.weightsSem[k]) {
-                p.cumulative.weightsSem[k] = { ...p.cumulative.weightsSem[k], [tag]: Number(w) }
-              } else {
-                p.cumulative.weights[k] = Number(w)
-              }
-            })}
+            onWeight={(k, w) => updatePrefs((p) => { p.cumulative.weights[k] = Number(w) })}
             onInclude={(k) => onToggle(k)}
           />}
     </>

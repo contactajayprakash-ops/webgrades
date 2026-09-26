@@ -141,6 +141,37 @@ export function buildPriorCourses(priorGroups) {
   return out
 }
 
+// Some Frisco class periods change into a DIFFERENT course at the semester —
+// the S1 course and the S2 course are distinct (own name, weight, GPA scale),
+// they just share a period. The common one is Social Studies Research (5.0, S1)
+// becoming AP Psychology (6.0, S2). We auto-link these when both show up live so
+// the student doesn't have to know the trick; `unlinked` lets them disconnect.
+const KNOWN_CONTINUATIONS = [
+  { base: /(social\s*stud(ies|y)?|soc\s*stu|ss)\s*research/i, cont: /ap\s*psych/i },
+]
+
+export function computeAutoLinks(currentLive = []) {
+  const links = {}
+  for (const rule of KNOWN_CONTINUATIONS) {
+    const b = currentLive.find((c) => rule.base.test(c.rawName || c.name || ''))
+    const s = currentLive.find((c) => rule.cont.test(c.rawName || c.name || ''))
+    if (b && s && b.key !== s.key) links[b.key] = s.key
+  }
+  return links
+}
+
+// Effective baseKey -> s2Key links: auto-detected continuations (minus the ones
+// the user disconnected) plus any manual links they made. Manual wins.
+export function effectiveLinks(currentLive, prefs) {
+  const explicit = prefs?.cumulative?.links || {}
+  const unlinked = prefs?.cumulative?.unlinked || {}
+  const out = {}
+  const auto = computeAutoLinks(currentLive)
+  for (const [b, s] of Object.entries(auto)) if (!unlinked[b]) out[b] = s
+  for (const [b, s] of Object.entries(explicit)) if (s) out[b] = s
+  return out
+}
+
 // Cumulative rows — ONE ROW PER SEMESTER, because Frisco computes GPA on
 // semester grades, not on a course's year average. This matters for the
 // UNWEIGHTED 4.0: an 89 in a semester is a B (3.0), and averaging it with a 9x
@@ -151,7 +182,6 @@ export function buildPriorCourses(priorGroups) {
 export function buildCumRows({ currentLive, priorCourses, included, period, prefs, latestYear }) {
   const rows = []
   const weights = prefs.cumulative.weights || {}
-  const weightsSem = prefs.cumulative.weightsSem || {}
   const creditsOv = prefs.cumulative.credits || {}
   const grades = prefs.cumulative.grades || {}
   const wantS1 = period !== 's2'
@@ -167,24 +197,38 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
 
   // Current year — each semester's grade (from the quarters) at 0.25 credit per
   // graded quarter in it, so S1 = 0.25 (Q1 only) … 0.5 (Q1+Q2), and likewise S2.
+  const links = effectiveLinks(currentLive, prefs)
+  const absorbed = new Set(Object.values(links))
+  const byKey = new Map(currentLive.map((c) => [c.key, c]))
+  const curYear = currentSchoolYear()
+
   for (const c of currentLive) {
+    if (absorbed.has(c.key)) continue // this course is the S2 of a merged pair — its base emits it
     if (!included[c.key]) continue
     const weight = weights[c.key] ?? detectWeight(c.rawName)
-    // Per-semester weight when a class changes course mid-year (e.g. SS Research
-    // 5.0 in S1 becomes AP Psych 6.0 in S2). Each semester is its own GPA row, so
-    // splitting the weight is exact — no averaging hack.
-    const ws = weightsSem[c.key]
-    const w1 = ws && ws.s1 != null ? ws.s1 : weight
-    const w2 = ws && ws.s2 != null ? ws.s2 : weight
+    const L = links[c.key] ? byKey.get(links[c.key]) : null
+
+    if (L) {
+      // Merged year: S1 is THIS course, S2 is the linked continuation, which
+      // keeps its own name, weight and grades (e.g. SS Research 5.0 → AP Psych 6.0).
+      const w2 = weights[L.key] ?? detectWeight(L.rawName)
+      let cS1 = ['1', '2'].filter((n) => c.qEff?.[n] != null).length * 0.25
+      let cS2 = ['3', '4'].filter((n) => L.qEff?.[n] != null).length * 0.25
+      const ov = creditsOv[c.key] // a base credit override means the whole-year credit
+      if (ov != null) { cS1 = ov / 2; cS2 = ov / 2 }
+      if (wantS1) push(c.key, c.name, curYear, 'S1', c.s1, cS1, weight)
+      if (wantS2) push(L.key, L.name, curYear, 'S2', L.s2, cS2, w2)
+      continue
+    }
+
     let cS1 = ['1', '2'].filter((n) => c.qEff?.[n] != null).length * 0.25
     let cS2 = ['3', '4'].filter((n) => c.qEff?.[n] != null).length * 0.25
     // A full-credit override scales the two semesters proportionally.
     if (creditsOv[c.key] != null && cS1 + cS2 > 0) {
       const k = creditsOv[c.key] / (cS1 + cS2); cS1 *= k; cS2 *= k
     }
-    const curYear = currentSchoolYear()
-    if (wantS1) push(c.key, c.name, curYear, 'S1', c.s1, cS1, w1)
-    if (wantS2) push(c.key, c.name, curYear, 'S2', c.s2, cS2, w2)
+    if (wantS1) push(c.key, c.name, curYear, 'S1', c.s1, cS1, weight)
+    if (wantS2) push(c.key, c.name, curYear, 'S2', c.s2, cS2, weight)
   }
 
   // Prior years — the transcript's two SEMESTER grades, each at half the course
