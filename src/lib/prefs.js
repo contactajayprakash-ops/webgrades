@@ -23,8 +23,9 @@ const DEFAULT = {
     weights: {},       // key -> weight
     grades: {},        // key -> grade override
     credits: {},       // key -> credit override
+    quarters: {},      // current-year key -> { '1':n,'2':n,'3':n,'4':n } per-quarter grade override (auto-filled from live, editable); s1/s2 derive from these w/ HAC-official rounding
     manual: [],        // manually-added courses [{ id, name }] (grade/weight/credit live in the maps above, keyed `manual:<id>`)
-    saves: [],         // named snapshots: [{ id, name, savedAt, config: { included, weights, grades, credits, manual } }]
+    saves: [],         // named snapshots: [{ id, name, savedAt, config: { included, weights, grades, credits, quarters, manual } }]
     confirmed: false,  // has the user picked courses at least once?
   },
 }

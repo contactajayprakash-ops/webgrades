@@ -69,7 +69,7 @@ export function useGpaMetrics(period = 'year') {
 
     const currentLiveRaw = buildCurrentLiveRaw({ quarters, edits })
     const { latestYear, currentGroup, priorGroups } = splitTranscript(transcript, currentLiveRaw)
-    const currentLive = buildCurrentLive({ currentLiveRaw, currentGroup, latestYear })
+    const currentLive = buildCurrentLive({ currentLiveRaw, currentGroup, latestYear, quartersOverride: prefs.cumulative.quarters })
     const priorCourses = buildPriorCourses(priorGroups)
     const cumRows = buildCumRows({
       currentLive, priorCourses, included: prefs.cumulative.included, period, prefs, latestYear,
