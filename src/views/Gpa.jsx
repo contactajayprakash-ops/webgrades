@@ -157,6 +157,8 @@ export default function Gpa() {
 
   const cumResult = weightedGpa(cumRows)
   const cumUnweighted = useMemo(() => unweightedGpa(cumRows), [cumRows])
+  // HAC's official cumulative weighted GPA (6.0), as last posted to the transcript.
+  const officialGpa = peekData('rank')?.gpa || null
 
   // ---- handlers ----
   const toggleCum = (code) => updatePrefs((p) => {
@@ -198,7 +200,7 @@ export default function Gpa() {
         quarters={prefs.cumulative.quarters || {}}
         manual={prefs.cumulative.manual || []}
         saves={prefs.cumulative.saves || []}
-        rows={cumRows} result={cumResult}
+        rows={cumRows} result={cumResult} officialGpa={officialGpa}
         period={period} onPeriod={setPeriod}
         onToggle={toggleCum} updatePrefs={updatePrefs}
         onRetry={() => loadTranscript(true)}
@@ -273,7 +275,7 @@ function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, onPeriod, confirmed, included, weights, credits, grades, quarters = {}, manual = [], saves = [], rows, result, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, onPeriod, confirmed, included, weights, credits, grades, quarters = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const periodSeg = (
     <Segmented value={period} onChange={onPeriod} ariaLabel="Time period"
@@ -569,7 +571,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
       {rows.length === 0
         ? <Empty>None of your selected courses have a grade for this period. Try Full Year.</Empty>
         : <GpaTable
-            rows={rows} result={result} showYear semesterView
+            rows={rows} result={result} showYear semesterView officialGpa={officialGpa}
             onWeight={(k, w) => updatePrefs((p) => { p.cumulative.weights[k] = Number(w) })}
             onInclude={(k) => onToggle(k)}
           />}
@@ -578,7 +580,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
 }
 
 // ---- shared table ----
-function GpaTable({ rows, result, whatIf, showYear, editableGrade, onGrade, onWeight, onCredit, onInclude }) {
+function GpaTable({ rows, result, whatIf, showYear, editableGrade, officialGpa, onGrade, onWeight, onCredit, onInclude }) {
   const res = result || weightedGpa(rows)
   const ures = unweightedGpa(rows)
   return (
@@ -586,13 +588,13 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, onGrade, onWe
       <div className="grid grid-3">
         <div className="card stat">
           <span className="glow" style={{ background: 'var(--accent)' }} />
-          <span className="label">Weighted GPA {whatIf && <em style={{ color: 'var(--yellow-text)' }}>· what-if</em>}</span>
-          <span className="value">{fmtGpa(res.gpa)}</span>
-          <span className="meta">Frisco 6.0 scale</span>
+          <span className="label">Most Recent Transcripted GPA</span>
+          <span className="value">{officialGpa || '—'}</span>
+          <span className="meta">Official · HAC 6.0 scale</span>
         </div>
         <div className="card stat">
           <span className="glow" style={{ background: 'var(--green)' }} />
-          <span className="label">Unweighted GPA</span>
+          <span className="label">Most Recent Cumulative</span>
           <span className="value">{ures.gpa.toFixed(2)}</span>
           <span className="meta">4.0 scale · A=4 B=3 C=2</span>
         </div>
