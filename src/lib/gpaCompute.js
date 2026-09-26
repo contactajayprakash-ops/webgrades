@@ -101,15 +101,30 @@ export function buildCurrentLiveRaw({ quarters, edits }) {
 
 // Resolved current courses: use HAC's posted semester grades + credit when
 // available (year finalized), else fall back to the live estimate (mid-year).
-export function buildCurrentLive({ currentLiveRaw, currentGroup, latestYear }) {
+// `quartersOverride` (prefs.cumulative.quarters) lets a student predict per
+// quarter: each course's effective quarters = their override ?? the live per
+// -quarter average (c.q), and s1/s2 derive from those with HAC-official rounding
+// (round each quarter, average, round) — the exact method the transcript uses.
+export function buildCurrentLive({ currentLiveRaw, currentGroup, latestYear, quartersOverride = {} }) {
   const txCur = (currentGroup?.courses || []).map((c) => ({ ...c, code: c.courseCode || `${latestYear}-${c.description}` }))
   const officialMap = txCur.length ? matchOfficial(currentLiveRaw, txCur) : {}
   return currentLiveRaw.map((c) => {
     const o = officialMap[c.key]
-    const s1 = o && o.sem1 != null ? o.sem1 : c.rawS1
-    const s2 = o && o.sem2 != null ? o.sem2 : c.rawS2
+    // Effective per-quarter grades: override wins, else the live average.
+    const qov = quartersOverride[c.key] || {}
+    const qEff = {}
+    for (const n of ['1', '2', '3', '4']) {
+      const v = qov[n] != null ? qov[n] : c.q?.[n]
+      qEff[n] = v == null ? null : Number(v)
+    }
+    // Quarter-derived semesters (HAC-official). Official posted transcript grade
+    // still wins when the year is finalized.
+    const qS1 = semesterGrade([qEff['1'], qEff['2']])
+    const qS2 = semesterGrade([qEff['3'], qEff['4']])
+    const s1 = o && o.sem1 != null ? o.sem1 : qS1
+    const s2 = o && o.sem2 != null ? o.sem2 : qS2
     const credit = o && o.credit != null && s1 != null && s2 != null ? o.credit : (s1 != null && s2 != null ? 1 : 0.5)
-    return { ...c, s1, s2, credit, official: !!o, sems: [s1, s2].filter((x) => x != null).join(' / ') || '—' }
+    return { ...c, qEff, s1, s2, credit, official: !!o, sems: [s1, s2].filter((x) => x != null).join(' / ') || '—' }
   })
 }
 
@@ -130,7 +145,10 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
   for (const c of currentLive) {
     if (!included[c.key]) continue
     const pg = resolvedPeriod(c, period)
-    const grade = grades[c.key] != null ? grades[c.key] : pg?.grade
+    // Current-year grade comes from the (auto-filled + per-quarter-editable)
+    // quarters via s1/s2 — NOT the legacy single-grade override, which the UI no
+    // longer sets for current courses.
+    const grade = pg?.grade
     if (grade == null) continue
     const credit = prefs.cumulative.credits?.[c.key] ?? pg?.credit ?? (period === 'year' ? 1 : 0.5)
     rows.push({

@@ -7,7 +7,7 @@ import Tour from '../components/Tour.jsx'
 import Segmented from '../components/Segmented.jsx'
 import {
   detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
-  WEIGHT_OPTIONS, weightTagClass, weightLabel,
+  WEIGHT_OPTIONS, weightTagClass, weightLabel, letterGrade,
 } from '../lib/gpa.js'
 import { courseKey, transcriptGrade, isNonGpaCourse, PERIODS, guessCurrentQuarter, semesterOfQuarter } from '../lib/courses.js'
 import {
@@ -153,8 +153,8 @@ export default function Gpa() {
   )
 
   const currentLive = useMemo(
-    () => buildCurrentLive({ currentLiveRaw, currentGroup, latestYear }),
-    [currentLiveRaw, currentGroup, latestYear]
+    () => buildCurrentLive({ currentLiveRaw, currentGroup, latestYear, quartersOverride: prefs.cumulative.quarters }),
+    [currentLiveRaw, currentGroup, latestYear, prefs.cumulative.quarters]
   )
   const priorCourses = useMemo(() => buildPriorCourses(priorGroups), [priorGroups])
 
@@ -238,6 +238,7 @@ export default function Gpa() {
           priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade} period={period}
           confirmed={cumConfirmed} included={cumIncluded}
           weights={prefs.cumulative.weights} credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
+          quarters={prefs.cumulative.quarters || {}}
           manual={prefs.cumulative.manual || []}
           saves={prefs.cumulative.saves || []}
           rows={cumRows} result={cumResult}
@@ -315,7 +316,7 @@ function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, manual = [], saves = [], rows, result, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, quarters = {}, manual = [], saves = [], rows, result, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
 
@@ -351,7 +352,15 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const setWeight = (key, w) => updatePrefs((p) => { p.cumulative.weights[key] = Number(w) })
   const setCredit = (key, v) => updatePrefs((p) => { p.cumulative.credits = p.cumulative.credits || {}; p.cumulative.credits[key] = v === '' ? null : Number(v) })
   const setGrade = (key, v) => updatePrefs((p) => { p.cumulative.grades = p.cumulative.grades || {}; p.cumulative.grades[key] = v })
-  const resetOverrides = () => updatePrefs((p) => { p.cumulative.weights = {}; p.cumulative.grades = {}; p.cumulative.credits = {} })
+  // Per-quarter override for a current-year course. Empty clears just that quarter
+  // (falls back to the live auto-fill). Removing the last override drops the key.
+  const setQuarter = (key, q, v) => updatePrefs((p) => {
+    p.cumulative.quarters = p.cumulative.quarters || {}
+    const cur = { ...(p.cumulative.quarters[key] || {}) }
+    if (v === '' || v == null) delete cur[q]; else cur[q] = Number(v)
+    if (Object.keys(cur).length) p.cumulative.quarters[key] = cur; else delete p.cumulative.quarters[key]
+  })
+  const resetOverrides = () => updatePrefs((p) => { p.cumulative.weights = {}; p.cumulative.grades = {}; p.cumulative.credits = {}; p.cumulative.quarters = {} })
 
   // Manually-added courses (summer / not-yet-transcripted). Auto-included on add.
   const addManual = () => updatePrefs((p) => {
@@ -378,7 +387,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   // complex setup can be reused across scenarios or reverted after a mistake.
   const snapConfig = (cum) => ({
     included: { ...cum.included }, weights: { ...cum.weights },
-    grades: { ...(cum.grades || {}) }, credits: { ...(cum.credits || {}) }, manual: [...(cum.manual || [])],
+    grades: { ...(cum.grades || {}) }, credits: { ...(cum.credits || {}) },
+    quarters: { ...(cum.quarters || {}) }, manual: [...(cum.manual || [])],
   })
   const saveConfig = () => {
     const name = (window.prompt('Name this GPA setup (e.g. "Real", "If I ace finals"):') || '').trim()
@@ -389,7 +399,8 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     if (!window.confirm(`Load “${s.name}”? This replaces your current selection, weights, grades, credits and added classes.`)) return
     updatePrefs((p) => { Object.assign(p.cumulative, {
       included: { ...s.config.included }, weights: { ...s.config.weights },
-      grades: { ...s.config.grades }, credits: { ...s.config.credits }, manual: [...(s.config.manual || [])],
+      grades: { ...s.config.grades }, credits: { ...s.config.credits },
+      quarters: { ...(s.config.quarters || {}) }, manual: [...(s.config.manual || [])],
     }) })
   }
   const overwriteConfig = (s) => {
@@ -429,39 +440,58 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
         <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
           {currentGroup ? `${latestYear} · Grade ${currentGroup.grade} · ${currentGroup.building}` : `Current year${currentGrade ? ` · Grade ${currentGrade}` : ''}`} · from live grades
         </div>
-        <table className="table">
-          <tbody>
-            {currentLive.length === 0 ? (
-              <tr><td className="faint small" style={{ padding: '14px 20px' }}>Loading current classes…</td></tr>
-            ) : currentLive.map((c) => {
-              const w = weights[c.key] ?? detectWeight(c.rawName)
-              const defCr = c.s1 != null && c.s2 != null ? 1 : 0.5
-              const cr = credits[c.key] ?? defCr
-              return (
-                <tr key={c.key}>
-                  <td style={{ width: 40 }}>
-                    <input type="checkbox" checked={!!included[c.key]} onChange={() => onToggle(c.key)}
-                      style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                  </td>
-                  <td>{c.name}<span className="faint small"> · live</span></td>
-                  <td><WeightSelect value={w} onChange={(e) => setWeight(c.key, e.target.value)} /></td>
-                  <td className="num faint small">{c.sems}</td>
-                  <td className="num">
-                    {(() => {
-                      const rp = resolvedPeriod(c, period)
-                      const auto = rp?.grade != null ? Math.round(rp.grade * 100) / 100 : null
-                      const gv = grades[c.key] !== undefined ? grades[c.key] : auto
-                      return <input className="input mini" type="number" step="1" title="Grade (editable — enter a predicted grade)"
-                        placeholder={auto != null ? String(auto) : 'grade'}
-                        value={gv ?? ''} onChange={(e) => setGrade(c.key, e.target.value === '' ? null : Number(e.target.value))} />
-                    })()}
-                  </td>
-                  <td className="num"><input className="input mini" type="number" step="0.5" min="0" title="Credit" value={cr} onChange={(e) => setCredit(c.key, e.target.value)} /></td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <p className="small faint" style={{ padding: '2px 20px 6px' }}>
+          Each course averages your four quarters (HAC-official rounding). Finished
+          quarters auto-fill from your real grades — type over any to predict, or fill
+          future quarters. The number on the right is what feeds your GPA.
+        </p>
+        <div className="cum-courses" data-tour="quarters">
+          {currentLive.length === 0 ? (
+            <div className="faint small" style={{ padding: '14px 20px' }}>Loading current classes…</div>
+          ) : currentLive.map((c) => {
+            const w = weights[c.key] ?? detectWeight(c.rawName)
+            const defCr = c.s1 != null && c.s2 != null ? 1 : 0.5
+            const cr = credits[c.key] ?? defCr
+            const qov = quarters[c.key] || {}
+            const on = !!included[c.key]
+            const rp = resolvedPeriod(c, period)
+            const yr = rp?.grade != null ? Math.round(rp.grade) : null
+            const lg = letterGrade(yr)
+            return (
+              <div key={c.key} className={`cum-course ${on ? '' : 'off'}`}>
+                <div className="cum-course-head">
+                  <label className="cum-check">
+                    <input type="checkbox" checked={on} onChange={() => onToggle(c.key)} />
+                    <span className="cum-course-name">{c.name}</span>
+                  </label>
+                  <div className="cum-course-right">
+                    <WeightSelect value={w} onChange={(e) => setWeight(c.key, e.target.value)} />
+                    <span className={`cum-year ${lg.cls}`} title="Year grade that feeds your GPA">{yr ?? '—'}</span>
+                  </div>
+                </div>
+                <div className="cum-quarters">
+                  {['1', '2', '3', '4'].map((q) => {
+                    const auto = c.q?.[q] != null ? Math.round(c.q[q]) : null
+                    const val = qov[q] != null ? qov[q] : (auto != null ? auto : '')
+                    return (
+                      <label key={q} className={`cum-q ${qov[q] != null ? 'edited' : ''}`}>
+                        <span className="cum-q-label">Q{q}</span>
+                        <input className="input mini" type="number" step="1" inputMode="numeric"
+                          placeholder={auto != null ? String(auto) : '—'}
+                          value={val} onChange={(e) => setQuarter(c.key, q, e.target.value)} />
+                      </label>
+                    )
+                  })}
+                  <label className="cum-q cum-cr">
+                    <span className="cum-q-label">Cr</span>
+                    <input className="input mini" type="number" step="0.5" min="0" title="Credit"
+                      value={cr} onChange={(e) => setCredit(c.key, e.target.value)} />
+                  </label>
+                </div>
+              </div>
+            )
+          })}
+        </div>
 
         {/* manually-added courses — summer / not-yet-transcripted outliers */}
         <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
