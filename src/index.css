@@ -564,25 +564,33 @@ body { overscroll-behavior-y: contain; } /* replace the browser's native pull-to
 .input.mini { padding: 6px 10px; font-size: var(--t-footnote); width: 76px; text-align: right; border-radius: 9px; }
 .select.mini { padding: 6px 10px; font-size: var(--t-footnote); width: auto; border-radius: 9px; }
 
-/* Cumulative setup — current-year courses as compact cards with 4 quarter inputs
-   (auto-filled from live grades, editable). Card-per-course so it's readable and
+/* Cumulative setup — every course (current, prior, added) is a compact card:
+   a head row (checkbox + name + weight + grade badge) and a fields row. Current
+   -year cards get four quarter inputs (auto-filled from live grades, editable);
+   prior/added use the simpler grade+credit row. One consistent look, and
    touch-friendly on mobile without the wide-table horizontal scroll. */
 .cum-courses { display: flex; flex-direction: column; }
 .cum-course { padding: 12px 20px; border-top: 0.5px solid var(--hairline); }
 .cum-course.off { opacity: 0.5; }
 .cum-course-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
-.cum-check { display: flex; align-items: center; gap: 11px; min-width: 0; cursor: pointer; }
-.cum-check input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+.cum-check { display: flex; align-items: center; gap: 11px; min-width: 0; flex: 1; cursor: pointer; }
+.cum-check > input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
 .cum-course-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cum-name-input { flex: 1; min-width: 0; width: auto !important; text-align: left !important; }
 .cum-course-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.cum-remove { background: transparent; border: 0; color: var(--red-text); cursor: pointer; padding: 4px; display: inline-flex; }
 .cum-year { min-width: 40px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums;
   padding: 3px 9px; border-radius: var(--pill); border: 0.5px solid transparent; }
-.cum-quarters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.cum-q { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+/* Fields row: quarters flex equally; credit is a small column pushed to the right. */
+.cum-quarters { display: flex; gap: 8px; align-items: flex-end; }
+.cum-quarters > .cum-q { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .cum-q-label { font-size: 11px; color: var(--text-faint); text-align: center; letter-spacing: .03em; font-weight: 600; }
 .cum-q .input.mini { width: 100%; text-align: center; padding: 8px 4px; }
 .cum-q.edited .input.mini { border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.cum-cr { flex: 0 0 52px !important; margin-left: 6px; }
 .cum-cr .input.mini { color: var(--text-dim); }
+.cum-simple .cum-q:first-child { flex: 2 1 0; }
+.cum-static { padding: 7px 4px; text-align: center; color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: var(--t-footnote); }
 .grades-search { width: 200px; } /* desktop; goes full-width (flex:1) on mobile */
 
 /* ============================================================================
