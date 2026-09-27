@@ -367,6 +367,11 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.992);
   background: var(--menu-bg); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
   border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--drop-lg);
   display: flex; flex-direction: column; gap: 1px; animation: popin .28s var(--spring) backwards; max-height: 340px; overflow-y: auto; }
+/* The GPA "Saved" menu sits under a left-ish button in a wrapping toolbar; a
+   fixed right:0 pushed it off the left edge on narrow screens. Cap its width to
+   the viewport, and on mobile open it rightward from the trigger so it stays on. */
+.saved-menu { width: min(264px, calc(100vw - 28px)); }
+@media (max-width: 760px) { .saved-menu { left: 0; right: auto; } }
 .card-menu .menu-head { font-size: var(--t-caption2); text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); font-weight: 600; padding: 8px 10px 5px; }
 .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 9px;
   background: transparent; border: none; color: var(--text); text-align: left; font-size: var(--t-subhead); transition: .14s; }

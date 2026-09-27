@@ -248,7 +248,7 @@ function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
       {open && (
         <>
           <div className="profile-backdrop" onClick={() => setOpen(false)} />
-          <div className="card card-menu" style={{ top: 38 }} role="menu">
+          <div className="card card-menu saved-menu" style={{ top: 38 }} role="menu">
             <div className="menu-head">Saved setups</div>
             {saves.length === 0 && <div className="menu-item" style={{ color: 'var(--text-faint)', cursor: 'default' }}>None saved yet.</div>}
             {saves.map((s) => (
@@ -711,13 +711,13 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, officialGpa, 
       <div className="grid grid-3">
         <div className="card stat">
           <span className="glow" style={{ background: 'var(--accent)' }} />
-          <span className="label">Most Recent Transcripted GPA</span>
+          <span className="label">Most Recent Transcripted 6.0</span>
           <span className="value">{officialGpa || '—'}</span>
           <span className="meta">Official · HAC 6.0 scale</span>
         </div>
         <div className="card stat">
           <span className="glow" style={{ background: 'var(--green)' }} />
-          <span className="label">Most Recent Cumulative</span>
+          <span className="label">Most Recent Transcripted 4.0</span>
           <span className="value">{ures.gpa.toFixed(2)}</span>
           <span className="meta">4.0 scale · A=4 B=3 C=2</span>
         </div>
