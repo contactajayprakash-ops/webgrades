@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
-import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner, Sparkline, LastUpdated } from '../components/ui.jsx'
+import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner, Sparkline, LastUpdated, NumField } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import {
@@ -345,12 +345,10 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew 
                               : <span className="faint small">{r.category || '—'}</span>}
                           </td>
                           <td className="num">
-                            <input className="input mini" type="number" step="0.5" value={r.score ?? ''}
-                              onChange={(e) => setEdit(r.key, { score: e.target.value === '' ? null : Number(e.target.value) })} />
+                            <NumField value={r.score ?? null} onChange={(v) => setEdit(r.key, { score: v })} />
                           </td>
                           <td className="num">
-                            <input className="input mini" type="number" step="1" value={r.total ?? ''}
-                              onChange={(e) => setEdit(r.key, { total: e.target.value === '' ? null : Number(e.target.value) })} />
+                            <NumField value={r.total ?? null} onChange={(v) => setEdit(r.key, { total: v })} />
                           </td>
                           <td className="num">
                             {pct == null && r.mark
