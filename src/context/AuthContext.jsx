@@ -112,6 +112,22 @@ function hydrateCache(username) {
   return m
 }
 
+// Normalize a grade for comparison — stable across HAC's decimal drift
+// ("100.0" vs "100.00" vs 100). Mirrors the Pi poller's normGrade so the client
+// and server agree on what "changed" means.
+function normGrade(g) {
+  const n = parseFloat(String(g))
+  return Number.isFinite(n) ? String(n) : String(g).trim()
+}
+
+// Dedup key for a single assignment. MUST include the category: HAC lists the
+// same assignment name under both a Progress Check and an Assessment category
+// (e.g. "1D Motion Math" = 70 PC AND 97 AOL). Keyed by name alone, those two
+// collide in the old-grade map — the last one wins — so the other is compared
+// against the wrong grade and re-flagged as "new" on every poll (endless
+// notification spam). This is the same collision the Pi poller fixed server-side.
+const assignKey = (a) => `${a.category ?? ''}|${a.assignmentName ?? ''}`
+
 // Human-readable summary of what changed between two responses for one resource.
 function diffResource(type, extra, oldData, newData) {
   if (oldData === undefined || !newData) return []
@@ -126,10 +142,10 @@ function diffResource(type, extra, oldData, newData) {
         if (!o) continue
         const name = cleanCourseName(c.courseName)
         // Name the exact assignment(s) that were graded/changed, not just the avg.
-        const oldA = new Map((o.assignments || []).map((a) => [a.assignmentName, a.grade]))
+        const oldA = new Map((o.assignments || []).map((a) => [assignKey(a), a.grade]))
         let listed = 0
         for (const a of c.assignments || []) {
-          if (!graded(a.grade) || oldA.get(a.assignmentName) === a.grade) continue
+          if (!graded(a.grade) || normGrade(oldA.get(assignKey(a))) === normGrade(a.grade)) continue
           out.push(`${name} — ${a.assignmentName || 'Assignment'}: ${String(a.grade).trim()}`)
           listed++
         }
@@ -163,9 +179,9 @@ function classGradeEvents(oldData, newData) {
   for (const c of newData.assignmentsData || []) {
     const o = oldMap.get(c.courseName)
     if (!o) continue
-    const oldA = new Map((o.assignments || []).map((a) => [a.assignmentName, a.grade]))
+    const oldA = new Map((o.assignments || []).map((a) => [assignKey(a), a.grade]))
     for (const a of c.assignments || []) {
-      if (!graded(a.grade) || oldA.get(a.assignmentName) === a.grade) continue
+      if (!graded(a.grade) || normGrade(oldA.get(assignKey(a))) === normGrade(a.grade)) continue
       events.push({ course: cleanCourseName(c.courseName), name: a.assignmentName || 'Assignment', grade: String(a.grade).trim(), category: a.category })
     }
   }
