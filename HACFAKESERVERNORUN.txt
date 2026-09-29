@@ -401,14 +401,20 @@ const scrapeSchedule = async (fetch) => {
   return { scheduleData };
 };
 
-const scrapeAttendance = async (fetch) => {
-  const attendanceUrl =
-    "https://hac.friscoisd.org/HomeAccess/Content/Attendance/MonthlyView.aspx";
-  const attendancePage = await fetch(attendanceUrl, {
-    headers: { "User-Agent": "Mozilla/5.0" },
-  });
-  const document = new JSDOM(await attendancePage.text()).window.document;
-  assertLoggedIn(document);
+// Pull a __doPostBack('target','arg') pair out of an <a href="javascript:…">.
+const postbackOf = (a) => {
+  const m = /__doPostBack\(\s*'([^']*)'\s*,\s*'([^']*)'\s*\)/.exec(
+    a?.getAttribute("href") || "",
+  );
+  return m ? { target: m[1], arg: m[2] } : null;
+};
+
+// Parse one rendered MonthlyView document: the day cells + the calendar header.
+// The ASP.NET Calendar header is three cells — [prev nav][month label][next nav]
+// — each nav cell holding a __doPostBack link whose argument (e.g. "V9497", an
+// absolute date serial) navigates the calendar. We hand those args back to the
+// client so it can page months without the server needing any state.
+const parseAttendanceDoc = (document) => {
   const calendarCells = document.querySelectorAll("#plnMain_cldAttendance td");
   const days = Array.from(calendarCells)
     .map((cell) => {
@@ -423,12 +429,56 @@ const scrapeAttendance = async (fetch) => {
       };
     })
     .filter(Boolean);
+  const headerCells = document.querySelectorAll(".sg-asp-calendar-header td");
   return {
-    month: document
-      .querySelector(".sg-asp-calendar-header td:nth-child(2)")
-      ?.textContent.trim(),
+    month: headerCells[1]?.textContent.trim(),
     days,
+    prev: postbackOf(headerCells[0]?.querySelector("a")),
+    next: postbackOf(headerCells[2]?.querySelector("a")),
   };
+};
+
+const scrapeAttendance = async (fetch, date) => {
+  const attendanceUrl =
+    "https://hac.friscoisd.org/HomeAccess/Content/Attendance/MonthlyView.aspx";
+  const attendancePage = await fetch(attendanceUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  let document = new JSDOM(await attendancePage.text()).window.document;
+  assertLoggedIn(document);
+
+  // `date` carries a calendar postback argument taken from a prior response's
+  // prev/next. Post it back to jump to that month. The arg is an absolute date
+  // serial, so it resolves against the freshly-loaded page's viewstate.
+  if (date) {
+    const first = parseAttendanceDoc(document);
+    const target =
+      (first.prev || first.next)?.target || "ctl00$plnMain$cldAttendance";
+    const form = new URLSearchParams();
+    form.append("__EVENTTARGET", target);
+    form.append("__EVENTARGUMENT", date);
+    form.append("__VIEWSTATE", document.querySelector("#__VIEWSTATE")?.value || "");
+    form.append(
+      "__VIEWSTATEGENERATOR",
+      document.querySelector("#__VIEWSTATEGENERATOR")?.value || "",
+    );
+    form.append(
+      "__EVENTVALIDATION",
+      document.querySelector("#__EVENTVALIDATION")?.value || "",
+    );
+    const postRes = await fetch(attendanceUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Mozilla/5.0",
+        Referer: attendanceUrl,
+      },
+      body: form.toString(),
+    });
+    document = new JSDOM(await postRes.text()).window.document;
+    assertLoggedIn(document);
+  }
+  return parseAttendanceDoc(document);
 };
 
 const scrapeWeek = async (fetch) => {
@@ -527,7 +577,7 @@ const scrapeType = async (fetch, { type, quarter, date } = {}, cache = {}) => {
     case "schedule":
       return scrapeSchedule(fetch);
     case "attendance":
-      return scrapeAttendance(fetch);
+      return scrapeAttendance(fetch, date);
     case "week":
       return scrapeWeek(fetch);
     case "ipr":

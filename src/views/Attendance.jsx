@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useHacData } from '../hooks/useHacData.js'
 import { PageHead, Loading, ErrorBox, Empty } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
@@ -19,8 +20,15 @@ function parseMonth(s) {
 const isGray = (c) => /^#?c{6}$/i.test(c || '') || /^#?ccc$/i.test(c || '')
 
 export default function Attendance() {
-  const { data, loading, error, refresh } = useHacData('attendance', null)
+  // null = the current month (what the snapshot prefills). A prev/next click
+  // stashes that month's calendar postback arg here; each month caches on its own.
+  const [viewArg, setViewArg] = useState(null)
+  const { data, loading, error, refresh } = useHacData('attendance', viewArg ? { date: viewArg } : undefined)
   const days = data?.days || []
+  const prevNav = data?.prev, nextNav = data?.next
+  // Show the switcher once the backend hands us nav args (older Pi builds don't,
+  // so it silently stays a single-month view), or whenever we're off "today".
+  const showSwitch = !!(prevNav || nextNav || viewArg)
   // Map real day-of-month -> its marking; the scrape pads blank cells with day 0.
   const byDay = new Map()
   for (const d of days) if (d.day >= 1) byDay.set(d.day, d)
@@ -33,6 +41,21 @@ export default function Attendance() {
       <PageHead title="Attendance" sub={data?.month ? data.month : 'Monthly attendance overview.'}>
         <button className="btn ghost sm" onClick={refresh}><Icon.refresh width={15} height={15} /> Refresh</button>
       </PageHead>
+
+      {showSwitch && (
+        <div className="cal-switch mb-3">
+          <button className="btn ghost sm cal-nav" aria-label="Previous month"
+            disabled={!prevNav || loading} onClick={() => prevNav && setViewArg(prevNav.arg)}>
+            <Icon.chevron width={16} height={16} style={{ transform: 'rotate(180deg)' }} />
+          </button>
+          <span className="cal-month">{data?.month || '…'}</span>
+          <button className="btn ghost sm cal-nav" aria-label="Next month"
+            disabled={!nextNav || loading} onClick={() => nextNav && setViewArg(nextNav.arg)}>
+            <Icon.chevron width={16} height={16} />
+          </button>
+          {viewArg && <button className="btn ghost sm" onClick={() => setViewArg(null)}>Today</button>}
+        </div>
+      )}
 
       {loading && <Loading />}
       {error && !loading && <ErrorBox message={error} onRetry={refresh} />}
