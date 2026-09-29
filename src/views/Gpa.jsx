@@ -467,7 +467,18 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     if (v === '' || v == null) delete cur[q]; else cur[q] = Number(v)
     if (Object.keys(cur).length) p.cumulative.quarters[key] = cur; else delete p.cumulative.quarters[key]
   })
-  const resetOverrides = () => updatePrefs((p) => { p.cumulative.weights = {}; p.cumulative.grades = {}; p.cumulative.credits = {}; p.cumulative.quarters = {}; p.cumulative.links = {}; p.cumulative.unlinked = {} })
+  // Reset edits — clears overrides on real (scraped) courses, but leaves
+  // manually-added courses (summer / not-yet-transcripted) fully intact: their
+  // grade, weight, credit and existence all live under `manual:<id>` keys.
+  const resetOverrides = () => updatePrefs((p) => {
+    const keepManual = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => k.startsWith('manual:')))
+    p.cumulative.weights = keepManual(p.cumulative.weights)
+    p.cumulative.grades = keepManual(p.cumulative.grades)
+    p.cumulative.credits = keepManual(p.cumulative.credits)
+    p.cumulative.quarters = {} // only current-year live courses; never manual
+    p.cumulative.links = {}
+    p.cumulative.unlinked = {}
+  })
 
   // Manually-added courses (summer / not-yet-transcripted). Auto-included on add.
   const addManual = () => updatePrefs((p) => {
@@ -487,7 +498,10 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     if (p.cumulative.weights) delete p.cumulative.weights[key]
     if (p.cumulative.credits) delete p.cumulative.credits[key]
   })
-  const hasOverrides = Object.keys(weights).length > 0 || Object.keys(grades).length > 0 || Object.keys(credits).length > 0 || Object.keys(quarters).length > 0 || Object.keys(explicitLinks).length > 0
+  // Manual-course entries aren't "edits" Reset would clear, so don't let them
+  // light up the Reset button (it would look active but do nothing to them).
+  const realKeys = (obj) => Object.keys(obj || {}).filter((k) => !k.startsWith('manual:')).length
+  const hasOverrides = realKeys(weights) > 0 || realKeys(grades) > 0 || realKeys(credits) > 0 || Object.keys(quarters).length > 0 || Object.keys(explicitLinks).length > 0
   const selectedCount = Object.keys(included).length
 
   // Named saved setups — snapshot/restore the whole cumulative config, so a

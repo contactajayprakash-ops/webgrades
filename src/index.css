@@ -863,6 +863,11 @@ tr.aol-row td:first-child { font-weight: 600; }
   background: var(--fill-3); color: var(--text-dim); cursor: default; }
 tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 
+/* Month switcher above the attendance calendar: ‹  Month YYYY  ›  (Today) */
+.cal-switch { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.cal-switch .cal-nav { padding: 7px 10px; }
+.cal-month { min-width: 148px; text-align: center; font-weight: 700; font-size: var(--t-subhead);
+  font-variant-numeric: tabular-nums; }
 .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .cal-head { text-align: center; font-size: var(--t-caption); font-weight: 600; color: var(--text-faint); text-transform: uppercase; padding-bottom: 4px; }
 .cal-cell { position: relative; min-height: 74px; border-radius: 12px; border: 0.5px solid var(--hairline); background: var(--fill-4); padding: 8px 10px; transition: border-color .2s, transform .2s var(--ease); }
