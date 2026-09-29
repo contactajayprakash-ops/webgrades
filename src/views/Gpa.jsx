@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
-import { PageHead, Loading, ErrorBox, Empty, WhatIfBanner } from '../components/ui.jsx'
+import { PageHead, Loading, ErrorBox, Empty, WhatIfBanner, NumField } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Tour from '../components/Tour.jsx'
 import {
@@ -323,16 +323,14 @@ function SingleCard({ c, on, w, cr, qov, period, candidates, onToggle, setWeight
           return (
             <label key={q} className={`cum-q ${qov[q] != null ? 'edited' : ''}`}>
               <span className="cum-q-label">Q{q}</span>
-              <input className="input mini" type="number" step="1" inputMode="numeric"
-                placeholder={auto != null ? String(auto) : '—'}
-                value={val} onChange={(e) => setQuarter(c.key, q, e.target.value)} />
+              <NumField placeholder={auto != null ? String(auto) : '—'}
+                value={val === '' ? null : val} onChange={(v) => setQuarter(c.key, q, v)} />
             </label>
           )
         })}
         <label className="cum-q cum-cr">
           <span className="cum-q-label">Cr</span>
-          <input className="input mini" type="number" step="0.5" min="0" title="Credit"
-            value={cr} onChange={(e) => setCredit(c.key, e.target.value)} />
+          <NumField title="Credit" value={cr} onChange={(v) => setCredit(c.key, v)} />
         </label>
       </div>
     </div>
@@ -361,9 +359,8 @@ function MergedCard({ base, cont, on, weightBase, weightCont, cr, qBase, qCont, 
             return (
               <label key={q} className={`cum-q ${ovMap[q] != null ? 'edited' : ''}`}>
                 <span className="cum-q-label">Q{q}</span>
-                <input className="input mini" type="number" step="1" inputMode="numeric"
-                  placeholder={auto != null ? String(auto) : '—'}
-                  value={val} onChange={(e) => setQuarter(course.key, q, e.target.value)} />
+                <NumField placeholder={auto != null ? String(auto) : '—'}
+                  value={val === '' ? null : val} onChange={(v) => setQuarter(course.key, q, v)} />
               </label>
             )
           })}
@@ -396,8 +393,8 @@ function MergedCard({ base, cont, on, weightBase, weightCont, cr, qBase, qCont, 
         <span className="small faint">Full-year course · S1 + S2 counted separately</span>
         <label className="cum-q cum-cr">
           <span className="cum-q-label">Yr Cr</span>
-          <input className="input mini" type="number" step="0.5" min="0" title="Whole-year credit (split evenly across the two semesters)"
-            value={cr} onChange={(e) => setCredit(base.key, e.target.value)} />
+          <NumField title="Whole-year credit (split evenly across the two semesters)"
+            value={cr} onChange={(v) => setCredit(base.key, v)} />
         </label>
       </div>
     </div>
@@ -457,7 +454,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     delete p.cumulative.links[baseKey]
     p.cumulative.unlinked[baseKey] = true // also suppress the auto-link
   })
-  const setCredit = (key, v) => updatePrefs((p) => { p.cumulative.credits = p.cumulative.credits || {}; p.cumulative.credits[key] = v === '' ? null : Number(v) })
+  const setCredit = (key, v) => updatePrefs((p) => { p.cumulative.credits = p.cumulative.credits || {}; p.cumulative.credits[key] = v == null ? null : Number(v) })
   const setGrade = (key, v) => updatePrefs((p) => { p.cumulative.grades = p.cumulative.grades || {}; p.cumulative.grades[key] = v })
   // Per-quarter override for a current-year course. Empty clears just that quarter
   // (falls back to the live auto-fill). Removing the last override drops the key.
@@ -621,13 +618,12 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                 <div className="cum-quarters cum-simple">
                   <label className="cum-q">
                     <span className="cum-q-label">Grade</span>
-                    <input className="input mini" type="number" step="1" inputMode="numeric" placeholder="grade"
-                      value={grades[key] ?? ''} onChange={(e) => setGrade(key, e.target.value === '' ? null : Number(e.target.value))} />
+                    <NumField placeholder="grade"
+                      value={grades[key] ?? null} onChange={(v) => setGrade(key, v)} />
                   </label>
                   <label className="cum-q cum-cr">
                     <span className="cum-q-label">Cr</span>
-                    <input className="input mini" type="number" step="0.5" min="0" title="Credit"
-                      value={credits[key] ?? 1} onChange={(e) => setCredit(key, e.target.value)} />
+                    <NumField title="Credit" value={credits[key] ?? 1} onChange={(v) => setCredit(key, v)} />
                   </label>
                 </div>
               </div>
@@ -674,8 +670,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                         </div>
                         <label className="cum-q cum-cr">
                           <span className="cum-q-label">Cr</span>
-                          <input className="input mini" type="number" step="0.5" min="0" title="Credit"
-                            value={cr} onChange={(e) => setCredit(code, e.target.value)} />
+                          <NumField title="Credit" value={cr} onChange={(v) => setCredit(code, v)} />
                         </label>
                       </div>
                     )}
@@ -768,7 +763,7 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, officialGpa, 
                   {showYear && <td className="faint small">{r.year}</td>}
                   <td className="num">
                     {editableGrade
-                      ? <input className="input mini" type="number" step="1" value={r.grade ?? ''} onChange={(e) => onGrade?.(r.key, e.target.value === '' ? null : Number(e.target.value))} />
+                      ? <NumField value={r.grade ?? null} onChange={(v) => onGrade?.(r.key, v)} />
                       : <span className="mono">{r.grade ?? '—'}</span>}
                   </td>
                   <td>
@@ -778,7 +773,7 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, officialGpa, 
                   </td>
                   <td className="num">
                     {onCredit
-                      ? <input className="input mini" type="number" step="0.5" value={r.credit ?? ''} onChange={(e) => onCredit(r.key, e.target.value === '' ? null : Number(e.target.value))} />
+                      ? <NumField value={r.credit ?? null} onChange={(v) => onCredit(r.key, v)} />
                       : <span className="mono faint">{r.credit}</span>}
                   </td>
                   <td className="num mono">{cg == null ? '—' : cg.toFixed(3)}</td>

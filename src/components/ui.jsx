@@ -170,3 +170,35 @@ export function PageHead({ title, sub, children }) {
     </div>
   )
 }
+
+// A numeric text field that behaves while you type. Controlled `type="number"`
+// inputs bound to a coerced Number fight the user: `Number("89.")` is 89 so the
+// decimal point vanishes, and clearing a field that falls back to an auto value
+// makes it snap back on the next keystroke. This keeps the RAW string in local
+// state (so backspace, a lone ".", partials and empty all behave), parses to a
+// number only for onChange, and re-syncs from the prop when you're not editing.
+// onChange receives a Number, or null when the field is empty.
+export function NumField({ value, onChange, placeholder, className = 'input mini', title, inputMode = 'decimal', ...rest }) {
+  const [raw, setRaw] = useState(value == null ? '' : String(value))
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (!editing) setRaw(value == null ? '' : String(value))
+  }, [value, editing])
+  const handle = (e) => {
+    const t = e.target.value
+    if (!/^-?\d*\.?\d*$/.test(t)) return // ignore stray non-numeric chars, keep the caret put
+    setRaw(t)
+    if (t === '' || t === '-' || t === '.' || t === '-.') { onChange(null); return }
+    const n = Number(t)
+    if (!Number.isNaN(n)) onChange(n)
+  }
+  return (
+    <input
+      className={className} type="text" inputMode={inputMode} title={title} placeholder={placeholder}
+      value={raw} onChange={handle}
+      onFocus={() => setEditing(true)}
+      onBlur={() => { setEditing(false); setRaw(value == null ? '' : String(value)) }}
+      {...rest}
+    />
+  )
+}
