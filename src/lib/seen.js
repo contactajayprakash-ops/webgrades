@@ -1,5 +1,16 @@
 import { parseGrade } from './gpa.js'
 import { cleanCourseName } from './courses.js'
+import { isAssessment, isProgress } from './whatif.js'
+
+// Frisco classes split assignments into Assessment (AOL) and Progress (PC)
+// categories, and the SAME assignment name appears in BOTH with different grades
+// (e.g. "1D Forces Math" is an AOL 100 and a PC 80). Keying a grade by name
+// alone collapses the pair — the second row silently overwrites the first — so
+// an AOL 100 disappears behind its same-named PC 80 and never shows in "Recently
+// posted". Tag the key with the category so both survive. Falls back to the bare
+// name for uncategorized assignments (and legacy snapshots match unchanged).
+const catTag = (cat) => (isAssessment(cat) ? 'aol' : isProgress(cat) ? 'pc' : '')
+const asgKey = (name, cat) => { const t = catTag(cat); return t ? `${name}\u0000${t}` : name }
 
 // A per-account snapshot of the grades the student last *saw*, so we can
 // highlight what changed since their last visit (distinct from the in-session
@@ -43,7 +54,7 @@ export function recordPosted(username, classes) {
     for (const asg of c.assignments || []) {
       const g = gradeOf(asg)
       if (g == null || !asg.assignmentName || isSubtotalName(asg.assignmentName)) continue
-      const id = idOf(c.courseName, asg.assignmentName)
+      const id = idOf(c.courseName, asgKey(asg.assignmentName, asg.category))
       if (!(id in map)) map[id] = baseline ? 0 : now
     }
   }
@@ -65,12 +76,14 @@ const gradeOf = (a) => {
 // surface them in "Recently posted" before the next re-scrape.
 const isSubtotalName = (n) => /^\s*-?\d+(\.\d+)?\s*$/.test(String(n || ''))
 
-// Map of graded assignments for one class: { assignmentName: grade }.
+// Map of graded assignments for one class: { asgKey(name, category): grade }.
+// Keyed by name+category (not name alone) so an AOL and PC row sharing a name
+// both survive instead of one clobbering the other.
 function assignmentsOf(course) {
   const a = {}
   for (const asg of course.assignments || []) {
     const g = gradeOf(asg)
-    if (g != null && asg.assignmentName && !isSubtotalName(asg.assignmentName)) a[asg.assignmentName] = g
+    if (g != null && asg.assignmentName && !isSubtotalName(asg.assignmentName)) a[asgKey(asg.assignmentName, asg.category)] = g
   }
   return a
 }
@@ -114,14 +127,23 @@ export function postedSince(seen, classes, postedMap = null) {
   for (const c of classes || []) {
     const e = entryOf(seen, c.courseName)
     if (!e || !e.hadAssignments) continue
-    const catByName = {}
-    for (const a of c.assignments || []) if (a.assignmentName) catByName[a.assignmentName] = a.category
-    const cur = assignmentsOf(c)
-    for (const [name, grade] of Object.entries(cur)) {
-      if (e.a[name] !== grade) out.push({
+    // Walk the raw rows (not the deduped map) so each AOL/PC row keeps its own
+    // name + category + grade; a composite key keeps same-named rows distinct.
+    const seenKeys = new Set()
+    for (const asg of c.assignments || []) {
+      const grade = gradeOf(asg)
+      const name = asg.assignmentName
+      if (grade == null || !name || isSubtotalName(name)) continue
+      const key = asgKey(name, asg.category)
+      if (seenKeys.has(key)) continue // identical dup rows within a class
+      seenKeys.add(key)
+      // Fall back to the bare-name entry so a pre-upgrade snapshot (keyed by name
+      // alone) still matches the unchanged row instead of flooding the feed.
+      const prev = key in e.a ? e.a[key] : e.a[name]
+      if (prev !== grade) out.push({
         course: cleanCourseName(c.courseName), name, grade,
-        isNew: !(name in e.a), category: catByName[name],
-        postedAt: (postedMap && postedMap[idOf(c.courseName, name)]) || 0,
+        isNew: !(key in e.a) && !(name in e.a), category: asg.category,
+        postedAt: (postedMap && postedMap[idOf(c.courseName, key)]) || 0,
       })
     }
   }
