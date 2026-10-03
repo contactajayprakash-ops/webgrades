@@ -2,6 +2,7 @@ import { useHacData } from '../hooks/useHacData.js'
 import { PageHead, Loading, ErrorBox, Empty, GradeBadge } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
+import { transcriptCourseName } from '../lib/courseCatalog.js'
 
 export default function Transcript() {
   const { data, loading, error, refresh } = useHacData('transcript', null)
@@ -40,7 +41,7 @@ export default function Transcript() {
                     {(g.courses || []).map((c, j) => (
                       <tr key={j}>
                         <td>
-                          {c.description || c.courseCode}
+                          {transcriptCourseName(c.description) || c.courseCode}
                           {c.courseCode && c.description && <span className="faint small"> · {c.courseCode}</span>}
                         </td>
                         <td className="num"><GradeBadge value={parseGrade(c.sem1)} showLetter={false} /></td>
