@@ -293,6 +293,18 @@ html[data-glass="enhanced"] .glass-host > .ql-content {
   gap: inherit; flex-wrap: inherit;
   flex: 1; align-self: stretch; min-width: 0;
 }
+/* The stat cards' accent .glow tint was designed to sit UNDER the old semi-
+   opaque card material. On quick-liquid's transparent glass it reads as a hard
+   amber rectangle (and it anchors to .ql-content, so it floats inset from the
+   card edges). The engine's sheen/rim lighting replaces it. */
+html[data-glass="enhanced"] .glass-host .glow { display: none; }
+/* Light mode: pure refraction has almost no presence on a light background —
+   surfaces looked invisible. Give light-mode hosts back a hairline edge and a
+   soft drop shadow so every panel reads as a distinct card. */
+html[data-theme="light"][data-glass="enhanced"] .glass-host {
+  border-color: rgba(0, 0, 0, 0.10) !important;
+  box-shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.18), 0 2px 8px -4px rgba(0, 0, 0, 0.10) !important;
+}
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }

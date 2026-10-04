@@ -63,11 +63,17 @@ export default function Glass({ as = 'div', className = '', config, liquidPress,
     return <Tag className={className} {...rest}>{children}</Tag>
   }
   const LG = LiquidGlassComp
+  // Light mode: the engine's default white tint (~0.16) vanishes against a light
+  // background — everything read as invisible. A much stronger frost + firmer
+  // edge gives the surfaces definition (dark mode keeps the airier defaults).
+  const appearanceExtra = appearance === 'light'
+    ? { tint: '#ffffff', tintOpacity: 0.55, edgeHighlight: 1, specularStrength: 0.5 }
+    : null
   return (
     <LG
       as={as}
       className={className ? `glass-host ${className}` : 'glass-host'}
-      config={{ ...BASE, appearance, ...config }}
+      config={{ ...BASE, appearance, ...appearanceExtra, ...config }}
       liquidPress={liquidPress}
       animateIn={animateIn}
       {...rest}

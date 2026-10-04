@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { syncAllowedFor } from '../lib/syncPolicy.js'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import { Icon } from './icons.jsx'
+import Glass from './Glass.jsx'
 
 function initials(name) {
   if (!name) return '?'
@@ -41,7 +42,11 @@ export default function ProfileSwitcher({ compact = false }) {
       {open && <div className="profile-backdrop" onClick={close} />}
 
       {open && (
-        <div className="profile-pop card" ref={trapRef} role="dialog" aria-modal="true" aria-label="Accounts">
+        <Glass className="profile-pop card" role="dialog" aria-modal="true" aria-label="Accounts"
+          animateIn config={{ material: 'thick', borderRadius: 18 }}>
+          {/* Glass's ref isn't a DOM node, so the focus trap lives on an inner
+              display:contents wrapper (invisible to layout). */}
+          <div ref={trapRef} style={{ display: 'contents' }}>
           <div className="profile-pop-label">Accounts</div>
           <div className="profile-list">
             {profiles.map((pr) => (
@@ -84,7 +89,8 @@ export default function ProfileSwitcher({ compact = false }) {
           <button className="profile-action danger" onClick={() => { logout(); close() }}>
             <Icon.chevron width={15} height={15} style={{ transform: 'rotate(180deg)' }} /> Sign out
           </button>
-        </div>
+          </div>
+        </Glass>
       )}
 
       <button className={`profile-trigger ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)}
