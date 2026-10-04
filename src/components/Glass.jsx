@@ -13,6 +13,15 @@ const BASE = {
   refractionMode: 'auto',
   quality: 'medium',
   respectPreferences: true,
+  // Soften the refraction bezel. The preset defaults (strength ~16, bezel 30)
+  // bend the backdrop so hard that the boundary between the bent edge band and
+  // the flat center reads as a second rounded box inside every card (worst on
+  // light gradient backgrounds). A wider, weaker, thinner bezel keeps the lens
+  // feel with no visible seam.
+  refractionStrength: 7,
+  bezelWidth: 48,
+  thickness: 10,
+  chromaticAberration: 0.08,
 }
 
 // quick-liquid is loaded ONLY when a glass surface actually renders in enhanced
