@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useHacData } from '../hooks/useHacData.js'
 import { PageHead, Loading, ErrorBox, Empty } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
@@ -36,6 +36,54 @@ export default function Attendance() {
 
   const parsed = parseMonth(data?.month)
 
+  // Month paging — shared by the buttons, a swipe (touch, with momentum), and
+  // the arrow keys (desktop). Swipe LEFT → next month, RIGHT → prev (iOS-style).
+  const goPrev = useCallback(() => { if (prevNav && !loading) setViewArg(prevNav.arg) }, [prevNav, loading])
+  const goNext = useCallback(() => { if (nextNav && !loading) setViewArg(nextNav.arg) }, [nextNav, loading])
+
+  const sw = useRef(null)
+  const [dragX, setDragX] = useState(0)
+  const [swiping, setSwiping] = useState(false)
+  const onTouchStart = (e) => {
+    if (e.touches.length !== 1 || loading) { sw.current = null; return }
+    const t = e.touches[0]
+    sw.current = { x: t.clientX, y: t.clientY, lx: t.clientX, lt: e.timeStamp, v: 0, dir: null }
+  }
+  const onTouchMove = (e) => {
+    const s = sw.current; if (!s) return
+    const t = e.touches[0]
+    const dx = t.clientX - s.x, dy = t.clientY - s.y
+    if (s.dir == null) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+      s.dir = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v' // commit to one axis
+      if (s.dir === 'h') setSwiping(true)
+    }
+    if (s.dir !== 'h') return
+    if (e.cancelable) e.preventDefault() // we own the horizontal gesture now
+    const dt = e.timeStamp - s.lt || 16
+    s.v = (t.clientX - s.lx) / dt       // px/ms, for the flick decision
+    s.lx = t.clientX; s.lt = e.timeStamp
+    const canGo = dx < 0 ? !!nextNav : !!prevNav
+    const eff = canGo ? dx : dx * 0.28  // rubber-band toward a month that isn't there
+    setDragX(Math.max(-130, Math.min(130, eff)))
+  }
+  const onTouchEnd = () => {
+    const s = sw.current; sw.current = null
+    setSwiping(false)
+    if (!s || s.dir !== 'h') { setDragX(0); return }
+    // Project with release velocity (momentum): a fast flick commits on little
+    // distance; a slow drag needs to pass the halfway mark.
+    const projected = dragX + s.v * 90
+    setDragX(0)
+    if (projected <= -56) goNext()
+    else if (projected >= 56) goPrev()
+  }
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev() }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); goNext() }
+    else if (e.key === 'Home' && viewArg) { e.preventDefault(); setViewArg(null) }
+  }
+
   return (
     <>
       <PageHead title="Attendance" sub={data?.month ? data.month : 'Monthly attendance overview.'}>
@@ -63,7 +111,20 @@ export default function Attendance() {
 
       {!loading && !error && days.length > 0 && (
         <>
-          <div className="card card-pad mb-3">
+          <div className="card card-pad mb-3"
+            role={showSwitch ? 'group' : undefined}
+            aria-label={showSwitch ? `Attendance for ${data?.month || 'this month'}. Swipe or use arrow keys to change month.` : undefined}
+            tabIndex={showSwitch ? 0 : undefined}
+            onKeyDown={showSwitch ? onKeyDown : undefined}
+            onTouchStart={showSwitch ? onTouchStart : undefined}
+            onTouchMove={showSwitch ? onTouchMove : undefined}
+            onTouchEnd={showSwitch ? onTouchEnd : undefined}
+            onTouchCancel={showSwitch ? onTouchEnd : undefined}
+            style={showSwitch ? {
+              transform: dragX ? `translateX(${dragX}px)` : undefined,
+              transition: swiping ? 'none' : 'transform .32s var(--ease)',
+              touchAction: 'pan-y',
+            } : undefined}>
             {parsed ? <CalendarGrid parsed={parsed} byDay={byDay} /> : <FlatGrid days={days} />}
             <div className="cal-legend">
               <Legend color="#00cc00" label="Present / testing" />

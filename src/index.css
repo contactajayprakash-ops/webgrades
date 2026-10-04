@@ -173,6 +173,94 @@ html[data-reduce-motion="1"] *::after {
   scroll-behavior: auto !important;
 }
 
+/* ============================================================================
+   OS ACCESSIBILITY PREFERENCES — follow the system settings automatically
+   (same effects as the in-app data-reduce-* toggles, driven by the OS).
+   ============================================================================ */
+
+/* Reduced motion — neutralize every animation + transition (including the
+   overshoot springs) so nothing slides or bounces. Instant state changes still
+   give feedback; this just removes the vestibular motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Reduced transparency — drop the blur and make the glass solid so text over
+   materials stays legible. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --blur: none; --blur-sm: none; --blur-heavy: none;
+    --mat-thick: #1c1c1e; --mat-regular: #1c1c1e; --mat-thin: #1c1c1e;
+    --mat-chrome: #141416; --menu-bg: #262628; --glass: #1c1c1e; --glass-2: #2c2c2e;
+  }
+  html[data-theme="light"] {
+    --mat-thick: #ffffff; --mat-regular: #ffffff; --mat-thin: #ffffff;
+    --mat-chrome: #f6f6f8; --menu-bg: #fafafb; --glass: #ffffff; --glass-2: #ffffff;
+  }
+  .backdrop, .install-backdrop, .profile-backdrop {
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  }
+}
+
+/* Increased contrast — solid surfaces, defined borders, firmer secondary text. */
+@media (prefers-contrast: more) {
+  :root {
+    --blur: none; --blur-sm: none; --blur-heavy: none;
+    --mat-thick: #1c1c1e; --mat-regular: #1c1c1e; --mat-thin: #1c1c1e;
+    --mat-chrome: #141416; --menu-bg: #262628; --glass: #1c1c1e; --glass-2: #2c2c2e;
+    --hairline: rgba(255,255,255,0.32); --separator: rgba(255,255,255,0.45);
+    --glass-border: rgba(255,255,255,0.40); --glass-border-strong: rgba(255,255,255,0.55);
+    --text-dim: rgba(235,235,245,0.82); --text-faint: rgba(235,235,245,0.60);
+  }
+  html[data-theme="light"] {
+    --mat-thick: #ffffff; --mat-regular: #ffffff; --mat-thin: #ffffff;
+    --mat-chrome: #f6f6f8; --menu-bg: #ffffff; --glass: #ffffff; --glass-2: #ffffff;
+    --hairline: rgba(0,0,0,0.50); --separator: rgba(0,0,0,0.60);
+    --glass-border: rgba(0,0,0,0.55); --glass-border-strong: rgba(0,0,0,0.70);
+    --text-dim: rgba(60,60,67,0.90); --text-faint: rgba(60,60,67,0.70);
+  }
+}
+
+/* ============================================================================
+   INPUT ERGONOMICS — tap latency, press flash, keyboard focus, cursors, hover
+   ============================================================================ */
+/* Kill the gray iOS tap flash (our :active scale is the real feedback) and the
+   double-tap-zoom delay on anything interactive. */
+a, button, input, select, textarea, label, summary,
+[role="button"], [role="tab"], .tab-item, .np-tab, .np-icon,
+.card-link, button.card, .seg button, .grade-tile, .circle-btn, .cal-nav {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Keyboard focus ring (desktop/web a11y) — shown for keyboard nav, not for
+   mouse/touch. The outline hugs each element's border-radius automatically. */
+:where(a, button, input, select, textarea, summary, [role="button"], [role="tab"], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Disabled controls read as disabled under the pointer. */
+button:disabled, .btn:disabled, [aria-disabled="true"], input:disabled, select:disabled {
+  cursor: not-allowed;
+}
+
+/* Touch devices have no real hover — don't let :hover transforms "stick" after
+   a tap (the :active press already gives feedback). */
+@media (hover: none) {
+  button.card:hover, .card-link:hover, .cal-cell.noted:hover, .swatch:hover,
+  .app-shell.v2 .grade-tile:hover, .app-shell.v2 .np-icon:hover,
+  .app-shell.v2 .btn:hover, .app-shell.v2 .circle-btn:hover,
+  .app-shell.v2 .profile-switch.compact .profile-trigger:hover {
+    transform: none;
+  }
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 
@@ -352,7 +440,7 @@ input, select { font-family: inherit; }
 @media (max-width: 760px) { .dash-tiles { grid-template-columns: 1fr; } }
 
 /* clickable cards — subtle iOS press */
-button.card, .card-link { text-align: left; transition: transform .32s var(--spring), box-shadow .3s var(--ease), border-color .25s; }
+button.card, .card-link { text-align: left; transition: transform .32s var(--ease), box-shadow .3s var(--ease), border-color .25s; }
 .card-link { text-decoration: none; color: inherit; cursor: pointer; display: flex; }
 button.card:hover, .card-link:hover { transform: translateY(-3px); box-shadow: var(--drop-lg); border-color: var(--glass-border-strong); }
 button.card:active, .card-link:active { transform: translateY(-1px) scale(.992); }
@@ -366,7 +454,7 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.992);
 .card-menu { position: absolute; z-index: 57; top: 48px; right: 0; width: 264px; padding: 6px;
   background: var(--menu-bg); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
   border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--drop-lg);
-  display: flex; flex-direction: column; gap: 1px; animation: popin .28s var(--spring) backwards; max-height: 340px; overflow-y: auto; }
+  display: flex; flex-direction: column; gap: 1px; animation: popin .28s var(--ease) backwards; max-height: 340px; overflow-y: auto; }
 /* The GPA "Saved" menu sits under a left-ish button in a wrapping toolbar; a
    fixed right:0 pushed it off the left edge on narrow screens. Cap its width to
    the viewport, and on mobile open it rightward from the trigger so it stays on. */
@@ -668,7 +756,7 @@ html[data-theme="light"] .seg button.active { background: #ffffff; }
   position: absolute; left: 0; top: 0; z-index: 0;
   border-radius: 9px; background: var(--bg-elevated-2);
   box-shadow: var(--rim), 0 3px 8px -3px rgba(0, 0, 0, 0.5);
-  transition: transform .42s var(--spring), width .42s var(--spring), height .2s var(--ease), opacity .18s;
+  transition: transform .42s var(--ease), width .42s var(--ease), height .2s var(--ease), opacity .18s;
   pointer-events: none;
 }
 html[data-theme="light"] .seg-indicator { background: #ffffff; }
@@ -708,6 +796,9 @@ html[data-theme="light"] .seg-indicator { background: #ffffff; }
 .whatif-banner { display: flex; align-items: center; gap: 12px; background: color-mix(in srgb, var(--yellow) 14%, transparent); border: 0.5px solid color-mix(in srgb, var(--yellow) 34%, transparent); color: var(--yellow-text); padding: 13px 18px; border-radius: var(--radius-sm); font-size: var(--t-footnote); margin-bottom: 16px; animation: rise .4s var(--ease) backwards; }
 .whatif-banner b { color: var(--yellow-text); }
 .whatif-banner .btn { color: #201a06; background: var(--yellow); box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--yellow) 80%, transparent); }
+/* v2 shell restyles ghost buttons to dark glass; keep the banner's Reset button yellow with dark text so it stays legible without hover. */
+.app-shell.v2 .whatif-banner .btn.ghost { color: #201a06; background: var(--yellow); border: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.app-shell.v2 .whatif-banner .btn.ghost:hover { color: #201a06; background: var(--yellow); }
 
 .impact { position: relative; background: var(--bg-elevated); border: 0.5px solid var(--separator); border-radius: var(--radius); overflow: hidden; box-shadow: var(--drop); }
 .impact-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 0.5px solid var(--separator); position: relative; z-index: 1; }
@@ -753,9 +844,7 @@ html[data-theme="light"] .seg-indicator { background: #ffffff; }
 .grid > *:nth-child(4) { animation-delay: .15s; }
 .grid > *:nth-child(5) { animation-delay: .20s; }
 .grid > *:nth-child(n+6) { animation-delay: .24s; }
-@media (prefers-reduced-motion: reduce) {
-  body::before, .grid > *, .page-head, .login-card, .whatif-banner, .assignments { animation: none !important; }
-}
+/* (reduced-motion handled comprehensively in the OS ACCESSIBILITY block above) */
 
 /* ============================================================================
    SYNC TOAST
@@ -767,7 +856,7 @@ html[data-theme="light"] .seg-indicator { background: #ffffff; }
   border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm);
   box-shadow: var(--rim), var(--drop-lg); padding: 13px 16px;
   font-size: var(--t-footnote); color: var(--text);
-  animation: toastin .4s var(--spring) backwards;
+  animation: toastin .4s var(--ease) backwards;
 }
 .sync-toast.ok { color: var(--green-text); }
 .sync-toast .sync-count { margin-left: auto; color: var(--text-faint); font-variant-numeric: tabular-nums; font-size: var(--t-caption); }
@@ -908,7 +997,7 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .tour-root { position: fixed; inset: 0; z-index: 200; pointer-events: none; }
 .tour-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
 .tour-spot { position: absolute; border-radius: 13px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.58), 0 0 0 2px var(--accent); transition: top .28s var(--ease), left .28s var(--ease), width .28s var(--ease), height .28s var(--ease); }
-.tour-pop { position: absolute; width: 320px; max-width: calc(100vw - 32px); pointer-events: auto; background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy); border: 0.5px solid var(--glass-border-strong); border-radius: var(--radius-sm); box-shadow: var(--rim), var(--drop-lg); padding: 16px 18px; animation: popin .26s var(--spring) backwards; }
+.tour-pop { position: absolute; width: 320px; max-width: calc(100vw - 32px); pointer-events: auto; background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy); border: 0.5px solid var(--glass-border-strong); border-radius: var(--radius-sm); box-shadow: var(--rim), var(--drop-lg); padding: 16px 18px; animation: popin .26s var(--ease) backwards; }
 .tour-step-n { font-size: var(--t-caption2); text-transform: uppercase; letter-spacing: .06em; color: var(--accent-text); font-weight: 700; }
 .tour-title { font-weight: 700; font-size: var(--t-callout); margin: 4px 0 6px; letter-spacing: -0.015em; }
 .tour-body { font-size: var(--t-footnote); color: var(--text-dim); line-height: 1.5; }
@@ -945,7 +1034,7 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .profile-switch .profile-pop { position: absolute; z-index: 56; bottom: calc(100% + 10px); left: 0; right: 0; padding: 7px;
   background: var(--menu-bg); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
   border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--drop-lg);
-  display: flex; flex-direction: column; gap: 2px; animation: popin .28s var(--spring) backwards; max-height: min(76vh, 620px); }
+  display: flex; flex-direction: column; gap: 2px; animation: popin .28s var(--ease) backwards; max-height: min(76vh, 620px); }
 .profile-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1 1 auto; margin: 0 -2px; padding: 0 2px;
   scrollbar-width: thin; scrollbar-color: var(--fill-3) transparent; }
 .profile-list::-webkit-scrollbar { width: 7px; }

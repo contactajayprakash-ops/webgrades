@@ -239,6 +239,13 @@ function WeightSelect({ value, onChange, full }) {
 // live in prefs (so they sync across devices with the rest of the GPA setup).
 function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
   const [open, setOpen] = useState(false)
+  // Esc closes the menu (desktop keyboard parity with the backdrop tap).
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
   return (
     <div style={{ position: 'relative' }}>
       <button className="btn ghost sm" onClick={() => setOpen((o) => !o)}>
