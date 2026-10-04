@@ -6,6 +6,7 @@ import { Icon } from './icons.jsx'
 import { OfflineBanner, Loading } from './ui.jsx'
 import ProfileSwitcher from './ProfileSwitcher.jsx'
 import PullToRefresh from './PullToRefresh.jsx'
+import Glass from './Glass.jsx'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: 'home', end: true },
@@ -104,7 +105,7 @@ export default function Layout() {
         </NavLink>
 
         <div className="topbar-right">
-          <nav className="navpill" aria-label="Primary">
+          <Glass as="nav" className="navpill" config={{ material: 'thin', borderRadius: 999 }} aria-label="Primary">
             {PRIMARY.map((t) => (
               <NavLink key={t.to} to={t.to} end={t.end}
                 className={({ isActive }) => `np-tab ${isActive ? 'active' : ''}`}>
@@ -117,20 +118,20 @@ export default function Layout() {
             <NavLink to="/settings" className={({ isActive }) => `np-icon ${isActive ? 'active' : ''}`} aria-label="Settings">
               <Icon.settings width={17} height={17} />
             </NavLink>
-          </nav>
+          </Glass>
 
           <ProfileSwitcher compact />
 
           {menu && (
             <>
               <div className="nav-menu-backdrop" onClick={() => setMenu(false)} />
-              <div className="nav-menu" role="menu">
+              <Glass className="nav-menu" role="menu" animateIn config={{ material: 'thick', borderRadius: 24 }}>
                 <div className="nav-menu-list">
                   {SECONDARY.map((item, i) => item.section
                     ? <div className="nav-section" key={`s${i}`}>{item.section}</div>
                     : navRow(item, () => setMenu(false)))}
                 </div>
-              </div>
+              </Glass>
             </>
           )}
         </div>
@@ -160,13 +161,13 @@ export default function Layout() {
       {sheet && <div className="backdrop" onClick={() => setSheet(false)} />}
 
       <div className="shell-body">
-        <div className="mobile-topbar">
+        <Glass className="mobile-topbar" config={{ material: 'regular', borderRadius: 0 }}>
           <button className="circle-btn" onClick={() => setSheet(true)} aria-label="Menu">
             <Icon.sidebar width={17} height={17} />
           </button>
           <div className="m-title">{currentTitle}</div>
           <div style={{ width: 34 }} />
-        </div>
+        </Glass>
 
         <main className="main" key={activeUsername}>
           <PullToRefresh onRefresh={() => syncAll({ full: true })}>
@@ -177,7 +178,7 @@ export default function Layout() {
       </div>
 
       {/* Floating Liquid Glass tab bar (iPhone) */}
-      <nav className="tab-bar" aria-label="Tabs">
+      <Glass as="nav" className="tab-bar" config={{ material: 'thin', borderRadius: 999 }} aria-label="Tabs">
         {TABS.map((t) => (
           <NavLink key={t.to} to={t.to} end={t.end}
             className={({ isActive }) => `tab-item ${isActive ? 'active' : ''}`}>
@@ -191,7 +192,7 @@ export default function Layout() {
           <Icon.more className="ico" width={24} height={24} />
           <span>More</span>
         </button>
-      </nav>
+      </Glass>
     </div>
   )
 }

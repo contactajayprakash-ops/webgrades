@@ -261,6 +261,39 @@ button:disabled, .btn:disabled, [aria-disabled="true"], input:disabled, select:d
   }
 }
 
+/* ============================================================================
+   LIQUID GLASS — when "enhanced" (quick-liquid) is on, hand the material over:
+   strip the CSS glass (background/blur/border/shadow) from converted hosts so
+   quick-liquid's refraction + rim shows instead. Layout (padding, radius, size)
+   is untouched. 'standard' keeps the original CSS glass with zero extra cost.
+   ============================================================================ */
+html[data-glass="enhanced"] .glass-host {
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  /* Entrance keyframes (rise/menupop/popin) animate OPACITY, which quick-liquid
+     can't tolerate on its host element — the engine's animateIn covers entry. */
+  animation: none !important;
+}
+/* The floating tab bar centers itself with transform: translateX(-50%), which
+   would fight the engine's transform-based press/entrance animations. Center the
+   enhanced host with inset margins instead. */
+html[data-glass="enhanced"] .tab-bar.glass-host {
+  left: 0; right: 0; transform: none; margin-inline: auto; width: fit-content;
+}
+/* quick-liquid wraps the host's real children in a block-level .ql-content div
+   (next to its absolute lens/tint/sheen/rim layers), which breaks flex hosts —
+   tab items stacked vertically inside the wrapper. Make the wrapper inherit the
+   host's layout so children lay out exactly as if unwrapped. */
+html[data-glass="enhanced"] .glass-host > .ql-content {
+  display: inherit;
+  flex-direction: inherit; align-items: inherit; justify-content: inherit;
+  gap: inherit; flex-wrap: inherit;
+  flex: 1; align-self: stretch; min-width: 0;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 

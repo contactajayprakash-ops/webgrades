@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { ErrorBox } from './ui.jsx'
+import Glass from './Glass.jsx'
 
 export default function Login() {
   // Short tab title for users. The full SEO title stays in index.html's <title>
@@ -33,7 +34,7 @@ export default function Login() {
 
   return (
     <div className="login-wrap">
-      <div className="card login-card">
+      <Glass className="card login-card" config={{ material: 'thick', borderRadius: 20 }}>
         <div className="brand">
           <span className="logo">W</span>
           <span>Web<span className="accent">Grades</span></span>
@@ -81,7 +82,7 @@ export default function Login() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-      </div>
+      </Glass>
     </div>
   )
 }

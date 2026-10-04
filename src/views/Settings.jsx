@@ -125,6 +125,13 @@ export default function Settings() {
         <div className="card card-pad">
           <h3 className="mb-3">Performance</h3>
           <ToggleRow
+            label="Liquid Glass"
+            hint="Real refracting glass surfaces. Turn off for the original, lighter look if it feels laggy (e.g. on a Chromebook)."
+            checked={theme.glass !== 'standard'}
+            onChange={(v) => update({ glass: v ? 'enhanced' : 'standard' })}
+          />
+          <div style={{ height: 14 }} />
+          <ToggleRow
             label="Reduce blur"
             hint="Lighter glass — smoother on Chromebooks and older devices."
             checked={theme.reduceBlur}

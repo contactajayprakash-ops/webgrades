@@ -15,6 +15,7 @@ import {
 } from '../lib/gpaCompute.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { transcriptCourseName } from '../lib/courseCatalog.js'
+import Glass from '../components/Glass.jsx'
 
 const TOUR_SEEN_KEY = 'wg_tour_cumulative_seen'
 const mkId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2))
@@ -214,7 +215,9 @@ export default function Gpa() {
 
 function HeadlineCard({ active, onClick, label, value, note, accent, whatIf }) {
   return (
-    <button className="card stat" onClick={onClick}
+    <Glass as="button" className="card stat" onClick={onClick}
+      liquidPress={onClick ? { scale: 0.97 } : false}
+      config={{ material: active ? 'regular' : 'thin', borderRadius: 20 }}
       style={{ textAlign: 'left', cursor: onClick ? 'pointer' : 'default', border: active ? `1px solid ${accent}` : undefined, background: active ? undefined : 'var(--bg-soft)' }}>
       {active && <span className="glow" style={{ background: accent }} />}
       <span className="label">{label} {whatIf && <em style={{ color: 'var(--yellow-text)' }}>· what-if</em>}</span>
@@ -222,7 +225,7 @@ function HeadlineCard({ active, onClick, label, value, note, accent, whatIf }) {
         ? <span className="value skeleton" style={{ height: 34, width: 130 }} />
         : <span className="value" style={{ fontSize: value === 'Set up' ? 22 : undefined }}>{value}</span>}
       <span className="meta">{note}</span>
-    </button>
+    </Glass>
   )
 }
 

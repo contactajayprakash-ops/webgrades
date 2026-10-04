@@ -3,12 +3,14 @@
 // CSS custom properties / <html> attributes that index.css reads. Defaults match
 // the original look exactly, so an untouched install renders identically.
 import { markSettingsChanged } from './settingsMeta.js'
+import { setGlassMode } from './glassMode.js'
 
 const KEY = 'wg_theme'
 
 export const DEFAULT_THEME = {
   theme: 'light',      // 'dark' | 'light' — light is the default
   accentId: 'blue',    // see ACCENTS
+  glass: 'enhanced',   // 'enhanced' (quick-liquid refraction) | 'standard' (CSS glass; lighter on Chromebooks)
   reduceBlur: false,   // lighter backdrop blur (faster on Chromebooks)
   reduceMotion: false, // kill animations/transitions
   showRecent: false,   // dashboard "Recently posted" feed — off by default (no change)
@@ -83,6 +85,12 @@ export function applyTheme(state) {
   else root.removeAttribute('data-theme')
   toggle('data-reduce-blur', s.reduceBlur)
   toggle('data-reduce-motion', s.reduceMotion)
+
+  // Liquid-glass rendering mode: the attribute lets CSS hand the material over
+  // to quick-liquid on enhanced hosts; setGlassMode re-renders <Glass> live.
+  const glass = s.glass === 'standard' ? 'standard' : 'enhanced'
+  root.setAttribute('data-glass', glass)
+  setGlassMode(glass, s.theme) // appearance follows the APP theme, not the OS
 
   // Favicon follows the accent (apple-touch-icon too).
   setLink('icon', accent)

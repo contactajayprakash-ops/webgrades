@@ -15,6 +15,7 @@ import { loadTheme } from '../lib/theme.js'
 import { markSettingsChanged } from '../lib/settingsMeta.js'
 import { loadUI } from '../lib/ui.js'
 import { loadAgenda, todayKey, startOfWeek, addDays, dateKey, labelFor } from '../lib/agenda.js'
+import Glass, { GlassLink } from '../components/Glass.jsx'
 
 export default function Dashboard() {
   const { userName } = useAuth()
@@ -156,14 +157,14 @@ function greeting(name) {
 // cards when GPA is hidden, so opening the app in front of others reveals nothing.
 function NavTile({ to, label, title, sub, accent = 'var(--accent)' }) {
   return (
-    <Link to={to} className="card stat card-link" style={{ flexDirection: 'column' }}>
+    <GlassLink to={to} className="card stat card-link" config={{ material: 'regular', borderRadius: 20 }} style={{ flexDirection: 'column' }}>
       <span className="glow" style={{ background: accent }} />
       <span className="label">{label}</span>
       <span className="value" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 28 }}>
         {title} <Icon.chevron width={22} height={22} />
       </span>
       <span className="meta">{sub}</span>
-    </Link>
+    </GlassLink>
   )
 }
 
@@ -180,12 +181,12 @@ function TopStats() {
         : <NavTile to="/agenda" label="Planner" title="Agenda" sub="Homework & due dates" />}
 
       {showGpa ? (
-        <div className="card stat">
+        <Glass className="card stat" config={{ material: 'regular', borderRadius: 20 }}>
           <span className="label">Official GPA</span>
           {rankLoading ? <span className="value skeleton" style={{ height: 34, width: 100 }} />
             : <span className="value">{rankData?.gpa || '—'}</span>}
           <span className="meta">from HAC transcript</span>
-        </div>
+        </Glass>
       ) : (
         <NavTile to="/schedule" label="Classes" title="Schedule" sub="Your A/B-day classes" accent="var(--accent-2)" />
       )}
@@ -201,7 +202,7 @@ function TopStats() {
 function RankCard({ rankData, rankLoading, blurred }) {
   const [revealed, setRevealed] = useState(false)
   return (
-    <div className="card stat">
+    <Glass className="card stat" config={{ material: 'regular', borderRadius: 20 }}>
       <span className="label">Class Rank</span>
       {rankLoading ? <span className="value skeleton" style={{ height: 34, width: 100 }} />
         : <span
@@ -210,7 +211,7 @@ function RankCard({ rankData, rankLoading, blurred }) {
             title={blurred ? (revealed ? 'Tap to hide' : 'Tap to reveal') : undefined}
           >{rankData?.rank ? `#${rankData.rank}` : '—'}</span>}
       <span className="meta">{rankData?.outOf ? `out of ${rankData.outOf}` : 'rank in class'}</span>
-    </div>
+    </Glass>
   )
 }
 
@@ -245,7 +246,7 @@ function UpcomingCard() {
   const rel = (key) => (key === todayKey() ? 'Today' : labelFor(key).weekday)
 
   return (
-    <Link to="/agenda" className="card stat card-link" style={{ flexDirection: 'column', alignItems: 'stretch', textAlign: 'left', gap: 0 }}>
+    <GlassLink to="/agenda" className="card stat card-link" config={{ material: 'regular', borderRadius: 20 }} style={{ flexDirection: 'column', alignItems: 'stretch', textAlign: 'left', gap: 0 }}>
       <span className="label">Upcoming</span>
       {items.length === 0 ? (
         <span className="value" style={{ fontSize: 22 }}>All clear</span>
@@ -267,7 +268,7 @@ function UpcomingCard() {
         {items.length === 0 ? 'nothing due — agenda + this week'
           : `${items.length} due${items.length > 3 ? ` · +${items.length - 3} more` : ''} · agenda + this week`}
       </span>
-    </Link>
+    </GlassLink>
   )
 }
 
@@ -302,7 +303,7 @@ function GpaCard() {
 
   return (
     <div className="stat-pick">
-      <Link to="/gpa" className="card stat card-link" style={{ flexDirection: 'column' }}>
+      <GlassLink to="/gpa" className="card stat card-link" config={{ material: 'regular', borderRadius: 20 }} style={{ flexDirection: 'column' }}>
         <span className="glow" style={{ background: 'var(--accent)' }} />
         <span className="label">{label}</span>
         {value === null
@@ -313,7 +314,7 @@ function GpaCard() {
               ? <span className="value" style={{ fontSize: 22 }}>Set up →</span>
               : <span className="value">{value}</span>}
         <span className="meta">{meta}</span>
-      </Link>
+      </GlassLink>
 
       <button className="card-edit" title="Choose what this shows" aria-label="Choose what this card shows"
         onClick={(e) => { e.preventDefault(); setMenuOpen((o) => !o) }}>
