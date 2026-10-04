@@ -292,6 +292,10 @@ html[data-glass="enhanced"] .glass-host > .ql-content {
   flex-direction: inherit; align-items: inherit; justify-content: inherit;
   gap: inherit; flex-wrap: inherit;
   flex: 1; align-self: stretch; min-width: 0;
+  /* Let the wrapper shrink inside height-capped flex hosts (profile pop's
+     max-height) — without this it grows past the cap and the inner scroll area
+     (.profile-list) never engages, so the wheel scrolled the PAGE instead. */
+  min-height: 0;
 }
 /* The stat cards' accent .glow tint was designed to sit UNDER the old semi-
    opaque card material. On quick-liquid's transparent glass it reads as a hard
@@ -1081,6 +1085,7 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--drop-lg);
   display: flex; flex-direction: column; gap: 2px; animation: popin .28s var(--ease) backwards; max-height: min(76vh, 620px); }
 .profile-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1 1 auto; margin: 0 -2px; padding: 0 2px;
+  overscroll-behavior: contain; /* hitting the list's ends must not scroll the page */
   scrollbar-width: thin; scrollbar-color: var(--fill-3) transparent; }
 .profile-list::-webkit-scrollbar { width: 7px; }
 .profile-list::-webkit-scrollbar-thumb { background: var(--fill-3); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
