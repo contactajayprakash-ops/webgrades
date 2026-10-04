@@ -22,6 +22,12 @@ const BASE = {
   bezelWidth: 48,
   thickness: 10,
   chromaticAberration: 0.08,
+  // No specular sheen: it paints a soft white rounded patch INSIDE the surface
+  // that reads as "a second box under the text" (worst on light backgrounds).
+  // Edge lighting lives on the rim instead.
+  specularStrength: 0,
+  dynamicLighting: false,
+  hoverLighting: false,
 }
 
 // quick-liquid is loaded ONLY when a glass surface actually renders in enhanced
@@ -76,7 +82,7 @@ export default function Glass({ as = 'div', className = '', config, liquidPress,
   // background — everything read as invisible. A much stronger frost + firmer
   // edge gives the surfaces definition (dark mode keeps the airier defaults).
   const appearanceExtra = appearance === 'light'
-    ? { tint: '#ffffff', tintOpacity: 0.55, edgeHighlight: 1, specularStrength: 0.5 }
+    ? { tint: '#ffffff', tintOpacity: 0.55 }
     : null
   return (
     <LG
