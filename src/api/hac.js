@@ -92,6 +92,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const GATEWAY_RETRIES = 2;
 const isGatewayError = (status) => status === 502 || status === 503 || status === 504;
 
+// Every call funnels through the single serial queue (see serialize), so a fetch
+// that never settles doesn't just hang its own request - it jams every request
+// behind it, and the spinner spins forever. The attendance month-switch is the
+// worst offender: it's the only scrape that posts back for a second full HAC page
+// load + JSDOM parse on a Pi 3. A deadline turns a stalled connection into a
+// retriable error instead. Generous enough that a legitimately slow batch finishes
+// well under it; a connection failure still throws immediately (offline falls
+// through to cache without waiting this out).
+const REQUEST_TIMEOUT_MS = 45000;
+
 async function rawPost(path, body) {
   let res;
   for (let attempt = 0; ; attempt++) {
@@ -100,6 +110,7 @@ async function rawPost(path, body) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (e) {
       throw new Error('Could not reach the API. Is the server awake and the URL correct?');

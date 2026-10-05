@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useHacData } from '../hooks/useHacData.js'
 import { PageHead, Loading, ErrorBox, Empty } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
@@ -35,6 +35,22 @@ export default function Attendance() {
   const flagged = [...byDay.values()].filter((d) => d.tooltip) // weekends are colored but have no note
 
   const parsed = parseMonth(data?.month)
+
+  // HAC's MonthlyView opens on a month behind today (it lands on the last month
+  // with recorded attendance, not the calendar's current month), so the default
+  // view shows e.g. September in October. When we're on that default view and the
+  // shown month predates today, step forward once so the page opens on the current
+  // month. Only fires from the default (viewArg === null), so it can't fight a
+  // user paging back into the past, and it self-disables once the live refresh
+  // lands the current month on its own.
+  useEffect(() => {
+    if (viewArg !== null || loading || !nextNav || !parsed) return
+    const now = new Date()
+    const behind = parsed.year < now.getFullYear() ||
+      (parsed.year === now.getFullYear() && parsed.monthIndex < now.getMonth())
+    if (behind) setViewArg(nextNav.arg)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewArg, loading, nextNav, data?.month])
 
   // Month paging — shared by the buttons, a swipe (touch, with momentum), and
   // the arrow keys (desktop). Swipe LEFT → next month, RIGHT → prev (iOS-style).
