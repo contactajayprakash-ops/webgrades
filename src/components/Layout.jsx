@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useState, useSyncExternalStore } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useSettingsSync } from '../hooks/useSettingsSync.js'
@@ -8,6 +8,7 @@ import ProfileSwitcher from './ProfileSwitcher.jsx'
 import PullToRefresh from './PullToRefresh.jsx'
 import Glass from './Glass.jsx'
 import GalaxyBg from './GalaxyBg.jsx'
+import { getNavSide, subscribeGlassMode } from '../lib/glassMode.js'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: 'home', end: true },
@@ -53,6 +54,8 @@ export default function Layout() {
   const [menu, setMenu] = useState(false)     // desktop "More" dropdown
   const [q, setQ] = useState('')              // sheet search filter
   const loc = useLocation()
+  // Desktop sidebar mode re-renders the nav (full list w/ icons, no More menu).
+  const navSide = useSyncExternalStore(subscribeGlassMode, getNavSide, () => false)
 
   // Bouncy sliding pill behind the active nav tab (galaxy-file style). Placed by
   // measurement so it works in the top bar AND the docked sidebar, in plain and
@@ -79,7 +82,7 @@ export default function Layout() {
     if (nav) ro.observe(nav)
     window.addEventListener('resize', place)
     return () => { clearTimeout(t1); clearTimeout(t2); ro.disconnect(); window.removeEventListener('resize', place) }
-  }, [loc.pathname, menu])
+  }, [loc.pathname, menu, navSide])
 
   const [seenBadges, setSeenBadges] = useState(() => {
     try { return JSON.parse(localStorage.getItem('wg_nav_seen')) || {} } catch (_) { return {} }
@@ -134,25 +137,44 @@ export default function Layout() {
         </NavLink>
 
         <div className="topbar-right">
-          <Glass as="nav" className="navpill" config={{ material: 'thin', borderRadius: 999 }} aria-label="Primary">
+          <Glass as="nav" className={`navpill ${navSide ? 'navpill-side' : ''}`} config={{ material: 'thin', borderRadius: navSide ? 30 : 999 }} aria-label="Primary">
             <span className="np-slider" aria-hidden="true" />
-            {PRIMARY.map((t) => (
-              <NavLink key={t.to} to={t.to} end={t.end}
-                className={({ isActive }) => `np-tab ${isActive ? 'active' : ''}`}>
-                {t.label}
-                {t.badge && !seenBadges[t.to] && <span className="np-dot" aria-hidden="true" />}
-              </NavLink>
-            ))}
-            <button className={`np-tab ${menu ? 'active' : ''}`} onClick={() => setMenu((m) => !m)}>More</button>
-            <span className="np-sep" />
-            <NavLink to="/settings" className={({ isActive }) => `np-icon ${isActive ? 'active' : ''}`} aria-label="Settings">
-              <Icon.settings width={17} height={17} />
-            </NavLink>
+            {navSide ? (
+              // Sidebar mode: the WHOLE nav lives in the rail (no More dropdown),
+              // icon + label rows like the galaxy concept file.
+              NAV.map((item, i) => {
+                if (item.section) return <span key={`s${i}`} className="np-sep" aria-hidden="true" />
+                const C = Icon[item.icon]
+                return (
+                  <NavLink key={item.to} to={item.to} end={item.end}
+                    className={({ isActive }) => `np-tab ${isActive ? 'active' : ''}`}>
+                    <C width={20} height={20} aria-hidden="true" />
+                    <span>{item.label}</span>
+                    {item.badge && !seenBadges[item.to] && <span className="np-dot" aria-hidden="true" />}
+                  </NavLink>
+                )
+              })
+            ) : (
+              <>
+                {PRIMARY.map((t) => (
+                  <NavLink key={t.to} to={t.to} end={t.end}
+                    className={({ isActive }) => `np-tab ${isActive && !menu ? 'active' : ''}`}>
+                    {t.label}
+                    {t.badge && !seenBadges[t.to] && <span className="np-dot" aria-hidden="true" />}
+                  </NavLink>
+                ))}
+                <button className={`np-tab ${menu ? 'active' : ''}`} onClick={() => setMenu((m) => !m)}>More</button>
+                <span className="np-sep" />
+                <NavLink to="/settings" className={({ isActive }) => `np-icon ${isActive ? 'active' : ''}`} aria-label="Settings">
+                  <Icon.settings width={17} height={17} />
+                </NavLink>
+              </>
+            )}
           </Glass>
 
           <ProfileSwitcher compact />
 
-          {menu && (
+          {menu && !navSide && (
             <>
               <div className="nav-menu-backdrop" onClick={() => setMenu(false)} />
               <Glass className="nav-menu" role="menu" animateIn config={{ material: 'thick', borderRadius: 24 }}>

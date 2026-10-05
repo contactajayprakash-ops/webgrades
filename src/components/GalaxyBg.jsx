@@ -60,33 +60,38 @@ export default function GalaxyBg() {
       d.innerHTML = `<svg viewBox="0 0 1092 764" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${l[2].replace(/§/g, i)}</svg>`
       bg.appendChild(d)
     })
-    bg.insertAdjacentHTML('beforeend', '<div class="glx-vig"></div>')
+    bg.insertAdjacentHTML('beforeend', '<div class="glx-vig"></div><div class="glx-cursor"></div>')
+    const cursor = bg.querySelector('.glx-cursor')
 
-    // pointer parallax on the sky
-    const onMove = (e) => {
-      bg.style.setProperty('--px', (e.clientX / innerWidth * 2 - 1).toFixed(3))
-      bg.style.setProperty('--py', (e.clientY / innerHeight * 2 - 1).toFixed(3))
+    // One pointermove listener, work done at most once per FRAME (rAF-throttled):
+    // sky parallax, the ambient light on the background itself, and the
+    // cursor-following light on whichever glass surface is under the pointer.
+    let raf = 0
+    let lastEl = null
+    let ev = null
+    const tick = () => {
+      raf = 0
+      if (!ev) return
+      const { clientX: x, clientY: y, target } = ev
+      ev = null
+      bg.style.setProperty('--px', (x / innerWidth * 2 - 1).toFixed(3))
+      bg.style.setProperty('--py', (y / innerHeight * 2 - 1).toFixed(3))
+      if (cursor) cursor.style.transform = `translate3d(${x}px, ${y}px, 0)`
+      const t = target && target.closest ? target.closest(GLOW_SEL) : null
+      if (t !== lastEl && lastEl) lastEl.style.setProperty('--a', 0.45)
+      lastEl = t
+      if (t) {
+        const r = t.getBoundingClientRect()
+        t.style.setProperty('--mx', (x - r.left) + 'px')
+        t.style.setProperty('--my', (y - r.top) + 'px')
+        t.style.setProperty('--a', 1)
+      }
     }
-    // cursor-following light across glass surfaces
-    const onGlow = (e) => {
-      const t = e.target.closest && e.target.closest(GLOW_SEL)
-      if (!t) return
-      const r = t.getBoundingClientRect()
-      t.style.setProperty('--mx', (e.clientX - r.left) + 'px')
-      t.style.setProperty('--my', (e.clientY - r.top) + 'px')
-      t.style.setProperty('--a', 1)
-    }
-    const onGlowOut = (e) => {
-      const t = e.target.closest && e.target.closest(GLOW_SEL)
-      if (t) t.style.setProperty('--a', 0.45)
-    }
-    addEventListener('pointermove', onMove, { passive: true })
-    document.addEventListener('pointermove', onGlow, { passive: true })
-    document.addEventListener('pointerout', onGlowOut, { passive: true })
+    const onMove = (e) => { ev = e; if (!raf) raf = requestAnimationFrame(tick) }
+    document.addEventListener('pointermove', onMove, { passive: true })
     return () => {
-      removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointermove', onGlow)
-      document.removeEventListener('pointerout', onGlowOut)
+      document.removeEventListener('pointermove', onMove)
+      if (raf) cancelAnimationFrame(raf)
     }
   }, [theme])
 

@@ -1571,8 +1571,8 @@ html[data-theme="galaxy"] .login-card,
 html[data-theme="galaxy"] .app-shell.v2 .impact {
   position: relative;
   background: rgba(255, 255, 255, 0.045);
-  -webkit-backdrop-filter: blur(16px) saturate(1.7) brightness(1.08);
-  backdrop-filter: blur(16px) saturate(1.7) brightness(1.08);
+  -webkit-backdrop-filter: blur(12px) saturate(1.7);
+  backdrop-filter: blur(12px) saturate(1.7);
   border-color: transparent;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.12),
@@ -1615,6 +1615,24 @@ html[data-theme="galaxy"] .np-slider {
 html[data-theme="galaxy"] .navpill .np-tab.active { color: #fff; }
 html[data-theme="galaxy"] .np-tab:hover { color: #fff; }
 
+/* ambient cursor light on the SKY itself (not just the cards) — a composited
+   transform-follow layer, so it costs nothing per-frame */
+.glx-cursor {
+  position: absolute; left: 0; top: 0; width: 620px; height: 620px;
+  margin: -310px 0 0 -310px; pointer-events: none; will-change: transform;
+  background: radial-gradient(circle, rgba(159, 170, 255, 0.16), rgba(127, 150, 255, 0.07) 40%, transparent 70%);
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1);
+}
+
+/* perf: a card INSIDE another glass card re-blurs a surface that's already
+   frosted — pure cost, no visual gain. One blur layer per stack. */
+html[data-theme="galaxy"] .card .card,
+html[data-theme="galaxy"] .card .card::before,
+html[data-theme="galaxy"] .card .card::after {
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+html[data-theme="galaxy"] .card .card { box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); background: rgba(255,255,255,.05); }
+
 /* ============================================================================
    SIDEBAR NAVIGATION (data-nav="side") — desktop: dock the floating top nav
    to the left edge (galaxy-file layout). Any theme; mobile keeps the tab bar.
@@ -1634,9 +1652,12 @@ html[data-theme="galaxy"] .np-tab:hover { color: #fff; }
     border-radius: 30px; padding: 8px;
   }
   html[data-nav="side"] .app-shell.v2 .navpill .np-tab {
-    display: flex; align-items: center; height: 52px; padding: 0 20px;
+    display: flex; align-items: center; gap: 14px; height: 50px; padding: 0 18px;
     font-size: var(--t-callout); text-align: left;
   }
+  html[data-nav="side"] .app-shell.v2 .navpill .np-tab svg { flex: none; opacity: .9; }
+  html[data-nav="side"] .app-shell.v2 .navpill .np-tab .np-dot { position: static; margin-left: auto; }
+  html[data-nav="side"] .app-shell.v2 .navpill { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
   html[data-nav="side"] .app-shell.v2 .navpill .np-sep { width: auto; height: 1px; align-self: auto; margin: 5px 10px; }
   html[data-nav="side"] .app-shell.v2 .navpill .np-icon {
     width: auto; height: 46px; border-radius: var(--pill);
@@ -1646,7 +1667,10 @@ html[data-theme="galaxy"] .np-tab:hover { color: #fff; }
   html[data-nav="side"] .app-shell.v2 .topbar-right .profile-switch { margin-top: auto; }
   /* the More dropdown opens beside the rail instead of below the pill */
   html[data-nav="side"] .app-shell.v2 .nav-menu { left: calc(100% + 14px); right: auto; top: 0; }
-  html[data-nav="side"] .app-shell.v2 .profile-switch.compact .profile-pop { left: 0; right: auto; top: auto; bottom: calc(100% + 12px); }
+  html[data-nav="side"] .app-shell.v2 .profile-switch.compact .profile-pop {
+    position: fixed; left: 286px; right: auto; top: auto; bottom: 18px;
+    max-height: min(76vh, 620px);
+  }
   /* content clears the rail */
   html[data-nav="side"] .app-shell.v2 .main { padding-left: 304px; padding-top: 28px; }
 }

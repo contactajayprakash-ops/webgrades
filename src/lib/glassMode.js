@@ -8,19 +8,22 @@
 let mode = 'enhanced'
 let appearance = 'dark' // follows the APP theme (data-theme), not the OS scheme
 let themeName = 'dark'  // full theme id ('dark'|'light'|'galaxy') for theme-aware components
+let navSide = false     // desktop sidebar nav (Layout re-renders its nav on change)
 const subs = new Set()
 const emit = () => { for (const fn of subs) { try { fn() } catch (_) {} } }
 
 export function getGlassMode() { return mode }
 export function getGlassAppearance() { return appearance }
 export function getThemeName() { return themeName }
+export function getNavSide() { return navSide }
 
-export function setGlassMode(next, theme) {
+export function setGlassMode(next, theme, side) {
   const m = next === 'standard' ? 'standard' : 'enhanced'
   const a = theme === 'light' ? 'light' : 'dark'
   const t = theme === 'light' || theme === 'galaxy' ? theme : 'dark'
-  if (m === mode && a === appearance && t === themeName) return
-  mode = m; appearance = a; themeName = t
+  const n = !!side
+  if (m === mode && a === appearance && t === themeName && n === navSide) return
+  mode = m; appearance = a; themeName = t; navSide = n
   emit()
 }
 
