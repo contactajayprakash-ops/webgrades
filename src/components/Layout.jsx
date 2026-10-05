@@ -8,6 +8,7 @@ import ProfileSwitcher from './ProfileSwitcher.jsx'
 import PullToRefresh from './PullToRefresh.jsx'
 import Glass from './Glass.jsx'
 import GalaxyBg from './GalaxyBg.jsx'
+import ThemeFX from './ThemeFX.jsx'
 import { getNavSide, subscribeGlassMode } from '../lib/glassMode.js'
 
 const NAV = [
@@ -165,6 +166,7 @@ export default function Layout() {
           dropped to pure black after a route/Suspense subtree swap. */}
       <div className="v2-bg" aria-hidden="true" />
       <GalaxyBg />
+      <ThemeFX />
       {/* Desktop floating Liquid Glass nav */}
       <header className="topbar">
         <NavLink to="/" end className="tb-brand">

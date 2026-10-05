@@ -1711,26 +1711,17 @@ html[data-theme="galaxy"] .card .card { box-shadow: inset 0 0 0 1px rgba(255,255
 /* icon: a little animated "sky" per theme — shared rotating light sweep on top */
 .tt-icon { position: relative; width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
-.tt-icon::before { content: ""; position: absolute; inset: -45%;
-  background: conic-gradient(transparent 0 72%, rgba(255, 255, 255, 0.35) 84%, transparent 96%);
-  animation: ttspin 5s linear infinite; }
-@keyframes ttspin { to { transform: rotate(360deg); } }
 .tt-dark   { background: linear-gradient(145deg, #2c2c35, #0b0b12); }
 .tt-light  { background: linear-gradient(145deg, #ffffff, #d8ddeb); }
-.tt-light::before { background: conic-gradient(transparent 0 72%, rgba(255, 190, 80, 0.55) 84%, transparent 96%); }
 .tt-galaxy { background:
   radial-gradient(3px 3px at 30% 35%, #fff, transparent 60%),
   radial-gradient(2px 2px at 68% 60%, #cfc6ff, transparent 60%),
   radial-gradient(2px 2px at 55% 22%, #b4cdff, transparent 60%),
   linear-gradient(145deg, #241546, #0a1030); }
 .tt-aurora { background: linear-gradient(145deg, #0b3b2a, #071118); }
-.tt-aurora::before { background: conic-gradient(transparent 0 60%, rgba(52, 224, 161, 0.5) 74%, rgba(122, 92, 255, 0.45) 86%, transparent 97%); }
 .tt-neon   { background: linear-gradient(145deg, #2a0640, #0d0414); }
-.tt-neon::before { background: conic-gradient(transparent 0 62%, rgba(255, 43, 214, 0.6) 76%, rgba(0, 229, 255, 0.55) 88%, transparent 98%); animation-duration: 3.2s; }
 .tt-ember  { background: linear-gradient(145deg, #4a1707, #140b08); }
-.tt-ember::before { background: conic-gradient(transparent 0 66%, rgba(255, 106, 61, 0.6) 80%, rgba(255, 179, 64, 0.5) 90%, transparent 98%); }
 .tt-tide   { background: linear-gradient(145deg, #e8fbff, #9fd8ea); }
-.tt-tide::before { background: conic-gradient(transparent 0 68%, rgba(34, 160, 229, 0.5) 82%, transparent 95%); }
 
 /* ============================================================================
    MEGA THEMES — animated backgrounds (aurora / neon / ember dark, tide light).
@@ -1756,12 +1747,12 @@ html[data-mega="neon"] .app-shell.v2 .v2-bg {
 }
 html[data-mega="ember"] body:has(.app-shell.v2) { background: #140b08; }
 html[data-mega="ember"] .app-shell.v2 .v2-bg {
+  /* dark forge: warmth lives at the BOTTOM (hearth) — no floating color blobs;
+     motion comes from the rising embers, so the canvas itself holds still */
   background-image:
-    radial-gradient(90vmax 60vmax at 18% -12%, rgba(255, 106, 61, 0.17), transparent 55%),
-    radial-gradient(85vmax 55vmax at 102% 18%, rgba(255, 179, 64, 0.12), transparent 58%),
-    radial-gradient(75vmax 55vmax at 70% 112%, rgba(214, 60, 32, 0.14), transparent 60%),
-    linear-gradient(180deg, #1c0d07 0%, #140b08 55%, #200a04 100%);
-  animation: bloomdrift 16s ease-in-out infinite;
+    radial-gradient(85vmax 45vmax at 50% 118%, rgba(255, 106, 61, 0.12), rgba(214, 60, 32, 0.05) 55%, transparent 70%),
+    linear-gradient(180deg, #120a08 0%, #0e0806 55%, #170a05 100%);
+  animation: none;
 }
 /* tide is a LIGHT-scheme theme — overrides the light canvas with sea tones */
 html[data-mega="tide"] body:has(.app-shell.v2) { background: #e4f3f7; }
@@ -1773,3 +1764,151 @@ html[data-mega="tide"] .app-shell.v2 .v2-bg {
     linear-gradient(180deg, #e2f5fa 0%, #d4edf4 55%, #dff0f9 100%);
   animation: bloomdrift 13s ease-in-out infinite;
 }
+
+/* ============================================================================
+   THEME FX — real animated scenes + per-theme card UI (ThemeFX.jsx builds the
+   DOM; everything animates transform/opacity only).
+   ============================================================================ */
+.fx-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.fx-par { position: absolute; inset: -6%; will-change: transform;
+  transform: translate3d(calc(var(--px, 0) * var(--k) * 1px), 0, 0);
+  transition: transform .9s cubic-bezier(.2, .8, .2, 1); }
+.fx-stars { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* ---- AURORA: undulating light ribbons + a cursor-driven beam ---- */
+.fx-ribbon { position: absolute; left: -20%; width: 140%; height: 34vh; border-radius: 50%;
+  filter: blur(46px); mix-blend-mode: screen; will-change: transform, opacity; }
+.fx-r1 { top: 2%;  background: linear-gradient(100deg, transparent 5%, rgba(52,224,161,.42) 32%, rgba(64,200,255,.25) 55%, rgba(122,92,255,.33) 76%, transparent 95%);
+  animation: fxwave 16s ease-in-out infinite alternate; }
+.fx-r2 { top: 20%; background: linear-gradient(95deg, transparent 8%, rgba(122,92,255,.3) 38%, rgba(52,224,161,.28) 66%, transparent 92%);
+  animation: fxwave 21s ease-in-out -7s infinite alternate-reverse; }
+.fx-r3 { top: 42%; height: 26vh; background: linear-gradient(105deg, transparent 10%, rgba(34,170,130,.2) 45%, rgba(90,110,255,.18) 70%, transparent 90%);
+  animation: fxwave 27s ease-in-out -13s infinite alternate; }
+@keyframes fxwave {
+  0%   { transform: translate3d(-3%, 0, 0) skewY(-7deg) scaleY(1); opacity: .75; }
+  50%  { transform: translate3d(2%, -2.5%, 0) skewY(-4deg) scaleY(1.18); opacity: 1; }
+  100% { transform: translate3d(4%, 1.5%, 0) skewY(-8deg) scaleY(.92); opacity: .8; }
+}
+.fx-beam { position: absolute; top: -4%; bottom: 30%; width: 180px; will-change: transform;
+  background: linear-gradient(180deg, rgba(120,255,205,.26), rgba(120,220,255,.1) 55%, transparent);
+  filter: blur(26px); mix-blend-mode: screen;
+  transition: transform .35s cubic-bezier(.2, .8, .2, 1); }
+/* aurora cards: cold ice glass with a polar-light top edge */
+html[data-mega="aurora"] .app-shell.v2 .card { position: relative;
+  background: rgba(190, 240, 230, 0.045);
+  box-shadow: var(--rim), 0 24px 50px -28px rgba(0, 40, 30, 0.6); }
+html[data-mega="aurora"] .app-shell.v2 .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  border-radius: inherit; pointer-events: none;
+  background: radial-gradient(160px 3px at var(--mx, 30%) 0, rgba(52, 224, 161, 0.9), rgba(122, 92, 255, 0.4) 60%, transparent);
+  opacity: .8; }
+html[data-mega="aurora"] .app-shell.v2 .card:hover { box-shadow: var(--rim), 0 0 34px -10px rgba(52, 224, 161, 0.35), 0 24px 50px -28px rgba(0, 40, 30, 0.6); }
+
+/* ---- NEON: perspective grid + horizon sun + crosshair cursor ---- */
+.fx-gridwrap { position: absolute; left: -25%; right: -25%; bottom: 0; height: 46%;
+  perspective: 420px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 22%);
+  mask-image: linear-gradient(180deg, transparent, #000 22%); }
+.fx-grid { position: absolute; inset: -100% 0 0 0; transform-origin: 50% 100%;
+  transform: rotateX(62deg); will-change: transform;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 43, 214, 0.33) 0 1.5px, transparent 1.5px 90px),
+    repeating-linear-gradient(0deg, rgba(255, 43, 214, 0.3) 0 1.5px, transparent 1.5px 72px);
+  animation: fxgrid 2.6s linear infinite; }
+@keyframes fxgrid { to { transform: rotateX(62deg) translateY(72px); } }
+.fx-sun { position: absolute; left: 50%; bottom: 38%; width: 290px; height: 290px; margin-left: -145px;
+  border-radius: 50%; will-change: transform, opacity;
+  background: radial-gradient(circle, #ff8ad8 0%, #ff2bd6 42%, rgba(122, 44, 255, 0.55) 72%, transparent 76%);
+  -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 14px, transparent 14px 20px), linear-gradient(#000, #000);
+  -webkit-mask-composite: source-in; filter: blur(1.5px) drop-shadow(0 0 44px rgba(255, 43, 214, 0.55));
+  animation: fxsun 5s ease-in-out infinite alternate; }
+@keyframes fxsun { from { transform: translateY(0) scale(1); opacity: .9; } to { transform: translateY(8px) scale(1.035); opacity: 1; } }
+.fx-cross-v, .fx-cross-h { position: absolute; will-change: transform; mix-blend-mode: screen; }
+.fx-cross-v { top: 0; bottom: 0; left: 0; width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(255, 43, 214, 0.6) 30%, rgba(255, 43, 214, 0.6) 70%, transparent);
+  box-shadow: 0 0 12px rgba(255, 43, 214, 0.7); }
+.fx-cross-h { left: 0; right: 0; top: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.55) 30%, rgba(0, 229, 255, 0.55) 70%, transparent);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.65); }
+/* neon cards: electric dual-edge outline that charges up on hover */
+html[data-mega="neon"] .app-shell.v2 .card {
+  background: rgba(30, 6, 44, 0.42);
+  box-shadow: 0 0 0 1px rgba(255, 43, 214, 0.35), inset 0 0 0 1px rgba(0, 229, 255, 0.14),
+    0 0 22px -8px rgba(255, 43, 214, 0.45), 0 26px 50px -30px rgba(0, 0, 0, 0.8);
+  transition: box-shadow .3s var(--ease), transform .3s var(--ease); }
+html[data-mega="neon"] .app-shell.v2 .card:hover {
+  box-shadow: 0 0 0 1.5px rgba(255, 43, 214, 0.75), inset 0 0 0 1px rgba(0, 229, 255, 0.3),
+    0 0 34px -6px rgba(255, 43, 214, 0.75), 0 0 50px -14px rgba(0, 229, 255, 0.5),
+    0 26px 50px -30px rgba(0, 0, 0, 0.8); }
+html[data-mega="neon"] .np-slider { background: linear-gradient(90deg, #ff2bd6, #9b4dff);
+  box-shadow: 0 0 18px -2px rgba(255, 43, 214, 0.8); }
+html[data-mega="neon"] .navpill .np-tab.active { color: #fff; }
+
+/* ---- EMBER: rising embers + breathing hearth + heat-haze cursor ---- */
+.fx-hearth { position: absolute; left: -10%; right: -10%; bottom: -22%; height: 55%;
+  background: radial-gradient(60% 90% at 50% 100%, rgba(255, 106, 61, 0.26), rgba(214, 60, 32, 0.1) 55%, transparent 75%);
+  filter: blur(30px); will-change: opacity, transform;
+  animation: fxhearth 4.6s ease-in-out infinite alternate; }
+@keyframes fxhearth { from { opacity: .7; transform: scaleY(.96); } to { opacity: 1; transform: scaleY(1.05); } }
+.fx-spark { position: absolute; bottom: -12px; border-radius: 50%; will-change: transform, opacity;
+  background: radial-gradient(circle, #ffd9a8 0%, #ff9340 45%, rgba(214, 60, 32, 0.6) 80%, transparent);
+  box-shadow: 0 0 8px rgba(255, 147, 64, 0.8);
+  animation-name: fxrise; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes fxrise {
+  0%   { transform: translate3d(0, 0, 0) scale(1); opacity: 0; }
+  8%   { opacity: .95; }
+  55%  { opacity: .75; }
+  100% { transform: translate3d(var(--dx, 0px), -108vh, 0) scale(.4); opacity: 0; }
+}
+.fx-warm { position: absolute; left: 0; top: 0; width: 260px; height: 260px; margin: -130px 0 0 -130px;
+  will-change: transform; mix-blend-mode: screen;
+  background: radial-gradient(circle, rgba(255, 147, 64, 0.09), rgba(214, 60, 32, 0.04) 45%, transparent 65%);
+  animation: fxflicker .9s steps(2, jump-none) infinite;
+  transition: transform .16s cubic-bezier(.2, .8, .2, 1); }
+@keyframes fxflicker { 50% { opacity: .82; } }
+/* ember cards: forged glass, heat along the bottom edge */
+html[data-mega="ember"] .app-shell.v2 .card { position: relative;
+  background: rgba(46, 18, 8, 0.38);
+  box-shadow: var(--rim), inset 0 -1px 0 rgba(255, 106, 61, 0.35), 0 26px 52px -30px rgba(20, 4, 0, 0.85); }
+html[data-mega="ember"] .app-shell.v2 .card::before { content: ""; position: absolute; inset: auto 0 0 0; height: 36%;
+  border-radius: inherit; pointer-events: none; opacity: .5;
+  background: linear-gradient(0deg, rgba(255, 106, 61, 0.14), transparent 80%); }
+html[data-mega="ember"] .app-shell.v2 .card:hover {
+  box-shadow: var(--rim), inset 0 -1.5px 0 rgba(255, 147, 64, 0.7), 0 0 30px -10px rgba(255, 106, 61, 0.45),
+    0 26px 52px -30px rgba(20, 4, 0, 0.85); }
+
+/* ---- TIDE: caustics + waves + bubbles; cursor = light spot, click = ripple ---- */
+.fx-caustic { position: absolute; width: 58vmax; height: 40vmax; border-radius: 50%;
+  filter: blur(60px); mix-blend-mode: soft-light; will-change: transform; background: rgba(255, 255, 255, 0.75); }
+.fx-c1 { top: -12%; left: -8%; animation: fxcaustic 17s ease-in-out infinite alternate; }
+.fx-c2 { bottom: -18%; right: -10%; background: rgba(170, 236, 255, 0.8);
+  animation: fxcaustic 23s ease-in-out -9s infinite alternate-reverse; }
+@keyframes fxcaustic { to { transform: translate3d(7%, 5%, 0) scale(1.14); } }
+.fx-wave { position: absolute; left: -10%; right: -10%; bottom: -4vh; height: 22vh; border-radius: 45% 55% 0 0 / 100% 100% 0 0;
+  will-change: transform; }
+.fx-w1 { background: rgba(34, 160, 229, 0.14); animation: fxswell 9s ease-in-out infinite alternate; }
+.fx-w2 { background: rgba(52, 200, 168, 0.12); bottom: -7vh; animation: fxswell 12s ease-in-out -5s infinite alternate-reverse; }
+@keyframes fxswell { from { transform: translate3d(-2.5%, 1.2vh, 0) scaleY(.94); } to { transform: translate3d(2.5%, -1vh, 0) scaleY(1.08); } }
+.fx-bubble { position: absolute; bottom: -20px; border-radius: 50%; will-change: transform, opacity;
+  border: 1.5px solid rgba(80, 170, 220, 0.5); background: rgba(255, 255, 255, 0.25);
+  animation-name: fxbubble; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes fxbubble {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  10%  { opacity: .8; }
+  100% { transform: translate3d(26px, -105vh, 0); opacity: 0; }
+}
+.fx-sunray { position: absolute; left: 0; top: 0; width: 540px; height: 540px; margin: -270px 0 0 -270px;
+  will-change: transform; mix-blend-mode: soft-light;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.35) 45%, transparent 68%);
+  transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
+.fx-ripple { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+  border: 2px solid rgba(34, 160, 229, 0.65); will-change: transform, opacity;
+  animation: fxripple .9s cubic-bezier(.2, .8, .3, 1) forwards; }
+@keyframes fxripple { to { transform: scale(14); opacity: 0; border-width: 0.5px; } }
+/* tide cards: sea glass — aqua edge, floaty hover */
+html[data-mega="tide"] .app-shell.v2 .card {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(34, 160, 229, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 18px 44px -24px rgba(20, 90, 130, 0.35); }
+html[data-mega="tide"] .app-shell.v2 .card:hover {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(34, 160, 229, 0.3),
+    0 26px 54px -24px rgba(20, 90, 130, 0.45); }

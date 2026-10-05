@@ -113,7 +113,7 @@ export function applyTheme(state) {
   // to quick-liquid on enhanced hosts; setGlassMode re-renders <Glass> live.
   const glass = s.glass === 'standard' ? 'standard' : 'enhanced'
   root.setAttribute('data-glass', glass)
-  setGlassMode(glass, tdef.scheme, s.navSide) // appearance follows the APP theme's scheme, not the OS
+  setGlassMode(glass, tdef.scheme, s.navSide, tdef.id) // appearance follows the APP theme's scheme, not the OS
 
   // Favicon follows the accent (apple-touch-icon too).
   setLink('icon', accent)
