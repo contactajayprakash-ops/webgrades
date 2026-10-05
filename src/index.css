@@ -1739,9 +1739,9 @@ html[data-mega="aurora"] .app-shell.v2 .v2-bg {
 html[data-mega="neon"] body:has(.app-shell.v2) { background: #0d0414; }
 html[data-mega="neon"] .app-shell.v2 .v2-bg {
   background-image:
-    radial-gradient(85vmax 60vmax at 12% -12%, rgba(255, 43, 214, 0.18), transparent 54%),
-    radial-gradient(85vmax 60vmax at 105% 20%, rgba(0, 229, 255, 0.15), transparent 56%),
-    radial-gradient(70vmax 55vmax at 70% 115%, rgba(122, 44, 255, 0.16), transparent 58%),
+    radial-gradient(85vmax 60vmax at 12% -12%, rgba(255, 43, 214, 0.12), transparent 54%),
+    radial-gradient(85vmax 60vmax at 105% 20%, rgba(0, 229, 255, 0.1), transparent 56%),
+    radial-gradient(70vmax 55vmax at 70% 115%, rgba(122, 44, 255, 0.11), transparent 58%),
     linear-gradient(180deg, #140522 0%, #0d0414 55%, #120326 100%);
   animation: bloomdrift 9s ease-in-out infinite;
 }
@@ -1776,13 +1776,13 @@ html[data-mega="tide"] .app-shell.v2 .v2-bg {
 .fx-stars { position: absolute; inset: 0; width: 100%; height: 100%; }
 
 /* ---- AURORA: undulating light ribbons + a cursor-driven beam ---- */
-.fx-ribbon { position: absolute; left: -20%; width: 140%; height: 34vh; border-radius: 50%;
+.fx-ribbon { position: absolute; left: -20%; width: 140%; height: 40vh; border-radius: 50%;
   filter: blur(46px); mix-blend-mode: screen; will-change: transform, opacity; }
-.fx-r1 { top: 2%;  background: linear-gradient(100deg, transparent 5%, rgba(52,224,161,.42) 32%, rgba(64,200,255,.25) 55%, rgba(122,92,255,.33) 76%, transparent 95%);
+.fx-r1 { top: 2%;  background: linear-gradient(100deg, transparent 5%, rgba(52,224,161,.55) 32%, rgba(64,200,255,.34) 55%, rgba(122,92,255,.44) 76%, transparent 95%);
   animation: fxwave 16s ease-in-out infinite alternate; }
-.fx-r2 { top: 20%; background: linear-gradient(95deg, transparent 8%, rgba(122,92,255,.3) 38%, rgba(52,224,161,.28) 66%, transparent 92%);
+.fx-r2 { top: 20%; background: linear-gradient(95deg, transparent 8%, rgba(122,92,255,.42) 38%, rgba(52,224,161,.38) 66%, transparent 92%);
   animation: fxwave 21s ease-in-out -7s infinite alternate-reverse; }
-.fx-r3 { top: 42%; height: 26vh; background: linear-gradient(105deg, transparent 10%, rgba(34,170,130,.2) 45%, rgba(90,110,255,.18) 70%, transparent 90%);
+.fx-r3 { top: 42%; height: 26vh; background: linear-gradient(105deg, transparent 10%, rgba(34,170,130,.3) 45%, rgba(90,110,255,.26) 70%, transparent 90%);
   animation: fxwave 27s ease-in-out -13s infinite alternate; }
 @keyframes fxwave {
   0%   { transform: translate3d(-3%, 0, 0) skewY(-7deg) scaleY(1); opacity: .75; }
@@ -1811,34 +1811,33 @@ html[data-mega="aurora"] .app-shell.v2 .card:hover { box-shadow: var(--rim), 0 0
 .fx-grid { position: absolute; inset: -100% 0 0 0; transform-origin: 50% 100%;
   transform: rotateX(62deg); will-change: transform;
   background:
-    repeating-linear-gradient(90deg, rgba(255, 43, 214, 0.33) 0 1.5px, transparent 1.5px 90px),
-    repeating-linear-gradient(0deg, rgba(255, 43, 214, 0.3) 0 1.5px, transparent 1.5px 72px);
+    repeating-linear-gradient(90deg, rgba(255, 43, 214, 0.18) 0 1.5px, transparent 1.5px 90px),
+    repeating-linear-gradient(0deg, rgba(255, 43, 214, 0.17) 0 1.5px, transparent 1.5px 72px);
   animation: fxgrid 2.6s linear infinite; }
 @keyframes fxgrid { to { transform: rotateX(62deg) translateY(72px); } }
 .fx-sun { position: absolute; left: 50%; bottom: 38%; width: 290px; height: 290px; margin-left: -145px;
   border-radius: 50%; will-change: transform, opacity;
-  background: radial-gradient(circle, #ff8ad8 0%, #ff2bd6 42%, rgba(122, 44, 255, 0.55) 72%, transparent 76%);
+  background: radial-gradient(circle, rgba(255,138,216,.75) 0%, rgba(255,43,214,.6) 42%, rgba(122,44,255,.35) 72%, transparent 76%);
   -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 14px, transparent 14px 20px), linear-gradient(#000, #000);
-  -webkit-mask-composite: source-in; filter: blur(1.5px) drop-shadow(0 0 44px rgba(255, 43, 214, 0.55));
+  -webkit-mask-composite: source-in; filter: blur(2px) drop-shadow(0 0 28px rgba(255, 43, 214, 0.35));
   animation: fxsun 5s ease-in-out infinite alternate; }
 @keyframes fxsun { from { transform: translateY(0) scale(1); opacity: .9; } to { transform: translateY(8px) scale(1.035); opacity: 1; } }
 .fx-cross-v, .fx-cross-h { position: absolute; will-change: transform; mix-blend-mode: screen; }
 .fx-cross-v { top: 0; bottom: 0; left: 0; width: 2px;
-  background: linear-gradient(180deg, transparent, rgba(255, 43, 214, 0.6) 30%, rgba(255, 43, 214, 0.6) 70%, transparent);
-  box-shadow: 0 0 12px rgba(255, 43, 214, 0.7); }
+  background: linear-gradient(180deg, transparent, rgba(255, 43, 214, 0.32) 30%, rgba(255, 43, 214, 0.32) 70%, transparent);
+  box-shadow: 0 0 10px rgba(255, 43, 214, 0.4); }
 .fx-cross-h { left: 0; right: 0; top: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.55) 30%, rgba(0, 229, 255, 0.55) 70%, transparent);
-  box-shadow: 0 0 12px rgba(0, 229, 255, 0.65); }
+  background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.28) 30%, rgba(0, 229, 255, 0.28) 70%, transparent);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.35); }
 /* neon cards: electric dual-edge outline that charges up on hover */
 html[data-mega="neon"] .app-shell.v2 .card {
   background: rgba(30, 6, 44, 0.42);
-  box-shadow: 0 0 0 1px rgba(255, 43, 214, 0.35), inset 0 0 0 1px rgba(0, 229, 255, 0.14),
-    0 0 22px -8px rgba(255, 43, 214, 0.45), 0 26px 50px -30px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 0 0 1px rgba(255, 43, 214, 0.22), inset 0 0 0 1px rgba(0, 229, 255, 0.1),
+    0 0 18px -9px rgba(255, 43, 214, 0.3), 0 26px 50px -30px rgba(0, 0, 0, 0.8);
   transition: box-shadow .3s var(--ease), transform .3s var(--ease); }
 html[data-mega="neon"] .app-shell.v2 .card:hover {
-  box-shadow: 0 0 0 1.5px rgba(255, 43, 214, 0.75), inset 0 0 0 1px rgba(0, 229, 255, 0.3),
-    0 0 34px -6px rgba(255, 43, 214, 0.75), 0 0 50px -14px rgba(0, 229, 255, 0.5),
-    0 26px 50px -30px rgba(0, 0, 0, 0.8); }
+  box-shadow: 0 0 0 1px rgba(255, 43, 214, 0.5), inset 0 0 0 1px rgba(0, 229, 255, 0.2),
+    0 0 26px -8px rgba(255, 43, 214, 0.5), 0 26px 50px -30px rgba(0, 0, 0, 0.8); }
 html[data-mega="neon"] .np-slider { background: linear-gradient(90deg, #ff2bd6, #9b4dff);
   box-shadow: 0 0 18px -2px rgba(255, 43, 214, 0.8); }
 html[data-mega="neon"] .navpill .np-tab.active { color: #fff; }

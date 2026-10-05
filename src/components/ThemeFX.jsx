@@ -20,10 +20,10 @@ function buildAurora(bg) {
   const rnd = seeded(11)
   // star field (sparse, cold, pixel-scale — the viewBox matches ~screen px)
   let stars = ''
-  for (let i = 0; i < 110; i++) {
+  for (let i = 0; i < 42; i++) {
     const x = (rnd() * 1440).toFixed(0), y = (rnd() * 650).toFixed(0)
-    const r = (0.5 + rnd() * 1.3).toFixed(2)
-    stars += `<circle cx="${x}" cy="${y}" r="${r}" fill="#dfe9ff" opacity="${(0.25 + rnd() * 0.6).toFixed(2)}"/>`
+    const r = (0.4 + rnd() * 0.9).toFixed(2)
+    stars += `<circle cx="${x}" cy="${y}" r="${r}" fill="#dfe9ff" opacity="${(0.18 + rnd() * 0.42).toFixed(2)}"/>`
   }
   bg.innerHTML = `
     <svg class="fx-stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">${stars}</svg>
@@ -41,9 +41,9 @@ function buildAurora(bg) {
 function buildNeon(bg) {
   const rnd = seeded(23)
   let stars = ''
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 40; i++) {
     const x = (rnd() * 1440).toFixed(0), y = (rnd() * 480).toFixed(0)
-    stars += `<circle cx="${x}" cy="${y}" r="${(0.6 + rnd() * 1.4).toFixed(2)}" fill="#ff9ff0" opacity="${(0.3 + rnd() * 0.5).toFixed(2)}"/>`
+    stars += `<circle cx="${x}" cy="${y}" r="${(0.5 + rnd() * 1).toFixed(2)}" fill="#ff9ff0" opacity="${(0.2 + rnd() * 0.35).toFixed(2)}"/>`
   }
   bg.innerHTML = `
     <svg class="fx-stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">${stars}</svg>
