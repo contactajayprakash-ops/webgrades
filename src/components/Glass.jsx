@@ -30,6 +30,27 @@ const BASE = {
   hoverLighting: false,
 }
 
+// Enhanced glass only engages where SVG backdrop refraction actually renders
+// (Chromium). Safari/Firefox would get quick-liquid's CSS fallback, which is
+// just a worse version of the app's own hand-tuned glass — and on iOS Safari
+// the fallback's lens blur doesn't reliably paint at all, leaving chrome bars
+// nearly fully transparent. So non-Chromium keeps the original CSS material
+// and never downloads the engine. (Same probe the engine itself uses.)
+let svgBackdropOK = null
+function supportsSvgBackdrop() {
+  if (svgBackdropOK != null) return svgBackdropOK
+  try {
+    const probe = document.createElement('div')
+    probe.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;' +
+      'backdrop-filter:url(#wgql);-webkit-backdrop-filter:url(#wgql)'
+    document.body.appendChild(probe)
+    const cs = getComputedStyle(probe)
+    svgBackdropOK = ((cs.backdropFilter || cs.webkitBackdropFilter || '').includes('url('))
+    probe.remove()
+  } catch (_) { svgBackdropOK = false }
+  return svgBackdropOK
+}
+
 // quick-liquid is loaded ONLY when a glass surface actually renders in enhanced
 // mode — it stays out of the entry chunk (keeps the cold-open boot path small),
 // and 'standard' users never download it at all. Until it lands, surfaces render
@@ -53,7 +74,7 @@ export function useGlassState() {
 }
 
 export function useGlassEnhanced() {
-  return useGlassState().enhanced
+  return useGlassState().enhanced && supportsSvgBackdrop()
 }
 
 // A glass surface. In 'enhanced' mode it renders through quick-liquid (and gets
@@ -61,7 +82,8 @@ export function useGlassEnhanced() {
 // 'standard' mode it's exactly the original element — no wrapper, no cost, no
 // quick-liquid download.
 export default function Glass({ as = 'div', className = '', config, liquidPress, animateIn, children, ...rest }) {
-  const { enhanced, appearance } = useGlassState()
+  const { enhanced: modeEnhanced, appearance } = useGlassState()
+  const enhanced = modeEnhanced && supportsSvgBackdrop()
   const [ready, setReady] = useState(!!LiquidGlassComp)
 
   useEffect(() => {
