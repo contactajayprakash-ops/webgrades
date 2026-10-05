@@ -65,7 +65,19 @@ export default function Settings() {
               value={theme.theme}
               onChange={(v) => update({ theme: v })}
               ariaLabel="Theme"
-              options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]}
+              options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }, { value: 'galaxy', label: 'Galaxy' }]}
+            />
+            {theme.theme === 'galaxy' && (
+              <span className="small faint">Deep-space: animated star field, cursor-lit glass, glowing borders.</span>
+            )}
+          </div>
+
+          <div className="field mt-3">
+            <ToggleRow
+              label="Sidebar navigation"
+              hint="Desktop: dock the nav to the left edge instead of the floating top bar. Works with any theme."
+              checked={!!theme.navSide}
+              onChange={(v) => update({ navSide: v })}
             />
           </div>
 

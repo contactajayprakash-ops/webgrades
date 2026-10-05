@@ -1496,3 +1496,157 @@ html[data-theme="light"] .app-shell.v2 .grade-tile {
   border-color: var(--glass-hi);
 }
 .app-shell.v2 .wk-head { border-bottom-color: var(--glass-hi); }
+
+/* ============================================================================
+   BOUNCY TAB SWITCH — the galaxy-file nav animation, used across the app.
+   A real sliding pill (.np-slider) glides + overshoots behind the active tab.
+   ============================================================================ */
+:root { --bounce: cubic-bezier(.3, 1.35, .4, 1); }
+
+.navpill { position: relative; }
+.np-slider {
+  position: absolute; left: 0; top: 0; z-index: 0; border-radius: var(--pill);
+  background: var(--text); box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.55);
+  opacity: 0; pointer-events: none;
+  transition: transform .55s var(--bounce), width .45s var(--bounce), height .3s var(--ease), opacity .2s;
+}
+.np-slider.on { opacity: 1; }
+.navpill .np-tab { position: relative; z-index: 1; }
+/* the slider IS the active background now */
+.navpill .np-tab.active { background: none; box-shadow: none; }
+
+/* mobile tab bar: the selected lozenge pops in with the same bounce */
+.tab-item.active .tab-glass { animation: tabpop .5s var(--bounce); }
+@keyframes tabpop { from { transform: scale(.6); } }
+
+/* segmented controls: same spring on the sliding indicator */
+.seg-indicator { transition: transform .5s var(--bounce), width .45s var(--bounce), height .2s var(--ease), opacity .18s; }
+
+/* ============================================================================
+   GALAXY THEME — deep-space star field + cursor-lit glass (from the concept
+   file). Its glass is hand-built CSS (quick-liquid is disabled under galaxy).
+   ============================================================================ */
+html[data-theme="galaxy"] {
+  color-scheme: dark;
+  --bg: #04050f; --bg-grouped: #04050f; --bg-elevated: #0a0c1f; --bg-elevated-2: #121531;
+  --text: #f6f8ff;
+  --text-dim: rgba(236, 240, 255, 0.68);
+  --text-faint: rgba(236, 240, 255, 0.45);
+  --text-quat: rgba(236, 240, 255, 0.25);
+  --hairline: rgba(255, 255, 255, 0.12);
+  --separator: rgba(255, 255, 255, 0.16);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-border-strong: rgba(255, 255, 255, 0.24);
+  --menu-bg: rgba(14, 17, 38, 0.92);
+  --mat-thick: rgba(16, 19, 42, 0.72); --mat-regular: rgba(16, 19, 42, 0.58);
+  --mat-thin: rgba(255, 255, 255, 0.05); --mat-chrome: rgba(8, 10, 26, 0.6);
+}
+html[data-theme="galaxy"] body { background: #04050f; }
+html[data-theme="galaxy"] body:has(.app-shell.v2) { background: #04050f; }
+html[data-theme="galaxy"] .app-shell.v2 { --glass-card: rgba(255, 255, 255, 0.045); }
+html[data-theme="galaxy"] .v2-bg { display: none; } /* the star field replaces it */
+
+/* star-field layers (built by GalaxyBg.jsx) */
+.glx-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: #04050f; pointer-events: none; }
+.glx-lay { position: absolute; inset: -5%; will-change: transform;
+  transform: translate3d(calc(var(--px, 0) * var(--k) * 1px), calc(var(--py, 0) * var(--k) * .6px), 0);
+  transition: transform .9s cubic-bezier(.2, .8, .2, 1); }
+.glx-lay.tw1 { animation: glxtw 5s ease-in-out infinite alternate; }
+.glx-lay.tw2 { animation: glxtw 7.5s ease-in-out -3s infinite alternate; }
+@keyframes glxtw { from { opacity: .2; } to { opacity: 1; } }
+.glx-lay svg { width: 100%; height: 100%; display: block; animation: glxdrift 24s ease-in-out infinite alternate; }
+.glx-lay:nth-child(2) svg { animation-duration: 31s; }
+.glx-lay:nth-child(3) svg { animation-duration: 38s; }
+@keyframes glxdrift { to { transform: translate3d(-1.4%, 1%, 0) scale(1.025); } }
+.glx-vig { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(2,3,12,.25), rgba(2,3,12,.05) 50%, rgba(2,3,12,.35)); }
+
+/* the galaxy glass: frosted panel + gradient edge + cursor-following light */
+html[data-theme="galaxy"] .card,
+html[data-theme="galaxy"] .navpill,
+html[data-theme="galaxy"] .nav-menu,
+html[data-theme="galaxy"] .profile-pop,
+html[data-theme="galaxy"] .card-menu,
+html[data-theme="galaxy"] .tab-bar,
+html[data-theme="galaxy"] .login-card,
+html[data-theme="galaxy"] .app-shell.v2 .impact {
+  position: relative;
+  background: rgba(255, 255, 255, 0.045);
+  -webkit-backdrop-filter: blur(16px) saturate(1.7) brightness(1.08);
+  backdrop-filter: blur(16px) saturate(1.7) brightness(1.08);
+  border-color: transparent;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    inset 6px 6px 12px -6px rgba(255, 255, 255, 0.6),
+    inset -6px -6px 12px -6px rgba(255, 255, 255, 0.42),
+    inset 0 0 26px rgba(255, 255, 255, 0.1),
+    0 34px 60px -26px rgba(0, 0, 0, 0.65);
+}
+/* gradient rim (masked border) */
+html[data-theme="galaxy"] .card::before,
+html[data-theme="galaxy"] .navpill::before,
+html[data-theme="galaxy"] .nav-menu::before,
+html[data-theme="galaxy"] .profile-pop::before,
+html[data-theme="galaxy"] .card-menu::before,
+html[data-theme="galaxy"] .tab-bar::before,
+html[data-theme="galaxy"] .login-card::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,255,255,.08) 32%, rgba(255,255,255,.04) 62%, rgba(255,255,255,.75));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+/* cursor-following light (GalaxyBg sets --mx/--my/--a) */
+html[data-theme="galaxy"] .card::after,
+html[data-theme="galaxy"] .navpill::after,
+html[data-theme="galaxy"] .nav-menu::after,
+html[data-theme="galaxy"] .profile-pop::after,
+html[data-theme="galaxy"] .card-menu::after,
+html[data-theme="galaxy"] .tab-bar::after,
+html[data-theme="galaxy"] .login-card::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  opacity: var(--a, .45); transition: opacity .4s;
+  background: radial-gradient(280px circle at var(--mx, 25%) var(--my, 0%), rgba(255, 255, 255, 0.24), transparent 62%);
+}
+/* galaxy slider pill — the file's bright glass pill, not the solid one */
+html[data-theme="galaxy"] .np-slider {
+  background: linear-gradient(180deg, rgba(255,255,255,.3), rgba(255,255,255,.1));
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.55), inset 0 0 16px rgba(255,255,255,.22), 0 10px 26px -8px rgba(0,0,0,.55);
+}
+html[data-theme="galaxy"] .navpill .np-tab.active { color: #fff; }
+html[data-theme="galaxy"] .np-tab:hover { color: #fff; }
+
+/* ============================================================================
+   SIDEBAR NAVIGATION (data-nav="side") — desktop: dock the floating top nav
+   to the left edge (galaxy-file layout). Any theme; mobile keeps the tab bar.
+   ============================================================================ */
+@media (min-width: 821px) {
+  html[data-nav="side"] .app-shell.v2 .topbar {
+    left: 0; right: auto; top: 0; bottom: 0; width: 272px;
+    flex-direction: column; align-items: stretch; justify-content: flex-start;
+    gap: 20px; padding: 24px 18px;
+  }
+  html[data-nav="side"] .app-shell.v2 .tb-brand { padding: 0 8px; }
+  html[data-nav="side"] .app-shell.v2 .topbar-right {
+    flex-direction: column; align-items: stretch; gap: 16px; flex: 1; min-height: 0;
+  }
+  html[data-nav="side"] .app-shell.v2 .navpill {
+    flex-direction: column; align-items: stretch; gap: 4px;
+    border-radius: 30px; padding: 8px;
+  }
+  html[data-nav="side"] .app-shell.v2 .navpill .np-tab {
+    display: flex; align-items: center; height: 52px; padding: 0 20px;
+    font-size: var(--t-callout); text-align: left;
+  }
+  html[data-nav="side"] .app-shell.v2 .navpill .np-sep { width: auto; height: 1px; align-self: auto; margin: 5px 10px; }
+  html[data-nav="side"] .app-shell.v2 .navpill .np-icon {
+    width: auto; height: 46px; border-radius: var(--pill);
+    display: flex; align-items: center; justify-content: flex-start; padding: 0 20px;
+  }
+  /* profile switcher pinned to the bottom of the rail */
+  html[data-nav="side"] .app-shell.v2 .topbar-right .profile-switch { margin-top: auto; }
+  /* the More dropdown opens beside the rail instead of below the pill */
+  html[data-nav="side"] .app-shell.v2 .nav-menu { left: calc(100% + 14px); right: auto; top: 0; }
+  html[data-nav="side"] .app-shell.v2 .profile-switch.compact .profile-pop { left: 0; right: auto; top: auto; bottom: calc(100% + 12px); }
+  /* content clears the rail */
+  html[data-nav="side"] .app-shell.v2 .main { padding-left: 304px; padding-top: 28px; }
+}

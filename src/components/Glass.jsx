@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useHref, useNavigate } from 'react-router-dom'
-import { getGlassAppearance, getGlassMode, subscribeGlassMode } from '../lib/glassMode.js'
+import { getGlassAppearance, getGlassMode, getThemeName, subscribeGlassMode } from '../lib/glassMode.js'
 
 // Shared base for every glass surface. `auto` picks SVG refraction on Chromium
 // and the CSS-glass fallback on Safari/Firefox; `respectPreferences` makes it
@@ -65,12 +65,14 @@ function loadQuickLiquid() {
     .catch(() => {}) // network/chunk failure → stay on the CSS element forever
 }
 
-// Snapshot combines mode + appearance so a theme switch re-renders glass live.
-const snapshot = () => `${getGlassMode()}|${getGlassAppearance()}`
+// Snapshot combines mode + appearance + theme so a theme switch re-renders live.
+const snapshot = () => `${getGlassMode()}|${getGlassAppearance()}|${getThemeName()}`
 
 export function useGlassState() {
-  const [m, a] = useSyncExternalStore(subscribeGlassMode, snapshot, () => 'enhanced|dark').split('|')
-  return { enhanced: m === 'enhanced', appearance: a }
+  const [m, a, t] = useSyncExternalStore(subscribeGlassMode, snapshot, () => 'enhanced|dark|dark').split('|')
+  // Galaxy has its own hand-built glass UI (cursor glow, gradient borders) —
+  // the quick-liquid engine stays out of its way entirely.
+  return { enhanced: m === 'enhanced' && t !== 'galaxy', appearance: a, theme: t }
 }
 
 export function useGlassEnhanced() {

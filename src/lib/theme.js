@@ -8,9 +8,10 @@ import { setGlassMode } from './glassMode.js'
 const KEY = 'wg_theme'
 
 export const DEFAULT_THEME = {
-  theme: 'light',      // 'dark' | 'light' — light is the default
+  theme: 'light',      // 'dark' | 'light' | 'galaxy' — light is the default
   accentId: 'blue',    // see ACCENTS
   glass: 'enhanced',   // 'enhanced' (quick-liquid refraction) | 'standard' (CSS glass; lighter on Chromebooks)
+  navSide: false,      // desktop: dock the nav as a left sidebar instead of the top bar (any theme)
   reduceBlur: false,   // lighter backdrop blur (faster on Chromebooks)
   reduceMotion: false, // kill animations/transitions
   showRecent: false,   // dashboard "Recently posted" feed — off by default (no change)
@@ -82,7 +83,9 @@ export function applyTheme(state) {
 
   const toggle = (attr, on) => (on ? root.setAttribute(attr, '1') : root.removeAttribute(attr))
   if (s.theme === 'light') root.setAttribute('data-theme', 'light')
+  else if (s.theme === 'galaxy') root.setAttribute('data-theme', 'galaxy') // dark base tokens + galaxy overrides
   else root.removeAttribute('data-theme')
+  if (s.navSide) root.setAttribute('data-nav', 'side'); else root.removeAttribute('data-nav')
   toggle('data-reduce-blur', s.reduceBlur)
   toggle('data-reduce-motion', s.reduceMotion)
 
@@ -97,5 +100,5 @@ export function applyTheme(state) {
   setLink('apple-touch-icon', accent)
 
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.content = s.theme === 'light' ? '#eef0f5' : '#0a0a0d'
+  if (meta) meta.content = s.theme === 'light' ? '#eef0f5' : s.theme === 'galaxy' ? '#04050f' : '#0a0a0d'
 }

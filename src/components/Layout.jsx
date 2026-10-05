@@ -7,6 +7,7 @@ import { OfflineBanner, Loading } from './ui.jsx'
 import ProfileSwitcher from './ProfileSwitcher.jsx'
 import PullToRefresh from './PullToRefresh.jsx'
 import Glass from './Glass.jsx'
+import GalaxyBg from './GalaxyBg.jsx'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: 'home', end: true },
@@ -53,6 +54,33 @@ export default function Layout() {
   const [q, setQ] = useState('')              // sheet search filter
   const loc = useLocation()
 
+  // Bouncy sliding pill behind the active nav tab (galaxy-file style). Placed by
+  // measurement so it works in the top bar AND the docked sidebar, in plain and
+  // quick-liquid (ql-content) DOM alike — buttons and slider share an offset
+  // parent either way. Re-placed on route/menu change, resize, and nav reflow.
+  useEffect(() => {
+    const place = () => {
+      const nav = document.querySelector('.app-shell.v2 .navpill')
+      const pill = nav?.querySelector('.np-slider')
+      if (!nav || !pill) return
+      const actives = nav.querySelectorAll('.np-tab.active')
+      const act = actives[actives.length - 1] // menu-open "More" wins over the route tab
+      if (!act) { pill.classList.remove('on'); return }
+      pill.classList.add('on')
+      pill.style.width = act.offsetWidth + 'px'
+      pill.style.height = act.offsetHeight + 'px'
+      pill.style.transform = `translate(${act.offsetLeft}px, ${act.offsetTop}px)`
+    }
+    place()
+    const t1 = setTimeout(place, 120)  // fonts settle
+    const t2 = setTimeout(place, 600)  // quick-liquid upgrade re-parents the tabs
+    const ro = new ResizeObserver(place)
+    const nav = document.querySelector('.app-shell.v2 .navpill')
+    if (nav) ro.observe(nav)
+    window.addEventListener('resize', place)
+    return () => { clearTimeout(t1); clearTimeout(t2); ro.disconnect(); window.removeEventListener('resize', place) }
+  }, [loc.pathname, menu])
+
   const [seenBadges, setSeenBadges] = useState(() => {
     try { return JSON.parse(localStorage.getItem('wg_nav_seen')) || {} } catch (_) { return {} }
   })
@@ -97,6 +125,7 @@ export default function Layout() {
           by :has(.app-shell.v2)) — that pseudo-element + :has combo intermittently
           dropped to pure black after a route/Suspense subtree swap. */}
       <div className="v2-bg" aria-hidden="true" />
+      <GalaxyBg />
       {/* Desktop floating Liquid Glass nav */}
       <header className="topbar">
         <NavLink to="/" end className="tb-brand">
@@ -106,6 +135,7 @@ export default function Layout() {
 
         <div className="topbar-right">
           <Glass as="nav" className="navpill" config={{ material: 'thin', borderRadius: 999 }} aria-label="Primary">
+            <span className="np-slider" aria-hidden="true" />
             {PRIMARY.map((t) => (
               <NavLink key={t.to} to={t.to} end={t.end}
                 className={({ isActive }) => `np-tab ${isActive ? 'active' : ''}`}>

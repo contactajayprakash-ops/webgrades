@@ -7,17 +7,20 @@
 // theme.js can set it before React mounts (no first-paint flash).
 let mode = 'enhanced'
 let appearance = 'dark' // follows the APP theme (data-theme), not the OS scheme
+let themeName = 'dark'  // full theme id ('dark'|'light'|'galaxy') for theme-aware components
 const subs = new Set()
 const emit = () => { for (const fn of subs) { try { fn() } catch (_) {} } }
 
 export function getGlassMode() { return mode }
 export function getGlassAppearance() { return appearance }
+export function getThemeName() { return themeName }
 
 export function setGlassMode(next, theme) {
   const m = next === 'standard' ? 'standard' : 'enhanced'
   const a = theme === 'light' ? 'light' : 'dark'
-  if (m === mode && a === appearance) return
-  mode = m; appearance = a
+  const t = theme === 'light' || theme === 'galaxy' ? theme : 'dark'
+  if (m === mode && a === appearance && t === themeName) return
+  mode = m; appearance = a; themeName = t
   emit()
 }
 
