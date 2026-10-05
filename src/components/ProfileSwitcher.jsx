@@ -1,9 +1,9 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { syncAllowedFor } from '../lib/syncPolicy.js'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import { Icon } from './icons.jsx'
-import Glass from './Glass.jsx'
 
 function initials(name) {
   if (!name) return '?'
@@ -21,6 +21,19 @@ export default function ProfileSwitcher({ compact = false }) {
   const [error, setError] = useState(null)
 
   const close = () => { setOpen(false); setAdding(false); setError(null); setU(''); setP('') }
+
+  // Sidebar rail (desktop): the pop opens as a fixed panel BESIDE the rail.
+  // Inline style, because stylesheet positioning was being defeated for this
+  // element — inline wins every cascade argument.
+  const sideMode = typeof document !== 'undefined'
+    && document.documentElement.getAttribute('data-nav') === 'side'
+    && typeof window !== 'undefined' && window.innerWidth >= 821
+    && !compact
+  const sideStyle = sideMode
+    ? { position: 'fixed', left: 286, right: 'auto', top: 'auto', bottom: 18, width: 304, maxHeight: 'min(76vh, 620px)', zIndex: 260 }
+    : undefined
+  // In side mode the pop renders at body level (viewport-true fixed coords).
+  const portal = (node) => (sideMode ? createPortal(node, document.body) : node)
   const trapRef = useFocusTrap(open, close)
 
   const submitAdd = async (e) => {
@@ -41,12 +54,12 @@ export default function ProfileSwitcher({ compact = false }) {
     <div className={`profile-switch ${compact ? 'compact' : ''}`}>
       {open && <div className="profile-backdrop" onClick={close} />}
 
-      {open && (
-        <Glass className="profile-pop card" role="dialog" aria-modal="true" aria-label="Accounts"
-          animateIn config={{ material: 'thick', borderRadius: 18 }}>
-          {/* Glass's ref isn't a DOM node, so the focus trap lives on an inner
-              display:contents wrapper (invisible to layout). */}
-          <div ref={trapRef} style={{ display: 'contents' }}>
+      {/* Plain element on purpose: the pop needs a near-opaque surface to stay
+          readable. In the sidebar rail it PORTALS to <body> — something in the
+          rail subtree rebased fixed-position coordinates, and a body-level
+          fixed panel is immune to every ancestor containing-block quirk. */}
+      {open && portal((
+        <div className="profile-pop card" ref={trapRef} style={sideStyle} role="dialog" aria-modal="true" aria-label="Accounts">
           <div className="profile-pop-label">Accounts</div>
           <div className="profile-list">
             {profiles.map((pr) => (
@@ -89,9 +102,8 @@ export default function ProfileSwitcher({ compact = false }) {
           <button className="profile-action danger" onClick={() => { logout(); close() }}>
             <Icon.chevron width={15} height={15} style={{ transform: 'rotate(180deg)' }} /> Sign out
           </button>
-          </div>
-        </Glass>
-      )}
+        </div>
+      ))}
 
       <button className={`profile-trigger ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)}
         title={compact ? (userName || 'Account') : undefined} aria-label={compact ? 'Account' : undefined}>

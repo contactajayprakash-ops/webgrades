@@ -102,6 +102,24 @@ export default function Layout() {
     return () => { clearTimeout(t1); clearTimeout(t2); ro.disconnect(); window.removeEventListener('resize', place) }
   }, [loc.pathname, menu, navSide])
 
+  // Sidebar mode: the More dropdown opens BESIDE the rail, vertically aligned
+  // with the More row itself (clamped on-screen) instead of pinned to the bottom.
+  useEffect(() => {
+    if (!menu || !navSide) return
+    const align = () => {
+      const m = document.querySelector('.nav-menu')
+      const btn = [...document.querySelectorAll('.navpill .np-tab')].find((t) => t.textContent.trim() === 'More')
+      if (!m || !btn) return
+      const h = m.getBoundingClientRect().height
+      const top = Math.max(12, Math.min(btn.getBoundingClientRect().top, window.innerHeight - h - 12))
+      m.style.top = top + 'px'
+      m.style.bottom = 'auto'
+    }
+    align()
+    const t = setTimeout(align, 250) // re-align after the entrance animation settles
+    return () => clearTimeout(t)
+  }, [menu, navSide])
+
   const [seenBadges, setSeenBadges] = useState(() => {
     try { return JSON.parse(localStorage.getItem('wg_nav_seen')) || {} } catch (_) { return {} }
   })

@@ -22,16 +22,33 @@ export const DEFAULT_THEME = {
 // Each accent turns the two knobs (--accent, --accent-2); every other brand
 // blue in the CSS is derived from them. 'blue' is the original palette.
 export const ACCENTS = [
-  { id: 'blue',   label: 'Blue',   accent: '#0a84ff', accent2: '#5e5ce6' },
-  { id: 'purple', label: 'Purple', accent: '#7d5cff', accent2: '#bf5af2' },
-  { id: 'pink',   label: 'Pink',   accent: '#ff375f', accent2: '#ff7ab6' },
-  { id: 'red',    label: 'Red',    accent: '#ff453a', accent2: '#ff9f0a' },
-  { id: 'orange', label: 'Orange', accent: '#ff9f0a', accent2: '#ffd426' },
-  { id: 'green',  label: 'Green',  accent: '#30d158', accent2: '#34c8a8' },
-  { id: 'teal',   label: 'Teal',   accent: '#32ade6', accent2: '#5e5ce6' },
+  { id: 'blue',    label: 'Blue',     accent: '#0a84ff', accent2: '#5e5ce6' },
+  { id: 'purple',  label: 'Purple',   accent: '#7d5cff', accent2: '#bf5af2' },
+  { id: 'violet',  label: 'Violet',   accent: '#a855f7', accent2: '#6d5ce6' },
+  { id: 'pink',    label: 'Pink',     accent: '#ff375f', accent2: '#ff7ab6' },
+  { id: 'hotpink', label: 'Hot Pink', accent: '#ff2db6', accent2: '#ff6ad5' },
+  { id: 'red',     label: 'Red',      accent: '#ff453a', accent2: '#ff9f0a' },
+  { id: 'orange',  label: 'Orange',   accent: '#ff9f0a', accent2: '#ffd426' },
+  { id: 'green',   label: 'Green',    accent: '#30d158', accent2: '#34c8a8' },
+  { id: 'teal',    label: 'Teal',     accent: '#32ade6', accent2: '#5e5ce6' },
 ]
 
 export const accentById = (id) => ACCENTS.find((a) => a.id === id) || ACCENTS[0]
+
+// Full visual themes (the Theme tile row in Settings). `scheme` picks the token
+// base; `mega` themes add their own animated background (data-mega attr). The
+// ACCENT stays the user's own choice in every theme — accents combine with
+// galaxy & friends on purpose.
+export const THEMES = [
+  { id: 'dark',   label: 'Dark',   scheme: 'dark' },
+  { id: 'light',  label: 'Light',  scheme: 'light' },
+  { id: 'galaxy', label: 'Galaxy', scheme: 'galaxy' },
+  { id: 'aurora', label: 'Aurora', scheme: 'dark',  mega: true, isNew: true },
+  { id: 'neon',   label: 'Neon',   scheme: 'dark',  mega: true, isNew: true },
+  { id: 'ember',  label: 'Ember',  scheme: 'dark',  mega: true, isNew: true },
+  { id: 'tide',   label: 'Tide',   scheme: 'light', mega: true, isNew: true },
+]
+export const themeById = (id) => THEMES.find((t) => t.id === id) || THEMES[0]
 
 export function loadTheme() {
   try {
@@ -82,9 +99,12 @@ export function applyTheme(state) {
   root.style.setProperty('--accent-2', accent.accent2)
 
   const toggle = (attr, on) => (on ? root.setAttribute(attr, '1') : root.removeAttribute(attr))
-  if (s.theme === 'light') root.setAttribute('data-theme', 'light')
-  else if (s.theme === 'galaxy') root.setAttribute('data-theme', 'galaxy') // dark base tokens + galaxy overrides
+  const tdef = themeById(s.theme)
+  if (tdef.scheme === 'light') root.setAttribute('data-theme', 'light')
+  else if (tdef.scheme === 'galaxy') root.setAttribute('data-theme', 'galaxy') // dark base tokens + galaxy overrides
   else root.removeAttribute('data-theme')
+  // Animated mega-theme backgrounds (aurora/neon/ember/tide) key off data-mega.
+  if (tdef.mega) root.setAttribute('data-mega', tdef.id); else root.removeAttribute('data-mega')
   if (s.navSide) root.setAttribute('data-nav', 'side'); else root.removeAttribute('data-nav')
   toggle('data-reduce-blur', s.reduceBlur)
   toggle('data-reduce-motion', s.reduceMotion)
@@ -93,12 +113,13 @@ export function applyTheme(state) {
   // to quick-liquid on enhanced hosts; setGlassMode re-renders <Glass> live.
   const glass = s.glass === 'standard' ? 'standard' : 'enhanced'
   root.setAttribute('data-glass', glass)
-  setGlassMode(glass, s.theme, s.navSide) // appearance follows the APP theme, not the OS
+  setGlassMode(glass, tdef.scheme, s.navSide) // appearance follows the APP theme's scheme, not the OS
 
   // Favicon follows the accent (apple-touch-icon too).
   setLink('icon', accent)
   setLink('apple-touch-icon', accent)
 
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.content = s.theme === 'light' ? '#eef0f5' : s.theme === 'galaxy' ? '#04050f' : '#0a0a0d'
+  const METAS = { light: '#eef0f5', galaxy: '#04050f', aurora: '#05100c', neon: '#0d0414', ember: '#140b08', tide: '#e4f3f7' }
+  if (meta) meta.content = METAS[s.theme] || '#0a0a0d'
 }

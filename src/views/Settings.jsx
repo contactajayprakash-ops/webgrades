@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { PageHead } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
-import { ACCENTS, loadTheme, saveTheme } from '../lib/theme.js'
+import { ACCENTS, THEMES, loadTheme, saveTheme } from '../lib/theme.js'
 import { loadUI, setUI } from '../lib/ui.js'
 import { useInstall } from '../hooks/useInstall.js'
 import { syncLock, setSyncLock, bgProfilesEnabled, setBgProfilesEnabled,
@@ -60,16 +60,25 @@ export default function Settings() {
 
           <div className="field mt-3">
             <label>Theme</label>
-            <Segmented
-              style={{ marginTop: 4, alignSelf: 'flex-start' }}
-              value={theme.theme}
-              onChange={(v) => update({ theme: v })}
-              ariaLabel="Theme"
-              options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }, { value: 'galaxy', label: 'Galaxy' }]}
-            />
-            {theme.theme === 'galaxy' && (
-              <span className="small faint">Deep-space: animated star field, cursor-lit glass, glowing borders.</span>
-            )}
+            <div className="theme-tiles" role="radiogroup" aria-label="Theme">
+              {THEMES.map((t) => (
+                <button key={t.id} role="radio" aria-checked={theme.theme === t.id}
+                  className={`theme-tile ${theme.theme === t.id ? 'active' : ''}`}
+                  title={t.label} onClick={() => update({ theme: t.id })}>
+                  <span className={`tt-icon tt-${t.id}`} aria-hidden="true" />
+                  <span className="tt-label">{t.label}</span>
+                  {t.isNew && <span className="tt-badge">NEW</span>}
+                </button>
+              ))}
+            </div>
+            <span className="small faint">
+              {theme.theme === 'galaxy' ? 'Deep-space: animated star field, cursor-lit glass, glowing borders.'
+                : theme.theme === 'aurora' ? 'Northern lights — drifting green & violet ribbons.'
+                : theme.theme === 'neon' ? 'Synthwave — pulsing magenta & cyan glow.'
+                : theme.theme === 'ember' ? 'Warm embers — slow-drifting fire tones.'
+                : theme.theme === 'tide' ? 'Bright aqua — a light theme with drifting sea glows.'
+                : 'Accent colors apply to every theme.'}
+            </span>
           </div>
 
           <div className="field mt-3">

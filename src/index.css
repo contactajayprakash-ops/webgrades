@@ -1671,13 +1671,105 @@ html[data-theme="galaxy"] .card .card { box-shadow: inset 0 0 0 1px rgba(255,255
   html[data-nav="side"] .app-shell.v2 .np-rail-profile .profile-trigger:hover { background: var(--fill-4); }
   /* the More dropdown opens beside the rail, bottom-anchored like the pop */
   html[data-nav="side"] .app-shell.v2 .nav-menu {
-    position: fixed; left: 286px; right: auto; top: auto; bottom: 18px;
+    position: fixed; left: 286px; right: auto; top: auto; bottom: 18px; /* JS aligns top to the More row */
     max-height: min(76vh, 580px);
+    background: var(--menu-bg) !important;
+    box-shadow: var(--rim), var(--drop-lg) !important;
   }
-  html[data-nav="side"] .app-shell.v2 .profile-switch.compact .profile-pop {
+  html[data-nav="side"] .app-shell.v2 .profile-switch .profile-pop {
     position: fixed; left: 286px; right: auto; top: auto; bottom: 18px;
-    max-height: min(76vh, 620px);
+    width: 304px; max-height: min(76vh, 620px);
+    /* must stay readable over the rail + busy backgrounds — near-opaque menu
+       surface even when the quick-liquid handover strips card backgrounds */
+    background: var(--menu-bg) !important;
+    box-shadow: var(--rim), var(--drop-lg) !important;
   }
   /* content clears the rail */
   html[data-nav="side"] .app-shell.v2 .main { padding-left: 304px; padding-top: 28px; }
+}
+
+/* ============================================================================
+   THEME TILES — the Settings theme picker: one animated icon per theme.
+   ============================================================================ */
+.theme-tiles { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.theme-tile {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px;
+  width: 78px; padding: 10px 8px 9px; border-radius: 16px; cursor: pointer;
+  border: 1px solid var(--hairline); background: var(--fill-4);
+  transition: border-color .2s, background .2s, transform .25s var(--bounce);
+}
+.theme-tile:hover { transform: translateY(-2px); }
+.theme-tile.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--fill-3); }
+.tt-label { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.theme-tile.active .tt-label { color: var(--text); }
+.tt-badge {
+  position: absolute; top: -7px; right: -6px; font-size: 9px; font-weight: 800; letter-spacing: .05em;
+  padding: 2px 6px; border-radius: 999px; color: #fff;
+  background: linear-gradient(90deg, #ff2db6, #7a5cff);
+  box-shadow: 0 2px 8px -2px rgba(255, 45, 182, 0.6);
+}
+/* icon: a little animated "sky" per theme — shared rotating light sweep on top */
+.tt-icon { position: relative; width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+.tt-icon::before { content: ""; position: absolute; inset: -45%;
+  background: conic-gradient(transparent 0 72%, rgba(255, 255, 255, 0.35) 84%, transparent 96%);
+  animation: ttspin 5s linear infinite; }
+@keyframes ttspin { to { transform: rotate(360deg); } }
+.tt-dark   { background: linear-gradient(145deg, #2c2c35, #0b0b12); }
+.tt-light  { background: linear-gradient(145deg, #ffffff, #d8ddeb); }
+.tt-light::before { background: conic-gradient(transparent 0 72%, rgba(255, 190, 80, 0.55) 84%, transparent 96%); }
+.tt-galaxy { background:
+  radial-gradient(3px 3px at 30% 35%, #fff, transparent 60%),
+  radial-gradient(2px 2px at 68% 60%, #cfc6ff, transparent 60%),
+  radial-gradient(2px 2px at 55% 22%, #b4cdff, transparent 60%),
+  linear-gradient(145deg, #241546, #0a1030); }
+.tt-aurora { background: linear-gradient(145deg, #0b3b2a, #071118); }
+.tt-aurora::before { background: conic-gradient(transparent 0 60%, rgba(52, 224, 161, 0.5) 74%, rgba(122, 92, 255, 0.45) 86%, transparent 97%); }
+.tt-neon   { background: linear-gradient(145deg, #2a0640, #0d0414); }
+.tt-neon::before { background: conic-gradient(transparent 0 62%, rgba(255, 43, 214, 0.6) 76%, rgba(0, 229, 255, 0.55) 88%, transparent 98%); animation-duration: 3.2s; }
+.tt-ember  { background: linear-gradient(145deg, #4a1707, #140b08); }
+.tt-ember::before { background: conic-gradient(transparent 0 66%, rgba(255, 106, 61, 0.6) 80%, rgba(255, 179, 64, 0.5) 90%, transparent 98%); }
+.tt-tide   { background: linear-gradient(145deg, #e8fbff, #9fd8ea); }
+.tt-tide::before { background: conic-gradient(transparent 0 68%, rgba(34, 160, 229, 0.5) 82%, transparent 95%); }
+
+/* ============================================================================
+   MEGA THEMES — animated backgrounds (aurora / neon / ember dark, tide light).
+   Accent colors stay the USER'S pick; these restyle the canvas only.
+   ============================================================================ */
+html[data-mega="aurora"] body:has(.app-shell.v2) { background: #05100c; }
+html[data-mega="aurora"] .app-shell.v2 .v2-bg {
+  background-image:
+    radial-gradient(95vmax 60vmax at 15% -10%, rgba(32, 224, 160, 0.17), transparent 55%),
+    radial-gradient(85vmax 55vmax at 100% 15%, rgba(122, 92, 255, 0.15), transparent 58%),
+    radial-gradient(70vmax 50vmax at 65% 110%, rgba(20, 190, 150, 0.12), transparent 60%),
+    linear-gradient(180deg, #07130e 0%, #04100b 55%, #071118 100%);
+  animation: bloomdrift 14s ease-in-out infinite;
+}
+html[data-mega="neon"] body:has(.app-shell.v2) { background: #0d0414; }
+html[data-mega="neon"] .app-shell.v2 .v2-bg {
+  background-image:
+    radial-gradient(85vmax 60vmax at 12% -12%, rgba(255, 43, 214, 0.18), transparent 54%),
+    radial-gradient(85vmax 60vmax at 105% 20%, rgba(0, 229, 255, 0.15), transparent 56%),
+    radial-gradient(70vmax 55vmax at 70% 115%, rgba(122, 44, 255, 0.16), transparent 58%),
+    linear-gradient(180deg, #140522 0%, #0d0414 55%, #120326 100%);
+  animation: bloomdrift 9s ease-in-out infinite;
+}
+html[data-mega="ember"] body:has(.app-shell.v2) { background: #140b08; }
+html[data-mega="ember"] .app-shell.v2 .v2-bg {
+  background-image:
+    radial-gradient(90vmax 60vmax at 18% -12%, rgba(255, 106, 61, 0.17), transparent 55%),
+    radial-gradient(85vmax 55vmax at 102% 18%, rgba(255, 179, 64, 0.12), transparent 58%),
+    radial-gradient(75vmax 55vmax at 70% 112%, rgba(214, 60, 32, 0.14), transparent 60%),
+    linear-gradient(180deg, #1c0d07 0%, #140b08 55%, #200a04 100%);
+  animation: bloomdrift 16s ease-in-out infinite;
+}
+/* tide is a LIGHT-scheme theme — overrides the light canvas with sea tones */
+html[data-mega="tide"] body:has(.app-shell.v2) { background: #e4f3f7; }
+html[data-mega="tide"] .app-shell.v2 .v2-bg {
+  background-image:
+    radial-gradient(95vmax 65vmax at 18% -15%, rgba(34, 201, 229, 0.34), transparent 55%),
+    radial-gradient(85vmax 60vmax at 102% 12%, rgba(63, 116, 255, 0.22), transparent 58%),
+    radial-gradient(75vmax 55vmax at 72% 112%, rgba(52, 200, 168, 0.26), transparent 60%),
+    linear-gradient(180deg, #e2f5fa 0%, #d4edf4 55%, #dff0f9 100%);
+  animation: bloomdrift 13s ease-in-out infinite;
 }
