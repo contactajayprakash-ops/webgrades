@@ -1080,7 +1080,7 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .profile-caret { color: var(--text-faint); transition: transform .25s var(--spring); }
 .profile-caret.open { transform: rotate(-90deg); }
 .profile-backdrop { position: fixed; inset: 0; z-index: 55; }
-.profile-switch .profile-pop { position: absolute; z-index: 56; bottom: calc(100% + 10px); left: 0; right: 0; padding: 7px;
+.profile-pop { position: absolute; z-index: 56; bottom: calc(100% + 10px); left: 0; right: 0; padding: 7px;
   background: var(--menu-bg); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
   border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--drop-lg);
   display: flex; flex-direction: column; gap: 2px; animation: popin .28s var(--ease) backwards; max-height: min(76vh, 620px); }
