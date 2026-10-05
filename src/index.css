@@ -1650,6 +1650,8 @@ html[data-theme="galaxy"] .card .card { box-shadow: inset 0 0 0 1px rgba(255,255
   html[data-nav="side"] .app-shell.v2 .navpill {
     flex-direction: column; align-items: stretch; gap: 4px;
     border-radius: 30px; padding: 8px;
+    /* full-height rail: nav on top, profile docked at the bottom */
+    flex: 1; min-height: 0;
   }
   html[data-nav="side"] .app-shell.v2 .navpill .np-tab {
     display: flex; align-items: center; gap: 14px; height: 50px; padding: 0 18px;
@@ -1663,10 +1665,15 @@ html[data-theme="galaxy"] .card .card { box-shadow: inset 0 0 0 1px rgba(255,255
     width: auto; height: 46px; border-radius: var(--pill);
     display: flex; align-items: center; justify-content: flex-start; padding: 0 20px;
   }
-  /* profile switcher pinned to the bottom of the rail */
-  html[data-nav="side"] .app-shell.v2 .topbar-right .profile-switch { margin-top: auto; }
-  /* the More dropdown opens beside the rail instead of below the pill */
-  html[data-nav="side"] .app-shell.v2 .nav-menu { left: calc(100% + 14px); right: auto; top: 0; }
+  /* profile switcher lives INSIDE the rail, docked to the bottom */
+  html[data-nav="side"] .app-shell.v2 .np-rail-profile { margin-top: auto; padding-top: 8px; border-top: 0.5px solid var(--glass-border); }
+  html[data-nav="side"] .app-shell.v2 .np-rail-profile .profile-trigger { background: none; width: 100%; }
+  html[data-nav="side"] .app-shell.v2 .np-rail-profile .profile-trigger:hover { background: var(--fill-4); }
+  /* the More dropdown opens beside the rail, bottom-anchored like the pop */
+  html[data-nav="side"] .app-shell.v2 .nav-menu {
+    position: fixed; left: 286px; right: auto; top: auto; bottom: 18px;
+    max-height: min(76vh, 580px);
+  }
   html[data-nav="side"] .app-shell.v2 .profile-switch.compact .profile-pop {
     position: fixed; left: 286px; right: auto; top: auto; bottom: 18px;
     max-height: min(76vh, 620px);

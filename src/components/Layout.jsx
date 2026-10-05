@@ -57,6 +57,24 @@ export default function Layout() {
   // Desktop sidebar mode re-renders the nav (full list w/ icons, no More menu).
   const navSide = useSyncExternalStore(subscribeGlassMode, getNavSide, () => false)
 
+  // Sidebar mode is ADAPTIVE: the rail is a full-height column (brand → nav →
+  // Settings → profile docked at the bottom). Only as many nav rows as actually
+  // fit are shown; the rest collapse behind a "More" row whose dropdown opens
+  // beside the rail. Recomputed on resize, so every screen height gets the
+  // right split instead of an overflowing list.
+  const [sideRows, setSideRows] = useState(99)
+  useEffect(() => {
+    if (!navSide) return
+    const calc = () => {
+      const ROW = 54        // nav row height + gap
+      const OVERHEAD = 300  // topbar padding + brand + seps + Settings row + profile row
+      setSideRows(Math.max(3, Math.floor((window.innerHeight - OVERHEAD) / ROW)))
+    }
+    calc()
+    window.addEventListener('resize', calc)
+    return () => window.removeEventListener('resize', calc)
+  }, [navSide])
+
   // Bouncy sliding pill behind the active nav tab (galaxy-file style). Placed by
   // measurement so it works in the top bar AND the docked sidebar, in plain and
   // quick-liquid (ql-content) DOM alike — buttons and slider share an offset
@@ -139,22 +157,45 @@ export default function Layout() {
         <div className="topbar-right">
           <Glass as="nav" className={`navpill ${navSide ? 'navpill-side' : ''}`} config={{ material: 'thin', borderRadius: navSide ? 30 : 999 }} aria-label="Primary">
             <span className="np-slider" aria-hidden="true" />
-            {navSide ? (
-              // Sidebar mode: the WHOLE nav lives in the rail (no More dropdown),
-              // icon + label rows like the galaxy concept file.
-              NAV.map((item, i) => {
-                if (item.section) return <span key={`s${i}`} className="np-sep" aria-hidden="true" />
+            {navSide ? (() => {
+              // Rail rows: primary tabs always; then as many record links as fit;
+              // the remainder behind More. Settings is always the last nav row.
+              const links = NAV.filter((i) => i.to)
+              const primaryL = links.slice(0, 4)
+              const settingsL = links[links.length - 1]
+              const secL = links.slice(4, -1)
+              const slots = sideRows - primaryL.length
+              const showAll = slots >= secL.length
+              const visible = showAll ? secL : secL.slice(0, Math.max(0, slots - 1))
+              const overflow = showAll ? [] : secL.slice(Math.max(0, slots - 1))
+              const row = (item) => {
                 const C = Icon[item.icon]
                 return (
                   <NavLink key={item.to} to={item.to} end={item.end}
-                    className={({ isActive }) => `np-tab ${isActive ? 'active' : ''}`}>
+                    className={({ isActive }) => `np-tab ${isActive && !menu ? 'active' : ''}`}>
                     <C width={20} height={20} aria-hidden="true" />
                     <span>{item.label}</span>
                     {item.badge && !seenBadges[item.to] && <span className="np-dot" aria-hidden="true" />}
                   </NavLink>
                 )
-              })
-            ) : (
+              }
+              return (
+                <>
+                  {primaryL.map(row)}
+                  <span className="np-sep" aria-hidden="true" />
+                  {visible.map(row)}
+                  {overflow.length > 0 && (
+                    <button className={`np-tab ${menu ? 'active' : ''}`} onClick={() => setMenu((m) => !m)}>
+                      <Icon.more width={20} height={20} aria-hidden="true" />
+                      <span>More</span>
+                    </button>
+                  )}
+                  <span className="np-sep" aria-hidden="true" />
+                  {row(settingsL)}
+                  <div className="np-rail-profile"><ProfileSwitcher /></div>
+                </>
+              )
+            })() : (
               <>
                 {PRIMARY.map((t) => (
                   <NavLink key={t.to} to={t.to} end={t.end}
@@ -172,14 +213,17 @@ export default function Layout() {
             )}
           </Glass>
 
-          <ProfileSwitcher compact />
+          {!navSide && <ProfileSwitcher compact />}
 
-          {menu && !navSide && (
+          {menu && (
             <>
               <div className="nav-menu-backdrop" onClick={() => setMenu(false)} />
               <Glass className="nav-menu" role="menu" animateIn config={{ material: 'thick', borderRadius: 24 }}>
                 <div className="nav-menu-list">
-                  {SECONDARY.map((item, i) => item.section
+                  {(navSide
+                    ? NAV.filter((i) => i.to).slice(4, -1).slice(Math.max(0, sideRows - 5))
+                    : SECONDARY
+                  ).map((item, i) => item.section
                     ? <div className="nav-section" key={`s${i}`}>{item.section}</div>
                     : navRow(item, () => setMenu(false)))}
                 </div>
