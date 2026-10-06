@@ -88,12 +88,31 @@ routes on the Host header, and forwarding CloudFront's hostname breaks it.
 
 A Raspberry Pi 3 on the tailnet running `server.mjs`: Express on port 3000
 (hardcoded, no `PORT` env), Node 18, scraping `hac.friscoisd.org` with
-`node-fetch` + `fetch-cookie` + `jsdom` (plus `firebase-admin` +
+`node-fetch` + `fetch-cookie` + `node-html-parser` (plus `firebase-admin` +
 `@google-cloud/firestore` for snapshot sync, when enabled). Routes: `GET /ping`,
 `POST /login`, `/data`, `/batch`, `/ipr-dates`, `/push/subscribe`,
 `/push/unsubscribe`, `/push/test`, `/push/poll`, `/snapshot/run`. Keeps
-logged-in cookie jars in memory for 3 minutes, keyed by username and re-checked
-against the password.
+logged-in cookie jars in memory for 15 minutes (`SESSION_TTL_MS`), keyed by
+username and re-checked against the password; an expired HAC session is
+detected and re-logged-in once.
+
+Speed rules for the scrape path (each cost real seconds on a Pi 3):
+
+- **No JSDOM.** It cost seconds of single-core CPU per HAC page. Parsing goes
+  through `toDoc()` (`node-html-parser`); `HTML_PARSER=jsdom` switches back for
+  debugging. node-html-parser does no HTML5 tree fixups (no implied `<tbody>`)
+  and has no `.value`/`.src` properties, so use `val()` / `getAttribute`.
+- **Live requests outrank pollers.** The snapshot and push pollers run on their
+  own HAC session (`pool = "snap"`) and `yieldToLive()` while any
+  `/login`/`/data`/`/batch` is in flight. HAC (ASP.NET) runs one request at a
+  time per session, so sharing one made the student wait behind the poller.
+- **Skip the redundant quarter POST** when the classwork iframe already shows
+  the requested quarter with default filters (the hot wave's usual case).
+- **The client queue is per account** (`serialize` in `hac.js`), so a profile
+  switch never waits behind the previous account's batch.
+
+`scripts/hac-bench.mjs` times every HAC round-trip and parse on the Pi; run it
+there before and after touching the scrape path.
 
 ### Web Push (grade notifications)
 
