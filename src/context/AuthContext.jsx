@@ -357,6 +357,12 @@ export function AuthProvider({ children }) {
       const gradeEvents = [] // structured new-grade events for notifications
       let done = 0
       let fetched = 0 // how many resources actually refreshed (0 = total failure, e.g. offline)
+      const stampSynced = () => {
+        const now = Date.now()
+        try { localStorage.setItem(syncedKeyFor(username), String(now)) } catch (_) {}
+        if (userRef.current === username) setSyncedAt(now)
+        return now
+      }
       for (const wave of waves) {
         if (syncGen.current !== myGen) return // superseded by an account switch
         const olds = wave.map(([t, e]) => acct.get(keyOf(t, e)))
@@ -398,6 +404,11 @@ export function AuthProvider({ children }) {
         if (gotByKey[curKey] !== undefined) acct.set(keyOf('class', {}), gotByKey[curKey])
         persistCache(username)
         done += wave.length
+        // Stamp "Updated" as soon as the current grades land, not after the
+        // background GPA/cold waves: the UI stops saying "updating…" here, and
+        // showing the old (possibly days-old) time for the rest of the sync read
+        // as if the refresh hadn't worked.
+        if (wave === WAVE_HOT && fetched > 0 && syncGen.current === myGen) stampSynced()
         if (syncGen.current === myGen) { bump(); setSync((s) => ({ ...s, done, hotDone: true })) }
         signalHot() // current grades are in — everything after this is background
       }
@@ -406,9 +417,7 @@ export function AuthProvider({ children }) {
         // Only stamp "synced" if something actually refreshed — a fully-failed
         // sync (offline / server down) must not claim the data is fresh.
         if (fetched > 0) {
-          const now = Date.now()
-          try { localStorage.setItem(syncedKeyFor(username), String(now)) } catch (_) {}
-          if (userRef.current === username) setSyncedAt(now)
+          const now = stampSynced()
           // Remember when the GPA/cold waves last ran so the hourly gate can skip
           // them on the next background re-sync.
           if (full) lastFullSyncAt.current.set(username, now)
