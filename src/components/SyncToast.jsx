@@ -1,18 +1,18 @@
 import { useAuth } from '../context/AuthContext.jsx'
 
-// Non-blocking, bottom-right glass toast — shows ONLY the live sync progress and
-// then disappears. The post-sync results ("N updates" / "Up to date") are
-// intentionally not shown; the dashboard's "Recently posted" card already
-// surfaces what got graded. Never hides page content — cached data shows while
-// this runs.
+// Non-blocking, bottom-right glass toast — a plain "Updating…" while the current
+// grades are being fetched, gone the moment they land. The slower GPA / schedule
+// / attendance waves keep running in the background with no indicator: cached
+// data is already on screen and the app stays usable. The post-sync results
+// ("N updates" / "Up to date") are intentionally not shown; the dashboard's
+// "Recently posted" card already surfaces what got graded.
 export default function SyncToast() {
   const { sync } = useAuth()
-  if (sync.phase !== 'syncing') return null
+  if (sync.phase !== 'syncing' || sync.hotDone) return null
   return (
-    <div className="sync-toast">
+    <div className="sync-toast" role="status">
       <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
-      <span>{sync.initial ? 'Loading your data…' : 'Checking for updates…'}</span>
-      <span className="sync-count">{sync.done}/{sync.total}</span>
+      <span>Updating…</span>
     </div>
   )
 }

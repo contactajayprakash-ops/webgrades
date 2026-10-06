@@ -80,20 +80,41 @@ routes on the Host header, and forwarding CloudFront's hostname breaks it.
 - **Do not add distribution-level custom error responses.** They apply to every
   behavior, so API errors would come back as the HTML app shell.
 - **Cache headers are deliberate.** Hashed assets get
-  `max-age=31536000,immutable`; `index.html`, `sw.js`, `registerSW.js` and
-  `manifest.webmanifest` get `no-store` and are invalidated on every deploy.
-  Without that split the PWA service worker serves a stale build forever.
+  `max-age=31536000,immutable`; `index.html`, `sw.js`, `registerSW.js`,
+  `manifest.webmanifest` and `wg-sw-push.js` get `no-store` and are invalidated
+  on every deploy; unhashed icons/robots/sitemap get a 1-day max-age. Without
+  that split the PWA service worker serves a stale build forever. Any new
+  unhashed file in `public/` must be kept out of the immutable sync step.
 
 ## Backend — the Pi
 
 A Raspberry Pi 3 on the tailnet running `server.mjs`: Express on port 3000
 (hardcoded, no `PORT` env), Node 18, scraping `hac.friscoisd.org` with
-`node-fetch` + `fetch-cookie` + `jsdom` (plus `firebase-admin` +
+`node-fetch` + `fetch-cookie` + `node-html-parser` (plus `firebase-admin` +
 `@google-cloud/firestore` for snapshot sync, when enabled). Routes: `GET /ping`,
 `POST /login`, `/data`, `/batch`, `/ipr-dates`, `/push/subscribe`,
 `/push/unsubscribe`, `/push/test`, `/push/poll`, `/snapshot/run`. Keeps
-logged-in cookie jars in memory for 3 minutes, keyed by username and re-checked
-against the password.
+logged-in cookie jars in memory for 15 minutes (`SESSION_TTL_MS`), keyed by
+username and re-checked against the password; an expired HAC session is
+detected and re-logged-in once.
+
+Speed rules for the scrape path (each cost real seconds on a Pi 3):
+
+- **No JSDOM.** It cost seconds of single-core CPU per HAC page. Parsing goes
+  through `toDoc()` (`node-html-parser`); `HTML_PARSER=jsdom` switches back for
+  debugging. node-html-parser does no HTML5 tree fixups (no implied `<tbody>`)
+  and has no `.value`/`.src` properties, so use `val()` / `getAttribute`.
+- **Live requests outrank pollers.** The snapshot and push pollers run on their
+  own HAC session (`pool = "snap"`) and `yieldToLive()` while any
+  `/login`/`/data`/`/batch` is in flight. HAC (ASP.NET) runs one request at a
+  time per session, so sharing one made the student wait behind the poller.
+- **Skip the redundant quarter POST** when the classwork iframe already shows
+  the requested quarter with default filters (the hot wave's usual case).
+- **The client queue is per account** (`serialize` in `hac.js`), so a profile
+  switch never waits behind the previous account's batch.
+
+`scripts/hac-bench.mjs` times every HAC round-trip and parse on the Pi; run it
+there before and after touching the scrape path.
 
 ### Web Push (grade notifications)
 
@@ -117,7 +138,7 @@ account**. Delivery is cheap; the cost is the poll.
   new ones matching each user's `aol`/`pc`/`both` choice. Never blasts the whole
   gradebook on the first poll after subscribing.
 - **Client:** `src/lib/push.js` subscribes via `PushManager`; the SW `push` +
-  `notificationclick` handlers live in `public/wg-sw-ext.js` (injected into the
+  `notificationclick` handlers live in `public/wg-sw-push.js` (injected into the
   generated Workbox SW via `workbox.importScripts`). Enable/opt-in is in
   Settings → Notifications (default off).
 
@@ -177,6 +198,20 @@ JSDOM. Scraping, Web Push, VAPID and `push-subs.json` are unchanged.
   snapshot-hydrated cache can't fire a gradebook-wide burst. Any failure
   (offline, no doc, browser without gunzip) falls through silently. Gated by the
   `wg_snapshot_read` rollout flag (now on by default) **and** `syncAllowedFor`.
+
+### Shared "Recently posted" times
+
+HAC has no post timestamp, so "Recently posted" shows when a grade was first
+seen. That time comes from the **Pi**, so it's the same on every device: every
+path that scrapes a class page (`/batch`, `/data`, both pollers) stamps new rows
+in `posted-times.json` (gitignored, no credentials), keyed
+`` `${courseName}|${category}|${assignmentName}` ``. The first scrape of each
+quarter seeds at 0 (unknown) so turning it on doesn't make a gradebook read "just
+posted". `/batch` returns the stamps for its rows as `posted`; the snapshot doc
+carries the whole map (gzipped `posted` field). The client merges them into
+`wg_posted_srv_<user>` (`src/lib/seen.js`) and prefers them over the old
+per-device `wg_posted_<user>` map, which stays as the fallback. Key parity is
+checked by `npm run test:posted`, which runs the real Pi block against `seen.js`.
 
 `HACFAKESERVERNORUN.txt` in this repo is a copy of that source. **Nothing keeps
 it in sync** — if the Pi is edited and this file isn't, the copy becomes fiction.
@@ -289,7 +324,9 @@ git push origin main     # deploys BOTH hosts via .github/workflows/deploy.yml
 
 The workflow has two independent jobs, `cloudfront` and `firebase`, each running
 its own build. Independent on purpose: if one host fails to deploy, the other
-still updates.
+still updates. Both `needs` a shared `test` job (`.github/workflows/test.yml`,
+also run on every PR) that runs `test:credkey` and `test:transcript`; if either
+fails, neither host deploys.
 
 Repo secrets required: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`,
 `CLOUDFRONT_DISTRIBUTION_ID`, `FIREBASE_SERVICE_ACCOUNT_WEBGRADES`.

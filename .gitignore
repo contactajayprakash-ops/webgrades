@@ -20,6 +20,7 @@ yarn-error.log*
 firebase-sa*.json
 snapshot-subs.json
 push-subs.json
+posted-times.json
 
 # Firebase "agent skills" - docs the CLI drops in, not part of this project
 .agents/

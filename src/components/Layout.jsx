@@ -286,7 +286,7 @@ export default function Layout() {
         </Glass>
 
         <main className="main" key={activeUsername}>
-          <PullToRefresh onRefresh={() => syncAll({ full: true })}>
+          <PullToRefresh onRefresh={() => new Promise((onHot) => { syncAll({ full: true, onHot }) })}>
             <OfflineBanner />
             <Suspense fallback={<Loading />}><Outlet /></Suspense>
           </PullToRefresh>

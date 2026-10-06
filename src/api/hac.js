@@ -64,13 +64,19 @@ export function dedupeClasses(data) {
   return { ...data, assignmentsData: [...byKey.values()] };
 }
 
-// The API logs into HAC fresh on every request. Hitting it concurrently makes
-// HAC reject the simultaneous logins ("Login failed"), so we funnel every call
-// through a single serial queue — one request to HAC at a time, app-wide.
-let queueTail = Promise.resolve();
-function serialize(task) {
-  const result = queueTail.then(task, task);
-  queueTail = result.then(() => {}, () => {});
+// Two concurrent requests for the SAME account make the server log into HAC
+// twice at once, and HAC rejects the second ("Login failed"). So calls are
+// serialized — but per ACCOUNT, not app-wide. Different accounts are separate
+// HAC sessions and never collide; one shared queue made a profile switch wait
+// behind the previous account's whole GPA batch (~30 s) before the new
+// account's current grades could even start.
+const queueTails = new Map(); // username -> tail promise
+function serialize(key, task) {
+  const tail = queueTails.get(key) || Promise.resolve();
+  const result = tail.then(task, task);
+  const next = result.then(() => {}, () => {});
+  queueTails.set(key, next);
+  next.then(() => { if (queueTails.get(key) === next) queueTails.delete(key); });
   return result;
 }
 
@@ -92,9 +98,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const GATEWAY_RETRIES = 2;
 const isGatewayError = (status) => status === 502 || status === 503 || status === 504;
 
-// Every call funnels through the single serial queue (see serialize), so a fetch
-// that never settles doesn't just hang its own request - it jams every request
-// behind it, and the spinner spins forever. The attendance month-switch is the
+// Every call funnels through its account's serial queue (see serialize), so a
+// fetch that never settles doesn't just hang its own request - it jams every
+// request behind it, and the spinner spins forever. The attendance month-switch is the
 // worst offender: it's the only scrape that posts back for a second full HAC page
 // load + JSDOM parse on a Pi 3. A deadline turns a stalled connection into a
 // retriable error instead. Generous enough that a legitimately slow batch finishes
@@ -131,7 +137,7 @@ async function rawPost(path, body) {
 // `retries` retries a transient login failure (used for data calls where the
 // credentials were already validated at sign-in). Login itself never retries.
 function post(path, body, retries = 0) {
-  return serialize(async () => {
+  return serialize(body?.username || '', async () => {
     let last;
     for (let attempt = 0; attempt <= retries; attempt++) {
       last = await rawPost(path, body);
@@ -170,11 +176,13 @@ export async function fetchBatch(creds, requests) {
   if (!j.success) throw new Error(j.message || 'Batch request failed.');
   const results = (j.results || []).map((r) =>
     r.type === 'class' && r.success ? { ...r, data: dedupeClasses(r.data) } : r);
-  return { userName: j.userName, results };
+  // `posted`: the Pi's shared first-posted times for the class rows it scraped
+  // (absent on an older Pi deploy).
+  return { userName: j.userName, results, posted: j.posted || null };
 }
 
-// Best-effort wake of a sleeping (Replit) server so the first real request
-// doesn't eat the cold-start. Never throws.
-export async function wake() {
-  try { await fetch(BASE + "/ping", { method: 'GET' }) } catch (_) {}
-}
+// Used to ping a sleeping (Replit) server awake before the first real request.
+// The Pi never sleeps, so awaiting that ping only put one more CloudFront round
+// trip (and one more chance of an edge 502) in front of every sync. Kept as a
+// no-op so callers don't change.
+export async function wake() {}

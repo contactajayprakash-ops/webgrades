@@ -3,35 +3,41 @@ import { Icon } from './icons.jsx'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import { useInstall } from '../hooks/useInstall.js'
 
-// Load counter (new key = every existing user is reset and sees the prompt again).
-const LOADS_KEY = 'wg_pwa_loads'
-// Guards the count/show so it happens once per page load (survives StrictMode's
-// double-invoke and the login->authed remount; resets on a real reload).
+// Set once the prompt has been shown — it never auto-shows again after that
+// (Settings keeps a manual Install button). iOS can't tell Safari that the app
+// was added to the home screen (separate storage), so repeat nudges there hit
+// people who already installed it.
+const SEEN_KEY = 'wg_pwa_prompted'
+// The old every-4th-load counter. Anyone who has it has already been prompted.
+const LEGACY_LOADS_KEY = 'wg_pwa_loads'
+// Guards the decision so it happens once per page load (survives StrictMode's
+// double-invoke and remounts; resets on a real reload).
 let ranThisLoad = false
 
-// Show on the 1st and 2nd load; if they keep not installing, re-nudge every
-// 4th load after that (6, 10, 14, …). Stops for good once launched standalone.
-const shouldShowOnLoad = (n) => n <= 2 || (n - 2) % 4 === 0
+function alreadyPrompted() {
+  try {
+    if (localStorage.getItem(LEGACY_LOADS_KEY) !== null) {
+      localStorage.removeItem(LEGACY_LOADS_KEY)
+      localStorage.setItem(SEEN_KEY, '1')
+    }
+    return localStorage.getItem(SEEN_KEY) === '1'
+  } catch (_) { return true } // no storage = can't remember a dismissal, so don't nag
+}
 
-// First-load nudge to install WebGrades as a home-screen app. On iOS Safari
-// there's no programmatic install, so we show the Share -> Add to Home Screen
+// One-time nudge, after sign-in, to install WebGrades as a home-screen app. On
+// iOS Safari there's no programmatic install, so we show the Share -> Add to Home Screen
 // steps. On Android/desktop Chrome the shared install singleton captures the
 // browser's install event for a real one-tap install (also reused by Settings).
 export default function InstallPrompt() {
   const { can, standalone, ios, desktop, promptInstall } = useInstall()
   const [show, setShow] = useState(false)
-  const [eligible, setEligible] = useState(false) // this load's counter says show
+  const [eligible, setEligible] = useState(false) // not prompted on this device yet
 
   useEffect(() => {
     if (standalone) return
-    if (ranThisLoad) return // count/decide exactly once per page load
+    if (ranThisLoad) return // decide exactly once per page load
     ranThisLoad = true
-    let n = 1
-    try {
-      n = (parseInt(localStorage.getItem(LOADS_KEY) || '0', 10) || 0) + 1
-      localStorage.setItem(LOADS_KEY, String(n))
-    } catch (_) {}
-    if (shouldShowOnLoad(n)) setEligible(true)
+    if (!alreadyPrompted()) setEligible(true)
   }, [standalone])
 
   // iOS gives no install event — show the instructional prompt shortly after load.
@@ -46,9 +52,12 @@ export default function InstallPrompt() {
     if (eligible && !ios && can) setShow(true)
   }, [eligible, ios, can])
 
-  // "Never mind" just closes for this load — the load counter drives whether it
-  // comes back (first two loads, then every fourth), and Settings keeps a manual
-  // "Install" button available regardless.
+  // Shown once, ever: record it the moment it appears, so a reload or a closed
+  // tab counts as seen too.
+  useEffect(() => {
+    if (show) try { localStorage.setItem(SEEN_KEY, '1') } catch (_) {}
+  }, [show])
+
   const dismiss = () => setShow(false)
 
   const install = async () => { await promptInstall(); dismiss() }
@@ -92,7 +101,7 @@ export default function InstallPrompt() {
         )}
 
         <div className="install-actions">
-          <button className="btn ghost sm" onClick={dismiss}>Never mind</button>
+          <button className="btn ghost sm" onClick={dismiss}>Don't show again</button>
           {!ios && can && <button className="btn sm" onClick={install}>Install app</button>}
         </div>
       </div>
