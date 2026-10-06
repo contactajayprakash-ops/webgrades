@@ -62,6 +62,35 @@ export function recordPosted(username, classes) {
   return map
 }
 
+// The Pi's SHARED first-posted times — the same for every device, because the Pi
+// records when IT first saw each graded row (any device's sync, or its own
+// poller). Arrives on every /batch response and in the grade snapshot; merged
+// here. Takes priority over the per-device map above, which stays as the
+// fallback for rows the Pi has no real time for (older Pi deploy, or graded
+// before it started tracking). Shape: { "<course>|<category>|<assignment>": ms }.
+const srvPostedKeyFor = (u) => `wg_posted_srv_${u || '_anon'}`
+// MUST match postedKey() on the Pi (server.mjs).
+const srvKeyOf = (courseName, asg) => `${courseName}|${asg.category}|${asg.assignmentName}`
+
+export function loadServerPosted(username) {
+  try { return JSON.parse(localStorage.getItem(srvPostedKeyFor(username))) || {} } catch (_) { return {} }
+}
+
+// Merge Pi stamps into the stored map. A Pi time never changes once set, so a
+// plain overlay is safe; 0s ("unknown") are skipped so they can't hide a real
+// per-device time. Returns true when anything changed.
+export function mergeServerPosted(username, stamps) {
+  if (!username || !stamps || typeof stamps !== 'object') return false
+  const map = loadServerPosted(username)
+  let changed = false
+  for (const [k, v] of Object.entries(stamps)) {
+    const t = Number(v)
+    if (t > 0 && map[k] !== t) { map[k] = t; changed = true }
+  }
+  if (changed) { try { localStorage.setItem(srvPostedKeyFor(username), JSON.stringify(map)) } catch (_) {} }
+  return changed
+}
+
 // A graded assignment's display grade, or null if it's not really graded yet.
 const gradeOf = (a) => {
   const g = a && a.grade
@@ -119,9 +148,10 @@ export function changedSince(seen, classes) {
 // The specific assignments graded/changed since last seen, for the feed:
 // [{ course, name, grade, isNew, category, postedAt }]. Skips classes with no
 // assignment baseline (legacy snapshot / first-ever visit) so we don't flood the
-// feed on upgrade. `postedMap` (from recordPosted) supplies each row's first-seen
-// time; 0/absent means unknown (seeded before tracking) and the UI shows no time.
-export function postedSince(seen, classes, postedMap = null) {
+// feed on upgrade. Each row's time comes from the Pi's shared `serverMap` first
+// (same on every device), else this device's `postedMap` (from recordPosted);
+// 0/absent means unknown (seeded before tracking) and the UI shows no time.
+export function postedSince(seen, classes, postedMap = null, serverMap = null) {
   if (!seen) return []
   const out = []
   for (const c of classes || []) {
@@ -143,7 +173,8 @@ export function postedSince(seen, classes, postedMap = null) {
       if (prev !== grade) out.push({
         course: cleanCourseName(c.courseName), name, grade,
         isNew: !(key in e.a) && !(name in e.a), category: asg.category,
-        postedAt: (postedMap && postedMap[idOf(c.courseName, key)]) || 0,
+        postedAt: (serverMap && serverMap[srvKeyOf(c.courseName, asg)])
+          || (postedMap && postedMap[idOf(c.courseName, key)]) || 0,
       })
     }
   }

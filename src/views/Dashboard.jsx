@@ -9,7 +9,7 @@ import { Icon } from '../components/icons.jsx'
 import { parseGrade, letterGrade } from '../lib/gpa.js'
 import { cleanCourseName, courseKey, QUARTERS, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
-import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince, loadPosted, recordPosted } from '../lib/seen.js'
+import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince, loadPosted, recordPosted, loadServerPosted } from '../lib/seen.js'
 import { officialAverage, isAssessment, isProgress } from '../lib/whatif.js'
 import { loadTheme } from '../lib/theme.js'
 import { markSettingsChanged } from '../lib/settingsMeta.js'
@@ -74,6 +74,11 @@ function useRecentGrades() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classes, activeUsername])
 
+  // The Pi's shared first-posted times (same on every device). AuthContext merges
+  // new stamps in and bumps dataVersion, so re-read on that.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const serverPosted = useMemo(() => loadServerPosted(activeUsername), [activeUsername, dataVersion])
+
   const changed = useMemo(() => new Set(changedSince(seen, classes)), [seen, classes])
   const markSeen = () => { const snap = snapshotOf(classes); saveSeen(activeUsername, snap); setSeen(snap) }
 
@@ -81,7 +86,7 @@ function useRecentGrades() {
   // graded since last visit (class · assignment · grade), newest first. Empty
   // until there's a snapshot to compare against. Each row carries its own
   // first-seen `postedAt` so the UI shows when it posted, not the global sync time.
-  const feed = useMemo(() => postedSince(seen, classes, posted), [seen, classes, posted])
+  const feed = useMemo(() => postedSince(seen, classes, posted, serverPosted), [seen, classes, posted, serverPosted])
 
   return { quarter, classes, seen, changed, markSeen, feed }
 }
@@ -347,7 +352,11 @@ function GpaCard() {
 function CurrentClasses({ recent }) {
   const { sync, syncAll, syncedAt } = useAuth()
   const navigate = useNavigate()
-  const updating = sync.phase === 'syncing'
+  // Only the current-grades wave counts as "updating"; the rest of the sync runs
+  // in the background. Refresh stays disabled until it all finishes so a second
+  // tap doesn't pile another batch onto the Pi.
+  const updating = sync.phase === 'syncing' && !sync.hotDone
+  const busy = sync.phase === 'syncing'
   const openClass = (courseName) => navigate(`/grades?c=${encodeURIComponent(courseKey(courseName))}`)
   // List (default) vs. tile view — remembered per device. The tile view is a 2.0
   // feature; the classic UI always uses the list.
@@ -383,7 +392,7 @@ function CurrentClasses({ recent }) {
               <button className={`vt-btn ${view === 'grid' ? 'active' : ''}`} onClick={() => pickView('grid')} aria-label="Tile view" title="Tiles"><Icon.grid width={16} height={16} /></button>
             </div>
           )}
-          <button className="btn ghost sm" onClick={() => syncAll({ full: true })} disabled={updating} title="Re-check HAC for new grades">
+          <button className="btn ghost sm" onClick={() => syncAll({ full: true })} disabled={busy} title="Re-check HAC for new grades">
             <Icon.refresh width={14} height={14} /> Refresh
           </button>
           <Link to="/grades" className="btn ghost sm">View all <Icon.chevron width={14} height={14} /></Link>

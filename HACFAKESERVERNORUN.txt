@@ -1,7 +1,7 @@
 import fetchOrig from "node-fetch";
 import fetchCookie from "fetch-cookie";
 import { CookieJar } from "tough-cookie";
-import { JSDOM } from "jsdom";
+import { parse as parseHtml } from "node-html-parser";
 import express from "express";
 import cors from "cors";
 import webpush from "web-push";
@@ -24,6 +24,21 @@ const kaAgent = (parsedURL) => (parsedURL.protocol === "http:" ? kaHttp : kaHttp
 // override via opts). Everything goes through the cookie-jar fetch built on this.
 const fetchKA = (url, opts = {}) => fetchOrig(url, { agent: kaAgent, ...opts });
 
+// HTML parsing. JSDOM builds a full browser DOM (CSSOM, live collections, window)
+// for every page, which on a Pi 3 cost seconds per HAC page — the classwork page
+// alone is a few hundred KB — and Node parses on ONE core, so every scrape queued
+// behind every other scrape's parse. node-html-parser builds just the element tree
+// with the same querySelector/textContent API at ~7x less CPU. HTML_PARSER=jsdom
+// switches back (needs jsdom installed) if a page ever parses differently.
+let JSDOM = null;
+if (process.env.HTML_PARSER === "jsdom") ({ JSDOM } = await import("jsdom"));
+const toDoc = (html) => (JSDOM ? new JSDOM(html).window.document : parseHtml(html));
+// Attribute reads that work on both parsers (node-html-parser has no `.value`/`.src`).
+// An <option> with no value attribute submits its text, as the DOM's .value did.
+const val = (el) =>
+  el?.getAttribute("value") ??
+  (el?.tagName?.toUpperCase() === "OPTION" ? el.textContent : "");
+
 // How many resources a single /batch scrapes at once. JSDOM is memory-hungry on
 // the 1GB Pi 3, so keep this modest; env-configurable to dial up on a bigger box.
 const BATCH_CONCURRENCY = Math.max(1, Number(process.env.BATCH_CONCURRENCY || 3));
@@ -36,6 +51,29 @@ app.use((req, res, next) => {
   const origin = req.headers.origin || req.headers.referer || "unknown";
   next();
 });
+
+// Live requests (a student waiting on a spinner) take priority over the
+// background pollers. Node runs all of this on ONE core, so a poller parsing
+// someone else's gradebook directly delays the live response. Pollers call
+// yieldToLive() between HAC pages and pause while anything live is in flight.
+const LIVE_PATHS = new Set(["/login", "/data", "/batch", "/ipr-dates"]);
+let liveInFlight = 0;
+app.use((req, res, next) => {
+  if (!LIVE_PATHS.has(req.path)) return next();
+  liveInFlight++;
+  let done = false;
+  const end = () => { if (!done) { done = true; liveInFlight--; } };
+  res.on("finish", end);
+  res.on("close", end);
+  next();
+});
+const YIELD_MAX_MS = 60 * 1000; // never starve a poller for more than this per step
+const yieldToLive = async () => {
+  const until = Date.now() + YIELD_MAX_MS;
+  while (liveInFlight > 0 && Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+};
 
 app.get("/ping", (req, res) => res.status(200).send("OK"));
 
@@ -62,7 +100,12 @@ const fetchWithRetry = async (fetch, url, options = {}, retries = 3) => {
 
 // ====================
 // Shared Login Function
-// Returns: { fetch, userName }
+// Returns: { fetch, userName: null }
+// Stops at the 302: the session cookie is set by then. Following it to the home
+// page cost ~2 s per cold login on the Pi (a 76 KB page) and was only there to
+// read the student's display name, which the classwork landing page carries too
+// (getClassworkDom picks it up). /login, which must answer with the name, calls
+// fetchUserName explicitly.
 // ====================
 const loginHAC = async (username, password) => {
   const cookieJar = new CookieJar();
@@ -75,14 +118,13 @@ const loginHAC = async (username, password) => {
     redirect: "manual",
   });
   const loginHtml = await loginPage.text();
-  const loginDom = new JSDOM(loginHtml);
 
-  const tokenInput = loginDom.window.document.querySelector(
+  const tokenInput = toDoc(loginHtml).querySelector(
     'input[name="__RequestVerificationToken"]',
   );
   if (!tokenInput) throw new Error("Login token not found");
 
-  const token = tokenInput.value;
+  const token = val(tokenInput);
   const formData = new URLSearchParams();
   formData.append("__RequestVerificationToken", token);
   formData.append("LogOnDetails.UserName", username);
@@ -103,32 +145,47 @@ const loginHAC = async (username, password) => {
 
   if (loginRes.status !== 302) throw new Error("Login failed");
 
-  const homeUrl = new URL(loginRes.headers.get("location"), loginUrl).href;
-  const homePage = await fetch(homeUrl, {
-    headers: { "User-Agent": "Mozilla/5.0", Referer: loginUrl },
+  return { fetch, userName: null };
+};
+
+// The display name in HAC's top menu, present on every MVC page (home, Classwork).
+const nameFromDoc = (doc) =>
+  doc.querySelector(".sg-menu-element-identity span")?.textContent.trim() || null;
+
+// Fill in a session's display name from the home page (only /login needs it
+// before any scrape has run).
+const fetchUserName = async (session) => {
+  if (session.userName) return session.userName;
+  const homePage = await session.fetch("https://hac.friscoisd.org/HomeAccess/", {
+    headers: { "User-Agent": "Mozilla/5.0" },
   });
-  const homeHtml = await homePage.text();
-  const homeDom = new JSDOM(homeHtml);
-
-  const userNameElement = homeDom.window.document.querySelector(
-    ".sg-menu-element-identity span",
-  );
-
-  const userName = userNameElement?.textContent.trim() || "Unknow n User";
-
-  return { fetch, userName };
+  const doc = toDoc(await homePage.text());
+  assertLoggedIn(doc);
+  session.userName = nameFromDoc(doc) || "Unknow n User";
+  return session.userName;
 };
 
 // ====================
 // Warm-session cache
-// Keep each user's logged-in cookie jar in memory briefly so repeat refreshes
-// (the "everyone checks the new grade at once" rush) skip the 3-trip login.
+// Keep each user's logged-in cookie jar in memory so repeat refreshes skip the
+// 3-trip login. HAC's own session outlives this by a wide margin (ASP.NET's
+// default is 20 min of idle), and an expired one is caught by assertLoggedIn and
+// re-logged-in once (scrapeWithSession), so the TTL only bounds how long a
+// password stays in memory. It used to be 3 min, which meant the app's own
+// 5-minute background poll paid a full login every single time.
+//
+// `pool` keeps the background snapshot poller on its OWN HAC session. HAC is
+// ASP.NET, which runs one request at a time per session, so a poller scraping
+// the same account on the same session made the student's live request wait in
+// HAC's queue behind it.
 // ====================
-const sessions = new Map(); // username -> { fetch, userName, ts }
-const SESSION_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const sessions = new Map(); // `${pool}|${username}` -> { fetch, userName, password, ts }
+const loginsInFlight = new Map(); // same key -> Promise<entry>
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 15 * 60 * 1000);
 
-const getSession = async (username, password, fresh = false) => {
-  const cached = sessions.get(username);
+const getSession = async (username, password, fresh = false, pool = "live") => {
+  const key = `${pool}|${username}`;
+  const cached = sessions.get(key);
   // Reuse only if the password matches the one that created the session, so a
   // warm session can never be served to a request with the wrong password.
   if (
@@ -139,15 +196,22 @@ const getSession = async (username, password, fresh = false) => {
   ) {
     return cached;
   }
-  const s = await loginHAC(username, password);
-  const entry = {
-    fetch: s.fetch,
-    userName: s.userName,
-    password,
-    ts: Date.now(),
-  };
-  sessions.set(username, entry);
-  return entry;
+  // Single-flight: when a session expires mid-batch every worker notices at
+  // once, and N simultaneous logins for one account make HAC reject all but
+  // one ("Login failed"). Share the one login that's already running.
+  const pending = loginsInFlight.get(key);
+  if (pending && pending.password === password) return pending.promise;
+  const promise = loginHAC(username, password).then((s) => {
+    const entry = { fetch: s.fetch, userName: s.userName, password, ts: Date.now() };
+    sessions.set(key, entry);
+    return entry;
+  });
+  loginsInFlight.set(key, { password, promise });
+  try {
+    return await promise;
+  } finally {
+    if (loginsInFlight.get(key)?.promise === promise) loginsInFlight.delete(key);
+  }
 };
 
 // A page that still shows the login token means the session expired and HAC
@@ -169,11 +233,9 @@ const assertLoggedIn = (doc) => {
 // ====================
 // Helper: Parse Quarter Dropdown
 // ====================
-const getQuarterValue = (iframeDom, quarter) => {
+const getQuarterValue = (doc, quarter) => {
   const options = Array.from(
-    iframeDom.window.document.querySelectorAll(
-      "#plnMain_ddlReportCardRuns option",
-    ),
+    doc.querySelectorAll("#plnMain_ddlReportCardRuns option"),
   );
 
   // Strip "Q" if user sent "Q1"
@@ -185,66 +247,80 @@ const getQuarterValue = (iframeDom, quarter) => {
       o.textContent.trim() === qNum || o.textContent.trim().startsWith(qNum),
   );
 
-  return selected ? selected.value : options[1]?.value;
+  return selected ? val(selected) : val(options[1]);
 };
 
 // ====================
 // Fetch Classwork with Quarter Support
-// Same flow as the original (fetch landing -> iframe -> optional quarter POST);
-// the speed win comes from reusing the logged-in session, not from skipping the
-// landing fetch (which may set session state the quarter POST relies on).
+// Same flow as the original (fetch landing -> iframe -> optional quarter POST),
+// minus the POST when the iframe ALREADY shows the requested quarter with the
+// default filters. That is the common case — the app's first wave asks for the
+// current quarter, which is HAC's default view — and the POST re-downloaded and
+// re-parsed the same few-hundred-KB page for nothing.
 // ====================
-const getClassworkDom = async (fetch, quarter = null) => {
+const CLASSWORK_FILTERS = {
+  ddlClasses: "ALL",
+  ddlCompetencies: "ALL",
+  ddlOrderBy: "Class",
+};
+const selectedValue = (doc, id) => {
+  const opts = doc.querySelectorAll(`#${id} option`);
+  const sel = Array.from(opts).find((o) => o.hasAttribute("selected"));
+  return val(sel || opts[0]); // a <select> with nothing marked shows its first option
+};
+const showsQuarterAlready = (doc, quarterValue) =>
+  !!quarterValue &&
+  selectedValue(doc, "plnMain_ddlReportCardRuns") === quarterValue &&
+  Object.entries(CLASSWORK_FILTERS).every(
+    ([id, want]) => selectedValue(doc, `plnMain_${id}`) === want,
+  );
+
+const getClassworkDom = async (fetch, quarter = null, cache = {}) => {
   const classworkUrl = "https://hac.friscoisd.org/HomeAccess/Classes/Classwork";
   const classworkPage = await fetch(classworkUrl, {
     headers: { "User-Agent": "Mozilla/5.0" },
   });
-  const classworkHtml = await classworkPage.text();
-  const classworkDom = new JSDOM(classworkHtml);
-  assertLoggedIn(classworkDom.window.document);
+  const landing = toDoc(await classworkPage.text());
+  assertLoggedIn(landing);
+  cache.userName = cache.userName || nameFromDoc(landing);
 
-  const iframe = classworkDom.window.document.querySelector("iframe");
+  const iframe = landing.querySelector("iframe");
   if (!iframe) throw new Error("Classwork iframe not found");
 
-  const iframeUrl = iframe.src.startsWith("http")
-    ? iframe.src
-    : "https://hac.friscoisd.org" + iframe.src;
+  const src = iframe.getAttribute("src") || "";
+  const iframeUrl = src.startsWith("http") ? src : "https://hac.friscoisd.org" + src;
 
   const iframePage = await fetch(iframeUrl, {
     headers: { "User-Agent": "Mozilla/5.0", Referer: classworkUrl },
   });
 
-  let iframeHtml = await iframePage.text();
-  let iframeDom = new JSDOM(iframeHtml);
-  assertLoggedIn(iframeDom.window.document);
+  let doc = toDoc(await iframePage.text());
+  assertLoggedIn(doc);
 
   if (quarter) {
-    const quarterValue = getQuarterValue(iframeDom, quarter);
-    const doc = iframeDom.window.document;
+    const quarterValue = getQuarterValue(doc, quarter);
+    if (showsQuarterAlready(doc, quarterValue)) return doc;
 
     const formData = new URLSearchParams();
 
     // Mimic the __doPostBack('ctl00$plnMain$btnRefreshView','') call seen in the HTML
     formData.append("__EVENTTARGET", "ctl00$plnMain$btnRefreshView");
     formData.append("__EVENTARGUMENT", "");
-    formData.append(
-      "__VIEWSTATE",
-      doc.querySelector("#__VIEWSTATE")?.value || "",
-    );
+    formData.append("__VIEWSTATE", val(doc.querySelector("#__VIEWSTATE")));
     formData.append(
       "__VIEWSTATEGENERATOR",
-      doc.querySelector("#__VIEWSTATEGENERATOR")?.value || "",
+      val(doc.querySelector("#__VIEWSTATEGENERATOR")),
     );
     formData.append(
       "__EVENTVALIDATION",
-      doc.querySelector("#__EVENTVALIDATION")?.value || "",
+      val(doc.querySelector("#__EVENTVALIDATION")),
     );
 
     // Required fields for the Frisco ISD view
     formData.append("ctl00$plnMain$ddlReportCardRuns", quarterValue);
-    formData.append("ctl00$plnMain$ddlClasses", "ALL");
-    formData.append("ctl00$plnMain$ddlCompetencies", "ALL");
-    formData.append("ctl00$plnMain$ddlOrderBy", "Class");
+    for (const [id, want] of Object.entries(CLASSWORK_FILTERS)) {
+      formData.append(`ctl00$plnMain$${id}`, want);
+    }
 
     const postRes = await fetch(iframeUrl, {
       method: "POST",
@@ -256,11 +332,10 @@ const getClassworkDom = async (fetch, quarter = null) => {
       body: formData.toString(),
     });
 
-    iframeHtml = await postRes.text();
-    iframeDom = new JSDOM(iframeHtml);
+    doc = toDoc(await postRes.text());
   }
 
-  return iframeDom;
+  return doc;
 };
 
 // HAC renders a per-class category-summary table (Category | Weight | Points |
@@ -273,9 +348,8 @@ const getClassworkDom = async (fetch, quarter = null) => {
 // poller already trusts). Real assignments have text names.
 const isSubtotalName = (n) => /^\s*-?\d+(\.\d+)?\s*$/.test(String(n || ""));
 
-// Parse the classwork DOM into { assignmentsData }
-const parseClasswork = (classDom) => {
-  const doc = classDom.window.document;
+// Parse the classwork document into { assignmentsData }
+const parseClasswork = (doc) => {
   const assignmentClasses = doc.querySelectorAll(".AssignmentClass");
 
   const assignmentsData = Array.from(assignmentClasses).map((classDiv) => {
@@ -325,7 +399,7 @@ const getTranscriptDoc = async (fetch, cache = {}) => {
   const transcriptPage = await fetch(transcriptUrl, {
     headers: { "User-Agent": "Mozilla/5.0" },
   });
-  const doc = new JSDOM(await transcriptPage.text()).window.document;
+  const doc = toDoc(await transcriptPage.text());
   assertLoggedIn(doc);
   cache.transcriptDoc = doc;
   return doc;
@@ -380,10 +454,10 @@ const scrapeSchedule = async (fetch) => {
   const schedulePage = await fetch(scheduleUrl, {
     headers: { "User-Agent": "Mozilla/5.0" },
   });
-  const scheduleDom = new JSDOM(await schedulePage.text());
-  assertLoggedIn(scheduleDom.window.document);
+  const scheduleDoc = toDoc(await schedulePage.text());
+  assertLoggedIn(scheduleDoc);
   const rows = Array.from(
-    scheduleDom.window.document.querySelectorAll(
+    scheduleDoc.querySelectorAll(
       "#plnMain_dgSchedule tr.sg-asp-table-data-row",
     ),
   );
@@ -444,7 +518,7 @@ const scrapeAttendance = async (fetch, date) => {
   const attendancePage = await fetch(attendanceUrl, {
     headers: { "User-Agent": "Mozilla/5.0" },
   });
-  let document = new JSDOM(await attendancePage.text()).window.document;
+  let document = toDoc(await attendancePage.text());
   assertLoggedIn(document);
 
   // `date` carries a calendar postback argument taken from a prior response's
@@ -457,14 +531,14 @@ const scrapeAttendance = async (fetch, date) => {
     const form = new URLSearchParams();
     form.append("__EVENTTARGET", target);
     form.append("__EVENTARGUMENT", date);
-    form.append("__VIEWSTATE", document.querySelector("#__VIEWSTATE")?.value || "");
+    form.append("__VIEWSTATE", val(document.querySelector("#__VIEWSTATE")));
     form.append(
       "__VIEWSTATEGENERATOR",
-      document.querySelector("#__VIEWSTATEGENERATOR")?.value || "",
+      val(document.querySelector("#__VIEWSTATEGENERATOR")),
     );
     form.append(
       "__EVENTVALIDATION",
-      document.querySelector("#__EVENTVALIDATION")?.value || "",
+      val(document.querySelector("#__EVENTVALIDATION")),
     );
     const postRes = await fetch(attendanceUrl, {
       method: "POST",
@@ -475,7 +549,7 @@ const scrapeAttendance = async (fetch, date) => {
       },
       body: form.toString(),
     });
-    document = new JSDOM(await postRes.text()).window.document;
+    document = toDoc(await postRes.text());
     assertLoggedIn(document);
     // Navigating to the month the page is ALREADY showing makes the ASP.NET
     // calendar answer with a no-op page that parses empty. The default view we
@@ -489,11 +563,13 @@ const scrapeAttendance = async (fetch, date) => {
 const scrapeWeek = async (fetch) => {
   const weekUrl = "https://hac.friscoisd.org/HomeAccess/Home/WeekView";
   const weekPage = await fetchWithRetry(fetch, weekUrl);
-  const dom = new JSDOM(await weekPage.text());
-  const rows = dom.window.document.querySelectorAll(
-    ".sg-homeview-table tbody tr",
-  );
-  const classes = Array.from(rows).map((row) => {
+  // `tbody tr`, minus header rows: JSDOM inserted the implied <tbody> that
+  // node-html-parser (no HTML5 tree fixups) doesn't, so match every row and drop
+  // the ones that sit in a <thead>.
+  const rows = Array.from(
+    toDoc(await weekPage.text()).querySelectorAll(".sg-homeview-table tr"),
+  ).filter((r) => r.parentNode?.tagName?.toUpperCase() !== "THEAD");
+  const classes = rows.map((row) => {
     const course = row.querySelector("#courseName")?.textContent.trim();
     const teacher = row.querySelector("#staffName")?.textContent.trim();
     const periodMatch = row.textContent.match(/Per:\s*(\w+)/);
@@ -519,13 +595,13 @@ const scrapeIpr = async (fetch, date) => {
   let iprPage = await fetch(iprUrl, {
     headers: { "User-Agent": "Mozilla/5.0" },
   });
-  let document = new JSDOM(await iprPage.text()).window.document;
+  let document = toDoc(await iprPage.text());
   assertLoggedIn(document);
 
   if (date) {
-    const viewstate = document.querySelector("#__VIEWSTATE")?.value || "";
+    const viewstate = val(document.querySelector("#__VIEWSTATE"));
     const eventvalidation =
-      document.querySelector("#__EVENTVALIDATION")?.value || "";
+      val(document.querySelector("#__EVENTVALIDATION"));
     const formData = new URLSearchParams();
     formData.append("__VIEWSTATE", viewstate);
     formData.append("__EVENTVALIDATION", eventvalidation);
@@ -540,7 +616,7 @@ const scrapeIpr = async (fetch, date) => {
       },
       body: formData,
     });
-    document = new JSDOM(await postRes.text()).window.document;
+    document = toDoc(await postRes.text());
   }
 
   const selectedDate =
@@ -549,7 +625,7 @@ const scrapeIpr = async (fetch, date) => {
       ?.textContent.trim() || null;
   const availableDates = Array.from(
     document.querySelectorAll("#plnMain_ddlIPRDates option"),
-  ).map((o) => ({ label: o.textContent.trim(), value: o.value }));
+  ).map((o) => ({ label: o.textContent.trim(), value: val(o) }));
   const rows = Array.from(
     document.querySelectorAll("#plnMain_dgIPR tr.sg-asp-table-data-row"),
   );
@@ -574,7 +650,7 @@ const scrapeIpr = async (fetch, date) => {
 const scrapeType = async (fetch, { type, quarter, date } = {}, cache = {}) => {
   switch (type) {
     case "class":
-      return parseClasswork(await getClassworkDom(fetch, quarter));
+      return parseClasswork(await getClassworkDom(fetch, quarter, cache));
     case "rank":
       return parseRank(await getTranscriptDoc(fetch, cache));
     case "transcript":
@@ -592,23 +668,28 @@ const scrapeType = async (fetch, { type, quarter, date } = {}, cache = {}) => {
   }
 };
 
+// A session learns its display name from the first classwork page it loads.
+const nameOf = (session, cache) => {
+  if (!session.userName && cache.userName) session.userName = cache.userName;
+  return session.userName;
+};
+
 // Run one scrape, transparently re-logging-in once if the warm session expired.
-const scrapeWithSession = async (username, password, request, cache) => {
-  let session = await getSession(username, password);
+const scrapeWithSession = async (username, password, request, cache, pool = "live") => {
+  let session = await getSession(username, password, false, pool);
   try {
-    return {
-      data: await scrapeType(session.fetch, request, cache),
-      userName: session.userName,
-    };
+    const data = await scrapeType(session.fetch, request, cache);
+    return { data, userName: nameOf(session, cache) };
   } catch (err) {
     if (err instanceof SessionExpired) {
       // session went stale — drop the per-request page cache, re-login, retry once
       delete cache.transcriptDoc;
-      session = await getSession(username, password, true);
-      return {
-        data: await scrapeType(session.fetch, request, cache),
-        userName: session.userName,
-      };
+      // Only force a new login if nobody replaced the stale session meanwhile
+      // (another worker in this batch may have just re-logged-in).
+      const now = await getSession(username, password, false, pool);
+      session = now !== session ? now : await getSession(username, password, true, pool);
+      const data = await scrapeType(session.fetch, request, cache);
+      return { data, userName: nameOf(session, cache) };
     }
     throw err;
   }
@@ -626,15 +707,67 @@ app.post("/ipr-dates", async (req, res) => {
     const iprPage = await session.fetch(iprUrl, {
       headers: { "User-Agent": "Mozilla/5.0" },
     });
-    const document = new JSDOM(await iprPage.text()).window.document;
+    const document = toDoc(await iprPage.text());
     const availableDates = Array.from(
       document.querySelectorAll("#plnMain_ddlIPRDates option"),
-    ).map((o) => ({ label: o.textContent.trim(), value: o.value }));
+    ).map((o) => ({ label: o.textContent.trim(), value: val(o) }));
     res.json({ success: true, availableDates });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
 });
+
+// ====================
+// First-posted times — one canonical "when did this grade first appear" per
+// assignment, shared by every device. HAC exposes no post timestamp, so the
+// Pi records the first time IT saw each graded row, from every path that scrapes
+// class pages (/batch, /data, the snapshot poller, the push poller). /batch
+// returns the stamps for the rows it scraped and the snapshot doc carries the
+// whole map, so the "Recently posted" times match on every device instead of
+// each one showing when IT happened to sync. Independent of push/snapshots (no
+// Firebase needed); holds no credentials, just times.
+// Store: username -> { seeded: { "<resource cache key>": true }, t: { "<course>|<category>|<assignment>": ms } }
+// 0 = already graded when we started tracking that resource (time unknown).
+// ====================
+const POSTED_FILE = process.env.POSTED_STORE || "./posted-times.json";
+let postedStore = {};
+try {
+  if (fs.existsSync(POSTED_FILE)) postedStore = JSON.parse(fs.readFileSync(POSTED_FILE, "utf8")) || {};
+} catch (e) { console.log(`[${ctTime()}] posted store load failed: ${e.message}`); }
+const savePostedStore = () => {
+  try { fs.writeFileSync(POSTED_FILE, JSON.stringify(postedStore), { mode: 0o600 }); }
+  catch (e) { console.log(`[${ctTime()}] posted store save failed: ${e.message}`); }
+};
+// Same key the client builds in src/lib/seen.js (srvKeyOf) — keep them identical.
+const postedKey = (courseName, a) => `${courseName}|${a.category}|${a.assignmentName}`;
+// Cache key of a class resource, matching the client's keyOf / snapKey.
+const classResKey = (quarter) => `class:${JSON.stringify(quarter != null && quarter !== "" ? { quarter: String(quarter) } : {})}`;
+
+// Stamp every graded row of one class scrape. The first time a RESOURCE (a
+// quarter) is seen for a user its rows are seeded at 0, so starting to track
+// doesn't make a whole gradebook read "just posted"; after that, a row we've
+// never seen gets the real time. Returns { stamps, changed } where stamps holds
+// this scrape's rows (nonzero only) for the /batch response.
+const stampPosted = (username, resKey, data) => {
+  const out = { stamps: {}, changed: false };
+  if (!username || !data || !Array.isArray(data.assignmentsData)) return out;
+  const e = postedStore[username] || (postedStore[username] = { seeded: {}, t: {} });
+  const baseline = !e.seeded[resKey];
+  const now = Date.now();
+  for (const c of data.assignmentsData) {
+    for (const a of c.assignments || []) {
+      // Any non-blank grade, letter marks ("T - Turned in") included; the client
+      // decides what it shows.
+      if (a.grade == null || String(a.grade).trim() === "" || !a.assignmentName || isSubtotalName(a.assignmentName)) continue;
+      const k = postedKey(c.courseName, a);
+      if (!(k in e.t)) { e.t[k] = baseline ? 0 : now; out.changed = true; }
+      if (e.t[k]) out.stamps[k] = e.t[k];
+    }
+  }
+  if (baseline) { e.seeded[resKey] = true; out.changed = true; }
+  if (out.changed) savePostedStore();
+  return out;
+};
 
 // ====================
 // Express Routes
@@ -643,6 +776,7 @@ app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   try {
     const session = await getSession(username, password, true); // always verify creds fresh
+    await fetchUserName(session);
     registerSnapshot(username, password); // keep this account's server snapshot warm
     console.log(
       `[${ctTime()}] LOGIN SUCCESS — name=${session.userName}  username=${username}`,
@@ -666,6 +800,7 @@ app.post("/data", async (req, res) => {
       { type, quarter, date },
       {},
     );
+    if (type === "class") stampPosted(username, classResKey(quarter), data);
     console.log(`[${ctTime()}] Usage — username=${username} type=${type}`);
     res.json({ success: true, userName, data });
   } catch (err) {
@@ -717,11 +852,17 @@ app.post("/batch", async (req, res) => {
       Array.from({ length: Math.min(BATCH_CONCURRENCY, requests.length) }, () => worker()),
     );
 
+    // Shared first-posted times for every class row this batch scraped.
+    const posted = {};
+    for (const r of results) {
+      if (r.success && r.type === "class") Object.assign(posted, stampPosted(username, classResKey(r.quarter), r.data).stamps);
+    }
+
     const okCount = results.filter((x) => x.success).length;
     console.log(
       `[${ctTime()}] BATCH — username=${username} ${okCount}/${requests.length} ok`,
     );
-    res.json({ success: true, userName, results });
+    res.json({ success: true, userName, results, posted });
   } catch (err) {
     console.log(
       `[${ctTime()}] BATCH FAILED — username=${username} reason=${err.message}`,
@@ -825,7 +966,7 @@ app.post("/push/subscribe", async (req, res) => {
       entry.lastSeen = {}; // fallback: firstSeen guard baselines silently next poll
       if (entry.password) {
         try {
-          const { data } = await scrapeWithSession(username, entry.password, { type: "class" }, {});
+          const { data } = await scrapeWithSession(username, entry.password, { type: "class" }, {}, "snap");
           entry.lastSeen = buildSeen(data); // baseline to NOW → nothing pre-existing notifies
         } catch (_) { /* scrape failed → keep {}, poll still baselines silently, no blast */ }
       }
@@ -921,7 +1062,9 @@ const pollOnce = async () => {
       const entry = pushStore[username];
       if (!entry || !entry.password || !(entry.subs || []).length) continue;
       try {
-        const { data } = await scrapeWithSession(username, entry.password, { type: "class" }, {});
+        await yieldToLive();
+        const { data } = await scrapeWithSession(username, entry.password, { type: "class" }, {}, "snap");
+        stampPosted(username, classResKey(), data);
         const firstSeen = !entry.lastSeen || !Object.keys(entry.lastSeen).length;
         const nextSeen = { ...(entry.lastSeen || {}) };
         const events = [];
@@ -1070,7 +1213,8 @@ const scrapeResources = async (username, password, resources, curQ) => {
   const data = {};
   for (const [type, extra] of resources) {
     try {
-      const { data: d } = await scrapeWithSession(username, password, { type, ...extra }, cache);
+      await yieldToLive(); // a student's live request goes first
+      const { data: d } = await scrapeWithSession(username, password, { type, ...extra }, cache, "snap");
       data[snapKey(type, extra)] = d;
     } catch (e) { /* skip this resource; keep the rest */ }
   }
@@ -1084,6 +1228,26 @@ const scrapeResources = async (username, password, resources, curQ) => {
 // restart → the first poll after boot is forced FULL to rebuild it.
 const snapDataCache = new Map(); // username -> data object
 
+// After a restart the in-memory base is gone, which used to force a FULL
+// re-scrape (8 HAC pages) of every registered account — hundreds of them — all
+// competing with live requests for hours. The last snapshot we wrote IS that
+// base, so read it back (one Firestore get) when it's still within the full-TTL
+// and its hash matches what we last wrote; otherwise fall through to FULL.
+const priorFromFirestore = async (username, password) => {
+  const entry = snapStore[username];
+  if (!entry?.snapHash || Date.now() - (entry.lastFull || 0) >= SNAP_FULL_TTL_MS) return undefined;
+  try {
+    const doc = await firestore.collection("grades").doc(credKey(username, password)).get();
+    const d = doc.exists ? doc.data() : null;
+    if (!d || d.codec !== "gzip" || d.hash !== entry.snapHash) return undefined;
+    const data = JSON.parse(zlib.gunzipSync(Buffer.from(d.data, "base64")).toString("utf8"));
+    snapDataCache.set(username, data);
+    return data;
+  } catch (e) {
+    return undefined;
+  }
+};
+
 // Write one gzipped snapshot doc per user at grades/<credKey>, but ONLY when the
 // uncompressed payload actually changed (hash compare) — keeps us far inside the
 // Firestore free tier. mode 'hot' patches the current quarter onto the last full
@@ -1092,7 +1256,7 @@ const snapDataCache = new Map(); // username -> data object
 const writeSnapshot = async (username, password, mode = "full") => {
   if (!SNAPSHOT_ENABLED) return { changed: false, bytes: 0, mode };
   const curQ = guessCurrentQuarter();
-  const prior = snapDataCache.get(username);
+  const prior = snapDataCache.get(username) || (mode === "hot" ? await priorFromFirestore(username, password) : undefined);
   // Can't patch onto nothing — a hot poll with no in-memory base becomes full.
   const effMode = mode === "hot" && prior ? "hot" : "full";
   const scraped = await scrapeResources(
@@ -1106,15 +1270,25 @@ const writeSnapshot = async (username, password, mode = "full") => {
   const entry = snapStore[username] || {};
   entry.password = password;
   if (effMode === "full") entry.lastFull = Date.now();
+  for (const [k, v] of Object.entries(scraped)) {
+    if (k.startsWith("class:")) stampPosted(username, k, v);
+  }
   const json = JSON.stringify(data);
   const hash = crypto.createHash("sha256").update(json).digest("hex");
   const gz = zlib.gzipSync(json);
   const bytes = gz.length;
-  if (entry.snapHash === hash) { snapStore[username] = entry; return { changed: false, bytes, mode: effMode }; }
+  // The first-posted map rides along (gzipped, same codec) so a cold open shows
+  // the shared times before the live sync lands. A new stamp from a device's
+  // /batch changes it without changing the grades, so it gets its own hash.
+  const postedJson = JSON.stringify((postedStore[username] && postedStore[username].t) || {});
+  const postedHash = crypto.createHash("sha256").update(postedJson).digest("hex");
+  if (entry.snapHash === hash && entry.postedHash === postedHash) { snapStore[username] = entry; return { changed: false, bytes, mode: effMode }; }
   await firestore.collection("grades").doc(credKey(username, password)).set({
     codec: "gzip", data: gz.toString("base64"), hash, updatedAt: Date.now(), v: 1,
+    posted: zlib.gzipSync(postedJson).toString("base64"),
   });
   entry.snapHash = hash;
+  entry.postedHash = postedHash;
   snapStore[username] = entry;
   saveSnapStore();
   return { changed: true, bytes, mode: effMode };
@@ -1183,7 +1357,9 @@ const snapshotPollOnce = async () => {
         if (!entry || !entry.password) continue;
         // FULL when there's no in-memory base (e.g. after a restart) or the daily
         // TTL elapsed; otherwise a cheap HOT patch of just the current quarter.
-        const needFull = !snapDataCache.has(username) || now - (entry.lastFull || 0) >= SNAP_FULL_TTL_MS;
+        // (No in-memory base after a restart is fine: writeSnapshot rebuilds it
+        // from the last Firestore doc when that's still fresh.)
+        const needFull = now - (entry.lastFull || 0) >= SNAP_FULL_TTL_MS;
         await snapshotNow(username, entry.password, needFull ? "full" : "hot"); // logs + guards + stamps
         await new Promise((r) => setTimeout(r, SNAP_STAGGER_MS)); // stagger — easy on HAC + the Pi
       }
