@@ -289,7 +289,9 @@ git push origin main     # deploys BOTH hosts via .github/workflows/deploy.yml
 
 The workflow has two independent jobs, `cloudfront` and `firebase`, each running
 its own build. Independent on purpose: if one host fails to deploy, the other
-still updates.
+still updates. Both `needs` a shared `test` job (`.github/workflows/test.yml`,
+also run on every PR) that runs `test:credkey` and `test:transcript`; if either
+fails, neither host deploys.
 
 Repo secrets required: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`,
 `CLOUDFRONT_DISTRIBUTION_ID`, `FIREBASE_SERVICE_ACCOUNT_WEBGRADES`.
