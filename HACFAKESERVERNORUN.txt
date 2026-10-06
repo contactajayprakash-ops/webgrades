@@ -1154,6 +1154,26 @@ const scrapeResources = async (username, password, resources, curQ) => {
 // restart → the first poll after boot is forced FULL to rebuild it.
 const snapDataCache = new Map(); // username -> data object
 
+// After a restart the in-memory base is gone, which used to force a FULL
+// re-scrape (8 HAC pages) of every registered account — hundreds of them — all
+// competing with live requests for hours. The last snapshot we wrote IS that
+// base, so read it back (one Firestore get) when it's still within the full-TTL
+// and its hash matches what we last wrote; otherwise fall through to FULL.
+const priorFromFirestore = async (username, password) => {
+  const entry = snapStore[username];
+  if (!entry?.snapHash || Date.now() - (entry.lastFull || 0) >= SNAP_FULL_TTL_MS) return undefined;
+  try {
+    const doc = await firestore.collection("grades").doc(credKey(username, password)).get();
+    const d = doc.exists ? doc.data() : null;
+    if (!d || d.codec !== "gzip" || d.hash !== entry.snapHash) return undefined;
+    const data = JSON.parse(zlib.gunzipSync(Buffer.from(d.data, "base64")).toString("utf8"));
+    snapDataCache.set(username, data);
+    return data;
+  } catch (e) {
+    return undefined;
+  }
+};
+
 // Write one gzipped snapshot doc per user at grades/<credKey>, but ONLY when the
 // uncompressed payload actually changed (hash compare) — keeps us far inside the
 // Firestore free tier. mode 'hot' patches the current quarter onto the last full
@@ -1162,7 +1182,7 @@ const snapDataCache = new Map(); // username -> data object
 const writeSnapshot = async (username, password, mode = "full") => {
   if (!SNAPSHOT_ENABLED) return { changed: false, bytes: 0, mode };
   const curQ = guessCurrentQuarter();
-  const prior = snapDataCache.get(username);
+  const prior = snapDataCache.get(username) || (mode === "hot" ? await priorFromFirestore(username, password) : undefined);
   // Can't patch onto nothing — a hot poll with no in-memory base becomes full.
   const effMode = mode === "hot" && prior ? "hot" : "full";
   const scraped = await scrapeResources(
@@ -1253,7 +1273,9 @@ const snapshotPollOnce = async () => {
         if (!entry || !entry.password) continue;
         // FULL when there's no in-memory base (e.g. after a restart) or the daily
         // TTL elapsed; otherwise a cheap HOT patch of just the current quarter.
-        const needFull = !snapDataCache.has(username) || now - (entry.lastFull || 0) >= SNAP_FULL_TTL_MS;
+        // (No in-memory base after a restart is fine: writeSnapshot rebuilds it
+        // from the last Firestore doc when that's still fresh.)
+        const needFull = now - (entry.lastFull || 0) >= SNAP_FULL_TTL_MS;
         await snapshotNow(username, entry.password, needFull ? "full" : "hot"); // logs + guards + stamps
         await new Promise((r) => setTimeout(r, SNAP_STAGGER_MS)); // stagger — easy on HAC + the Pi
       }
