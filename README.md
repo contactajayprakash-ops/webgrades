@@ -10,7 +10,7 @@ Built with **React + Vite**. It talks to your own HAC-scraping API (the Node/Exp
 - **Classes** — every class with its average, expandable to show all assignments; per-class **what-if** mode to model hypothetical scores.
 - **GPA Calculator** — semester GPA using the Frisco ISD formula. Weights auto-detected from class names (override anything), grades editable for "what-if" scenarios, classes can be toggled in/out.
 - **Schedule**, **Rank & GPA**, **Transcript**, **Attendance** — straight from HAC.
-- **Settings** — change the API URL, manage your session, test the weight detector.
+- **Settings** — appearance, performance, grade notifications, and your session.
 
 ## GPA formula
 
@@ -30,26 +30,32 @@ npm install
 npm run dev      # http://localhost:5173
 ```
 
-The API URL is read from `VITE_API_URL` (see `.env`). You can also change it in-app under **Settings** or the login screen's **API settings** — that override is stored per-browser in `localStorage`.
+The app calls the API through a same-origin `/api` path, so the backend URL never ships in the client bundle. In dev, Vite proxies `/api/*` to the backend and strips the prefix (`/api/login` becomes `/login`). Set the proxy target with `VITE_API_URL` in `.env` (see `.env.example`); it defaults to `http://localhost:3000` and is only read by the dev server.
 
 ## Build
 
 ```bash
-npm run build    # outputs to dist/
-npm run preview  # preview the production build
+npm run build            # CloudFront build: same-origin /api
+npm run build:firebase   # Firebase build: absolute CloudFront /api URL
+npm run preview          # preview the production build
 ```
 
-## Deploy (Vercel / Netlify)
+The client's API base is `VITE_API_BASE`, falling back to `/api` when unset (`src/api/hac.js`). Only the Firebase build sets it.
 
-1. Push this folder to a Git repo.
-2. Import it into **Vercel** or **Netlify**.
-   - Build command: `npm run build`
-   - Output directory: `dist`
-3. Set the env var `VITE_API_URL` to your API's URL.
+## Deploy
 
-SPA routing is already handled: `vercel.json` (Vercel) and `public/_redirects` (Netlify) rewrite all paths to `index.html` so deep links work.
+Pushing to `main` deploys both hosts via `.github/workflows/deploy.yml`. The two jobs are independent, so if one host fails the other still updates.
 
-> **Note on the API:** your Replit API must be awake and reachable. Replit free instances sleep — the first request may be slow or fail until it wakes. CORS is already open on the API (`app.use(cors())`), so the browser can call it directly.
+| Host | URL | API path |
+|---|---|---|
+| CloudFront + S3 | `https://diatjuqtrbl82.cloudfront.net` | same-origin `/api`, proxied server-side |
+| Firebase Hosting | `https://webgrades.firebaseapp.com` | cross-origin to CloudFront's `/api` |
+
+- **CloudFront** serves the static build from S3 and has a `/api/*` behavior that proxies to the backend. Its CloudFront Functions (`cloudfront/`) handle SPA routing and strip the `/api` prefix.
+- **Firebase Hosting** can't proxy to an external origin, so its build points `VITE_API_BASE` at CloudFront's `/api` and calls go cross-origin. To deploy it by hand, use `npm run deploy:firebase`. Never deploy a plain `npm run build` to Firebase: the page loads and then every request fails.
+- Use `webgrades.firebaseapp.com`, not `webgrades.web.app`; the school network blocks `web.app`, as well as Vercel, Render and Cloudflare Pages domains.
+
+CloudFront is the API proxy for both hosts, so deleting the distribution takes both down. One-time AWS setup is in [DEPLOY.md](DEPLOY.md); architecture and invariants are in [CLAUDE.md](CLAUDE.md). `vercel.json` is kept only as a record of the old rewrite rules.
 
 ## Security notes
 
