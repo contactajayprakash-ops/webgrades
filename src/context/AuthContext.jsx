@@ -76,6 +76,35 @@ const WAVE_COLD = [
 // A manual refresh or a never-synced account forces a full run regardless.
 const GPA_TTL_MS = 60 * 60 * 1000 // ~hourly
 
+// Schedule + attendance used to be fetched only when missing, so a new semester's
+// schedule (or an attendance cache in an old shape) stuck around forever unless
+// someone pulled to refresh. Re-scrape them ~daily instead. Stamped in
+// localStorage, not memory, because a fresh app open shouldn't reset the clock.
+const COLD_TTL_MS = 24 * 60 * 60 * 1000
+const coldKeyFor = (username) => `wg_cold_${username}`
+function coldDue(username, acct) {
+  const at = Number(localStorage.getItem(coldKeyFor(username))) || 0
+  return (t, e) => acct.get(keyOf(t, e)) === undefined || Date.now() - at >= COLD_TTL_MS
+}
+function stampCold(username) {
+  try { localStorage.setItem(coldKeyFor(username), String(Date.now())) } catch (_) {}
+}
+
+// Bump when the shape of what's stored under wg_data_<username> changes in a way
+// old caches can't be read through — every account's cache is dropped once and
+// re-fetched. A browser with no version stamp yet is treated as current.
+const CACHE_VERSION = '1'
+const CACHE_VERSION_KEY = 'wg_cache_v'
+try {
+  const v = localStorage.getItem(CACHE_VERSION_KEY)
+  if (v !== null && v !== CACHE_VERSION) {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith('wg_data_') || k.startsWith('wg_synced_') || k.startsWith('wg_cold_')) localStorage.removeItem(k)
+    }
+  }
+  if (v !== CACHE_VERSION) localStorage.setItem(CACHE_VERSION_KEY, CACHE_VERSION)
+} catch (_) {}
+
 const keyOf = (type, extra) => {
   const { force, ...rest } = extra || {}
   return `${type}:${JSON.stringify(rest)}`
@@ -318,8 +347,9 @@ export function AuthProvider({ children }) {
       // first; the remaining quarters ride along in the GPA wave.
       const curQ = guessCurrentQuarter()
       const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(curQ)
-      // Cold resources rarely change — only refetch them when we have nothing cached.
-      const coldNeeded = WAVE_COLD.filter(([t, e]) => acct.get(keyOf(t, e)) === undefined)
+      // Cold resources rarely change — refetch when missing, ~daily, or on a manual refresh.
+      const due = coldDue(username, acct)
+      const coldNeeded = WAVE_COLD.filter(([t, e]) => opts.full === true || due(t, e))
       const waves = [WAVE_HOT, ...(full ? [WAVE_GPA, coldNeeded] : [])].filter((w) => w.length)
       const total = waves.reduce((n, w) => n + w.length, 0)
       setSync({ phase: 'syncing', done: 0, total, changes: [], initial, hotDone: false })
@@ -360,6 +390,8 @@ export function AuthProvider({ children }) {
             fetched++
           }
         })
+        if (wave === coldNeeded && wave.length === WAVE_COLD.length
+          && wave.every(([t, e]) => gotByKey[keyOf(t, e)] !== undefined)) stampCold(username)
         // Same page — alias the keyed current quarter into the generic `class:{}`
         // view so Dashboard/Agenda's fallback stays fresh without a second scrape.
         const curKey = keyOf('class', { quarter: curQ })
@@ -477,7 +509,8 @@ export function AuthProvider({ children }) {
       const full = initial || Date.now() - (lastFullSyncAt.current.get(username) || 0) >= GPA_TTL_MS
       const curQ = guessCurrentQuarter()
       const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(curQ)
-      const coldNeeded = WAVE_COLD.filter(([t, e]) => acct.get(keyOf(t, e)) === undefined)
+      const due = coldDue(username, acct)
+      const coldNeeded = WAVE_COLD.filter(([t, e]) => due(t, e))
       const waves = [WAVE_HOT, ...(full ? [WAVE_GPA, coldNeeded] : [])].filter((w) => w.length)
       let fetched = 0
       for (const wave of waves) {
@@ -495,6 +528,8 @@ export function AuthProvider({ children }) {
           const key = keyOf(type, extra)
           if (gotByKey[key] !== undefined) { acct.set(key, gotByKey[key]); fetched++ }
         }
+        if (wave === coldNeeded && wave.length === WAVE_COLD.length
+          && wave.every(([t, e]) => gotByKey[keyOf(t, e)] !== undefined)) stampCold(username)
         // Alias the keyed current quarter into `class:{}` (same page as syncAll).
         const curKey = keyOf('class', { quarter: curQ })
         if (gotByKey[curKey] !== undefined) acct.set(keyOf('class', {}), gotByKey[curKey])

@@ -48,7 +48,26 @@ jobs:
             --exclude "registerSW.js" \
             --exclude "manifest.webmanifest" \
             --exclude "_redirects" \
+            --exclude "wg-sw-push.js" \
+            --exclude "favicon.svg" \
+            --exclude "apple-touch-icon.png" \
+            --exclude "icon-*.png" \
+            --exclude "robots.txt" \
+            --exclude "sitemap.xml" \
             --cache-control "public,max-age=31536000,immutable"
+
+      # Unhashed public files keep the same name when their content changes, so
+      # they can't be immutable — a new icon would never show up.
+      - name: Sync unhashed public files
+        run: |
+          aws s3 sync dist/ "s3://${{ secrets.S3_BUCKET }}" \
+            --exclude "*" \
+            --include "favicon.svg" \
+            --include "apple-touch-icon.png" \
+            --include "icon-*.png" \
+            --include "robots.txt" \
+            --include "sitemap.xml" \
+            --cache-control "public,max-age=86400"
 
       # The shell files must never be cached, or the PWA serves a stale app.
       - name: Sync entry points
@@ -59,13 +78,15 @@ jobs:
             --include "sw.js" \
             --include "registerSW.js" \
             --include "manifest.webmanifest" \
+            --include "wg-sw-push.js" \
             --cache-control "no-cache,no-store,must-revalidate"
 
       - name: Invalidate CloudFront
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" \
-            --paths "/index.html" "/sw.js" "/registerSW.js" "/manifest.webmanifest"
+            --paths "/index.html" "/sw.js" "/registerSW.js" "/manifest.webmanifest" "/wg-sw-push.js" \
+              "/favicon.svg" "/apple-touch-icon.png" "/icon-*" "/robots.txt" "/sitemap.xml"
 
   # ---------------------------------------------------------------
   # Firebase Hosting: webgrades.firebaseapp.com. Firebase can't proxy
