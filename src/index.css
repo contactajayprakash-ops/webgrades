@@ -1633,6 +1633,13 @@ html[data-theme="galaxy"] .card .card::after {
   -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
 }
 html[data-theme="galaxy"] .card .card { box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); background: rgba(255,255,255,.05); }
+/* The sidebar's profile pop sits INSIDE the rail, which is itself a
+   backdrop-filter surface: a nested backdrop-filter can only sample the rail
+   (Chrome's backdrop root), so the part hanging outside the rail blurred
+   nothing and glitched as the sky moved. Its surface is near-opaque anyway. */
+html[data-theme="galaxy"] .navpill .profile-pop {
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
 
 /* ============================================================================
    SIDEBAR NAVIGATION (data-nav="side") — desktop: dock the floating top nav

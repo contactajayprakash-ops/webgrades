@@ -41,7 +41,12 @@ function buildLayers() {
 }
 
 // Surfaces that receive the cursor light (galaxy CSS paints the ::after glow).
-const GLOW_SEL = '.card, .navpill, .nav-menu, .profile-pop, .card-menu, .login-card, .tab-bar, .impact'
+// Content panels only. The sidebar rail, menus and tab bar are NOT tracked:
+// moving --mx/--my on them repainted a tall backdrop-filter surface on every
+// pointer frame (and restyled its whole subtree), which flickered in Chrome
+// while the sky moved beneath it. They keep a static sheen, and the sky's own
+// cursor light (.glx-cursor) still shows through their frost.
+const GLOW_SEL = '.card, .login-card, .impact'
 
 export default function GalaxyBg() {
   const theme = useSyncExternalStore(subscribeGlassMode, getThemeName, () => 'dark')
@@ -77,14 +82,18 @@ export default function GalaxyBg() {
       bg.style.setProperty('--px', (x / innerWidth * 2 - 1).toFixed(3))
       bg.style.setProperty('--py', (y / innerHeight * 2 - 1).toFixed(3))
       if (cursor) cursor.style.transform = `translate3d(${x}px, ${y}px, 0)`
-      const t = target && target.closest ? target.closest(GLOW_SEL) : null
-      if (t !== lastEl && lastEl) lastEl.style.setProperty('--a', 0.45)
-      lastEl = t
+      // Skip surfaces inside the rail/menus (e.g. a .card-like row in a popover).
+      let t = target && target.closest ? target.closest(GLOW_SEL) : null
+      if (t && t.closest('.topbar, .nav-menu, .profile-pop, .tab-bar')) t = null
+      if (t !== lastEl) {
+        if (lastEl) lastEl.style.setProperty('--a', 0.45)
+        if (t) t.style.setProperty('--a', 1)
+        lastEl = t
+      }
       if (t) {
         const r = t.getBoundingClientRect()
-        t.style.setProperty('--mx', (x - r.left) + 'px')
-        t.style.setProperty('--my', (y - r.top) + 'px')
-        t.style.setProperty('--a', 1)
+        t.style.setProperty('--mx', Math.round(x - r.left) + 'px')
+        t.style.setProperty('--my', Math.round(y - r.top) + 'px')
       }
     }
     const onMove = (e) => { ev = e; if (!raf) raf = requestAnimationFrame(tick) }
