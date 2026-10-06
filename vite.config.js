@@ -28,8 +28,10 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
           skipWaiting: true,
           // Adds a notificationclick handler so tapping a grade notification
-          // focuses/opens the app (see public/wg-sw-ext.js).
-          importScripts: ['/wg-sw-ext.js'],
+          // focuses/opens the app (see public/wg-sw-push.js). Renamed from
+          // wg-sw-ext.js because the old name was once served `immutable` and
+          // browsers would keep loading that copy; it's no-store now.
+          importScripts: ['/wg-sw-push.js'],
         },
       }),
     ],

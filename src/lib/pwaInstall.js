@@ -21,7 +21,9 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export const isIos = () => /iphone|ipod|ipad/i.test(navigator.userAgent || '');
+// iPadOS 13+ reports itself as desktop Safari on a Mac; real Macs have no touch.
+export const isIos = () => /iphone|ipod|ipad/i.test(navigator.userAgent || '') ||
+  (/macintosh/i.test(navigator.userAgent || '') && navigator.maxTouchPoints > 1);
 export const isAndroid = () => /android/i.test(navigator.userAgent || '');
 export const isStandalone = () =>
   window.navigator.standalone === true ||

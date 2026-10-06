@@ -60,6 +60,15 @@
             "value": "no-cache,no-store,must-revalidate"
           }
         ]
+      },
+      {
+        "source": "/wg-sw-push.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache,no-store,must-revalidate"
+          }
+        ]
       }
     ]
   }

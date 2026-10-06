@@ -80,9 +80,11 @@ routes on the Host header, and forwarding CloudFront's hostname breaks it.
 - **Do not add distribution-level custom error responses.** They apply to every
   behavior, so API errors would come back as the HTML app shell.
 - **Cache headers are deliberate.** Hashed assets get
-  `max-age=31536000,immutable`; `index.html`, `sw.js`, `registerSW.js` and
-  `manifest.webmanifest` get `no-store` and are invalidated on every deploy.
-  Without that split the PWA service worker serves a stale build forever.
+  `max-age=31536000,immutable`; `index.html`, `sw.js`, `registerSW.js`,
+  `manifest.webmanifest` and `wg-sw-push.js` get `no-store` and are invalidated
+  on every deploy; unhashed icons/robots/sitemap get a 1-day max-age. Without
+  that split the PWA service worker serves a stale build forever. Any new
+  unhashed file in `public/` must be kept out of the immutable sync step.
 
 ## Backend — the Pi
 
@@ -117,7 +119,7 @@ account**. Delivery is cheap; the cost is the poll.
   new ones matching each user's `aol`/`pc`/`both` choice. Never blasts the whole
   gradebook on the first poll after subscribing.
 - **Client:** `src/lib/push.js` subscribes via `PushManager`; the SW `push` +
-  `notificationclick` handlers live in `public/wg-sw-ext.js` (injected into the
+  `notificationclick` handlers live in `public/wg-sw-push.js` (injected into the
   generated Workbox SW via `workbox.importScripts`). Enable/opt-in is in
   Settings → Notifications (default off).
 

@@ -43,8 +43,8 @@ export default function App() {
   // else (no data loads on the dead host anyway).
   if (isRetiredHost()) return <MovedNotice />
 
-  // The install prompt shows for everyone — signed in or on the login screen.
-  if (!isAuthed) return (<><Login /><InstallPrompt /></>)
+  // The install prompt waits until they're signed in — not over the login form.
+  if (!isAuthed) return <Login />
 
   return (
     <>
