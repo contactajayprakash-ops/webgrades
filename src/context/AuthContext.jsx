@@ -205,7 +205,7 @@ export function AuthProvider({ children }) {
   const [dataVersion, setDataVersion] = useState(0) // bumped when cache changes -> consumers re-read
 
   // background sync state for the toast
-  const [sync, setSync] = useState({ phase: 'idle', done: 0, total: 0, changes: [], initial: false })
+  const [sync, setSync] = useState({ phase: 'idle', done: 0, total: 0, changes: [], initial: false, hotDone: false })
   const [syncedAt, setSyncedAt] = useState(() => loadSyncedAt(initialSession()?.username))
 
   const bump = useCallback(() => setDataVersion((v) => v + 1), [])
@@ -284,100 +284,110 @@ export function AuthProvider({ children }) {
   // Prefetch + revalidate everything for the current account, wave by wave, so
   // the current grades (wave 1) refresh and paint FIRST. Each wave is a single
   // batched request. Aborts if the user switches accounts mid-sync.
+  //
+  // `sync.hotDone` flips true once wave 1 (current grades) has landed. The UI
+  // only shows "Updating…" until then; the GPA/cold waves finish quietly in the
+  // background. `opts.onHot` is called at that same moment (or when the sync
+  // ends early), so pull-to-refresh can let go without waiting on the rest.
   const syncAll = useCallback(async (opts = {}) => {
-    const c = credsRef.current
-    if (!c) return
-    const username = c.username
-    const myGen = ++syncGen.current
-    syncing.current = true
-    lastSyncAt.current = Date.now()
-    const acct = cacheFor(username)
-    const initial = acct.size === 0
-    // Whether this is the FIRST live sync for this account this app session. A
-    // snapshot hydration (or a fresh login) pre-fills the cache, so `initial`
-    // can't be trusted as the notification baseline — this can. See the guard on
-    // maybeNotify below.
-    const firstLive = !liveSyncedAccts.current.has(username)
-    // The GPA/cold waves change ~once a grading period, so in the background we
-    // refresh them at most hourly and let the hot wave (current grades) run every
-    // time. A manual refresh (opts.full — from the pull-to-refresh / refresh
-    // button) or a never-synced account always runs them. This keeps the steady
-    // -state visibility/poll re-syncs to just the one page people open the app for.
-    const full = opts.full === true || initial ||
-      Date.now() - (lastFullSyncAt.current.get(username) || 0) >= GPA_TTL_MS
-    // Wave 1 refreshes the current quarter (calendar guess) so its grades paint
-    // first; the remaining quarters ride along in the GPA wave.
-    const curQ = guessCurrentQuarter()
-    const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(curQ)
-    // Cold resources rarely change — only refetch them when we have nothing cached.
-    const coldNeeded = WAVE_COLD.filter(([t, e]) => acct.get(keyOf(t, e)) === undefined)
-    const waves = [WAVE_HOT, ...(full ? [WAVE_GPA, coldNeeded] : [])].filter((w) => w.length)
-    const total = waves.reduce((n, w) => n + w.length, 0)
-    setSync({ phase: 'syncing', done: 0, total, changes: [], initial })
-    const changes = []
-    const gradeEvents = [] // structured new-grade events for notifications
-    let done = 0
-    let fetched = 0 // how many resources actually refreshed (0 = total failure, e.g. offline)
-    for (const wave of waves) {
-      if (syncGen.current !== myGen) return // superseded by an account switch
-      const olds = wave.map(([t, e]) => acct.get(keyOf(t, e)))
-      // Fetch the whole wave in one batched request; if the server doesn't
-      // support /batch (older deploy) or it errors, fall back to per-resource.
-      const gotByKey = {}
-      try {
-        const { userName: batchName, results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
-        backfillUserName(username, batchName) // fill in a missing real name
+    let hotSignaled = false
+    const signalHot = () => { if (!hotSignaled) { hotSignaled = true; opts.onHot?.() } }
+    try {
+      const c = credsRef.current
+      if (!c) return
+      const username = c.username
+      const myGen = ++syncGen.current
+      syncing.current = true
+      lastSyncAt.current = Date.now()
+      const acct = cacheFor(username)
+      const initial = acct.size === 0
+      // Whether this is the FIRST live sync for this account this app session. A
+      // snapshot hydration (or a fresh login) pre-fills the cache, so `initial`
+      // can't be trusted as the notification baseline — this can. See the guard on
+      // maybeNotify below.
+      const firstLive = !liveSyncedAccts.current.has(username)
+      // The GPA/cold waves change ~once a grading period, so in the background we
+      // refresh them at most hourly and let the hot wave (current grades) run every
+      // time. A manual refresh (opts.full — from the pull-to-refresh / refresh
+      // button) or a never-synced account always runs them. This keeps the steady
+      // -state visibility/poll re-syncs to just the one page people open the app for.
+      const full = opts.full === true || initial ||
+        Date.now() - (lastFullSyncAt.current.get(username) || 0) >= GPA_TTL_MS
+      // Wave 1 refreshes the current quarter (calendar guess) so its grades paint
+      // first; the remaining quarters ride along in the GPA wave.
+      const curQ = guessCurrentQuarter()
+      const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(curQ)
+      // Cold resources rarely change — only refetch them when we have nothing cached.
+      const coldNeeded = WAVE_COLD.filter(([t, e]) => acct.get(keyOf(t, e)) === undefined)
+      const waves = [WAVE_HOT, ...(full ? [WAVE_GPA, coldNeeded] : [])].filter((w) => w.length)
+      const total = waves.reduce((n, w) => n + w.length, 0)
+      setSync({ phase: 'syncing', done: 0, total, changes: [], initial, hotDone: false })
+      const changes = []
+      const gradeEvents = [] // structured new-grade events for notifications
+      let done = 0
+      let fetched = 0 // how many resources actually refreshed (0 = total failure, e.g. offline)
+      for (const wave of waves) {
+        if (syncGen.current !== myGen) return // superseded by an account switch
+        const olds = wave.map(([t, e]) => acct.get(keyOf(t, e)))
+        // Fetch the whole wave in one batched request; if the server doesn't
+        // support /batch (older deploy) or it errors, fall back to per-resource.
+        const gotByKey = {}
+        try {
+          const { userName: batchName, results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          backfillUserName(username, batchName) // fill in a missing real name
+          wave.forEach(([type, extra], i) => {
+            const r = results.find((x) => x.type === type && String(x.quarter ?? '') === String(extra.quarter ?? '')) || results[i]
+            if (r && r.success && r.data !== undefined) gotByKey[keyOf(type, extra)] = r.data
+          })
+        } catch (_) {
+          for (const [type, extra] of wave) {
+            if (syncGen.current !== myGen) return
+            try {
+              const data = await getData(type, { ...extra, force: acct.get(keyOf(type, extra)) !== undefined })
+              gotByKey[keyOf(type, extra)] = data
+            } catch (_) { /* keep stale */ }
+          }
+        }
+        if (syncGen.current !== myGen) return
         wave.forEach(([type, extra], i) => {
-          const r = results.find((x) => x.type === type && String(x.quarter ?? '') === String(extra.quarter ?? '')) || results[i]
-          if (r && r.success && r.data !== undefined) gotByKey[keyOf(type, extra)] = r.data
+          const key = keyOf(type, extra)
+          if (gotByKey[key] !== undefined) {
+            acct.set(key, gotByKey[key])
+            changes.push(...diffResource(type, extra, olds[i], gotByKey[key]))
+            if (type === 'class') gradeEvents.push(...classGradeEvents(olds[i], gotByKey[key]))
+            fetched++
+          }
         })
-      } catch (_) {
-        for (const [type, extra] of wave) {
-          if (syncGen.current !== myGen) return
-          try {
-            const data = await getData(type, { ...extra, force: acct.get(keyOf(type, extra)) !== undefined })
-            gotByKey[keyOf(type, extra)] = data
-          } catch (_) { /* keep stale */ }
-        }
+        // Same page — alias the keyed current quarter into the generic `class:{}`
+        // view so Dashboard/Agenda's fallback stays fresh without a second scrape.
+        const curKey = keyOf('class', { quarter: curQ })
+        if (gotByKey[curKey] !== undefined) acct.set(keyOf('class', {}), gotByKey[curKey])
+        persistCache(username)
+        done += wave.length
+        if (syncGen.current === myGen) { bump(); setSync((s) => ({ ...s, done, hotDone: true })) }
+        signalHot() // current grades are in — everything after this is background
       }
-      if (syncGen.current !== myGen) return
-      wave.forEach(([type, extra], i) => {
-        const key = keyOf(type, extra)
-        if (gotByKey[key] !== undefined) {
-          acct.set(key, gotByKey[key])
-          changes.push(...diffResource(type, extra, olds[i], gotByKey[key]))
-          if (type === 'class') gradeEvents.push(...classGradeEvents(olds[i], gotByKey[key]))
-          fetched++
+      if (syncGen.current === myGen) {
+        syncing.current = false
+        // Only stamp "synced" if something actually refreshed — a fully-failed
+        // sync (offline / server down) must not claim the data is fresh.
+        if (fetched > 0) {
+          const now = Date.now()
+          try { localStorage.setItem(syncedKeyFor(username), String(now)) } catch (_) {}
+          if (userRef.current === username) setSyncedAt(now)
+          // Remember when the GPA/cold waves last ran so the hourly gate can skip
+          // them on the next background re-sync.
+          if (full) lastFullSyncAt.current.set(username, now)
+          liveSyncedAccts.current.add(username) // notification baseline is now real
         }
-      })
-      // Same page — alias the keyed current quarter into the generic `class:{}`
-      // view so Dashboard/Agenda's fallback stays fresh without a second scrape.
-      const curKey = keyOf('class', { quarter: curQ })
-      if (gotByKey[curKey] !== undefined) acct.set(keyOf('class', {}), gotByKey[curKey])
-      persistCache(username)
-      done += wave.length
-      if (syncGen.current === myGen) { bump(); setSync((s) => ({ ...s, done })) }
-    }
-    if (syncGen.current === myGen) {
-      syncing.current = false
-      // Only stamp "synced" if something actually refreshed — a fully-failed
-      // sync (offline / server down) must not claim the data is fresh.
-      if (fetched > 0) {
-        const now = Date.now()
-        try { localStorage.setItem(syncedKeyFor(username), String(now)) } catch (_) {}
-        if (userRef.current === username) setSyncedAt(now)
-        // Remember when the GPA/cold waves last ran so the hourly gate can skip
-        // them on the next background re-sync.
-        if (full) lastFullSyncAt.current.set(username, now)
-        liveSyncedAccts.current.add(username) // notification baseline is now real
+        setSync({ phase: 'done', done: total, total, changes, initial, hotDone: true })
+        // Suppress notifications on the FIRST live sync of the session: a fresh
+        // login or a snapshot-hydrated cache would otherwise diff a whole (or
+        // partial) gradebook into a notification burst. Genuine new-grade
+        // notifications come from later background-poll syncs (and the Pi push).
+        if (!firstLive) maybeNotify(gradeEvents, username)
       }
-      setSync({ phase: 'done', done: total, total, changes, initial })
-      // Suppress notifications on the FIRST live sync of the session: a fresh
-      // login or a snapshot-hydrated cache would otherwise diff a whole (or
-      // partial) gradebook into a notification burst. Genuine new-grade
-      // notifications come from later background-poll syncs (and the Pi push).
-      if (!firstLive) maybeNotify(gradeEvents, username)
-    }
+    } finally { signalHot() }
   }, [cacheFor, persistCache, getData, bump, backfillUserName])
 
   // Fire a grade notification for the active account's new grades — but only when
