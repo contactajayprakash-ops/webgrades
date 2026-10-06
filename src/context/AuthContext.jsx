@@ -5,6 +5,7 @@ import { clearPrefs } from '../lib/prefs.js'
 import { bgProfilesEnabled, pollIntervalMs, syncAllowedFor, snapshotReadEnabled } from '../lib/syncPolicy.js'
 import { loadNotifyPrefs, eventMatches, showGradeNotification } from '../lib/notify.js'
 import { hasPushSubscription } from '../lib/push.js'
+import { mergeServerPosted } from '../lib/seen.js'
 
 const AuthContext = createContext(null)
 
@@ -325,8 +326,9 @@ export function AuthProvider({ children }) {
       // support /batch (older deploy) or it errors, fall back to per-resource.
       const gotByKey = {}
       try {
-        const { userName: batchName, results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+        const { userName: batchName, results, posted } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
         backfillUserName(username, batchName) // fill in a missing real name
+        mergeServerPosted(username, posted) // shared "Recently posted" times; bump() below re-renders
         wave.forEach(([type, extra], i) => {
           const r = results.find((x) => x.type === type && String(x.quarter ?? '') === String(extra.quarter ?? '')) || results[i]
           if (r && r.success && r.data !== undefined) gotByKey[keyOf(type, extra)] = r.data
@@ -426,6 +428,9 @@ export function AuthProvider({ children }) {
       const { readSnapshot } = await import('../lib/snapshotRead.js')
       const snap = await readSnapshot(username, password)
       if (!snap || !snap.data || !snap.updatedAt) return
+      // The shared first-posted times are worth taking even when the grades below
+      // turn out older than the local cache.
+      if (mergeServerPosted(username, snap.posted) && userRef.current === username) bump()
       // A live sync may have landed while we were fetching (they now run
       // concurrently) — don't downgrade fresh live data to an older snapshot.
       if (liveSyncedAccts.current.has(username)) return
@@ -468,7 +473,8 @@ export function AuthProvider({ children }) {
       for (const wave of waves) {
         const gotByKey = {}
         try {
-          const { userName: batchName, results } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          const { userName: batchName, results, posted } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          mergeServerPosted(username, posted)
           backfillUserName(username, batchName) // fill in a missing real name for this profile
           wave.forEach(([type, extra], i) => {
             const r = results.find((x) => x.type === type && String(x.quarter ?? '') === String(extra.quarter ?? '')) || results[i]

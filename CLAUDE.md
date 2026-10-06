@@ -178,6 +178,20 @@ JSDOM. Scraping, Web Push, VAPID and `push-subs.json` are unchanged.
   (offline, no doc, browser without gunzip) falls through silently. Gated by the
   `wg_snapshot_read` rollout flag (now on by default) **and** `syncAllowedFor`.
 
+### Shared "Recently posted" times
+
+HAC has no post timestamp, so "Recently posted" shows when a grade was first
+seen. That time comes from the **Pi**, so it's the same on every device: every
+path that scrapes a class page (`/batch`, `/data`, both pollers) stamps new rows
+in `posted-times.json` (gitignored, no credentials), keyed
+`` `${courseName}|${category}|${assignmentName}` ``. The first scrape of each
+quarter seeds at 0 (unknown) so turning it on doesn't make a gradebook read "just
+posted". `/batch` returns the stamps for its rows as `posted`; the snapshot doc
+carries the whole map (gzipped `posted` field). The client merges them into
+`wg_posted_srv_<user>` (`src/lib/seen.js`) and prefers them over the old
+per-device `wg_posted_<user>` map, which stays as the fallback. Key parity is
+checked by `npm run test:posted`, which runs the real Pi block against `seen.js`.
+
 `HACFAKESERVERNORUN.txt` in this repo is a copy of that source. **Nothing keeps
 it in sync** — if the Pi is edited and this file isn't, the copy becomes fiction.
 
