@@ -718,6 +718,58 @@ app.post("/ipr-dates", async (req, res) => {
 });
 
 // ====================
+// First-posted times — one canonical "when did this grade first appear" per
+// assignment, shared by every device. HAC exposes no post timestamp, so the
+// Pi records the first time IT saw each graded row, from every path that scrapes
+// class pages (/batch, /data, the snapshot poller, the push poller). /batch
+// returns the stamps for the rows it scraped and the snapshot doc carries the
+// whole map, so the "Recently posted" times match on every device instead of
+// each one showing when IT happened to sync. Independent of push/snapshots (no
+// Firebase needed); holds no credentials, just times.
+// Store: username -> { seeded: { "<resource cache key>": true }, t: { "<course>|<category>|<assignment>": ms } }
+// 0 = already graded when we started tracking that resource (time unknown).
+// ====================
+const POSTED_FILE = process.env.POSTED_STORE || "./posted-times.json";
+let postedStore = {};
+try {
+  if (fs.existsSync(POSTED_FILE)) postedStore = JSON.parse(fs.readFileSync(POSTED_FILE, "utf8")) || {};
+} catch (e) { console.log(`[${ctTime()}] posted store load failed: ${e.message}`); }
+const savePostedStore = () => {
+  try { fs.writeFileSync(POSTED_FILE, JSON.stringify(postedStore), { mode: 0o600 }); }
+  catch (e) { console.log(`[${ctTime()}] posted store save failed: ${e.message}`); }
+};
+// Same key the client builds in src/lib/seen.js (srvKeyOf) — keep them identical.
+const postedKey = (courseName, a) => `${courseName}|${a.category}|${a.assignmentName}`;
+// Cache key of a class resource, matching the client's keyOf / snapKey.
+const classResKey = (quarter) => `class:${JSON.stringify(quarter != null && quarter !== "" ? { quarter: String(quarter) } : {})}`;
+
+// Stamp every graded row of one class scrape. The first time a RESOURCE (a
+// quarter) is seen for a user its rows are seeded at 0, so starting to track
+// doesn't make a whole gradebook read "just posted"; after that, a row we've
+// never seen gets the real time. Returns { stamps, changed } where stamps holds
+// this scrape's rows (nonzero only) for the /batch response.
+const stampPosted = (username, resKey, data) => {
+  const out = { stamps: {}, changed: false };
+  if (!username || !data || !Array.isArray(data.assignmentsData)) return out;
+  const e = postedStore[username] || (postedStore[username] = { seeded: {}, t: {} });
+  const baseline = !e.seeded[resKey];
+  const now = Date.now();
+  for (const c of data.assignmentsData) {
+    for (const a of c.assignments || []) {
+      // Any non-blank grade, letter marks ("T - Turned in") included; the client
+      // decides what it shows.
+      if (a.grade == null || String(a.grade).trim() === "" || !a.assignmentName || isSubtotalName(a.assignmentName)) continue;
+      const k = postedKey(c.courseName, a);
+      if (!(k in e.t)) { e.t[k] = baseline ? 0 : now; out.changed = true; }
+      if (e.t[k]) out.stamps[k] = e.t[k];
+    }
+  }
+  if (baseline) { e.seeded[resKey] = true; out.changed = true; }
+  if (out.changed) savePostedStore();
+  return out;
+};
+
+// ====================
 // Express Routes
 // ====================
 app.post("/login", async (req, res) => {
@@ -748,6 +800,7 @@ app.post("/data", async (req, res) => {
       { type, quarter, date },
       {},
     );
+    if (type === "class") stampPosted(username, classResKey(quarter), data);
     console.log(`[${ctTime()}] Usage — username=${username} type=${type}`);
     res.json({ success: true, userName, data });
   } catch (err) {
@@ -799,11 +852,17 @@ app.post("/batch", async (req, res) => {
       Array.from({ length: Math.min(BATCH_CONCURRENCY, requests.length) }, () => worker()),
     );
 
+    // Shared first-posted times for every class row this batch scraped.
+    const posted = {};
+    for (const r of results) {
+      if (r.success && r.type === "class") Object.assign(posted, stampPosted(username, classResKey(r.quarter), r.data).stamps);
+    }
+
     const okCount = results.filter((x) => x.success).length;
     console.log(
       `[${ctTime()}] BATCH — username=${username} ${okCount}/${requests.length} ok`,
     );
-    res.json({ success: true, userName, results });
+    res.json({ success: true, userName, results, posted });
   } catch (err) {
     console.log(
       `[${ctTime()}] BATCH FAILED — username=${username} reason=${err.message}`,
@@ -1005,6 +1064,7 @@ const pollOnce = async () => {
       try {
         await yieldToLive();
         const { data } = await scrapeWithSession(username, entry.password, { type: "class" }, {}, "snap");
+        stampPosted(username, classResKey(), data);
         const firstSeen = !entry.lastSeen || !Object.keys(entry.lastSeen).length;
         const nextSeen = { ...(entry.lastSeen || {}) };
         const events = [];
@@ -1210,15 +1270,25 @@ const writeSnapshot = async (username, password, mode = "full") => {
   const entry = snapStore[username] || {};
   entry.password = password;
   if (effMode === "full") entry.lastFull = Date.now();
+  for (const [k, v] of Object.entries(scraped)) {
+    if (k.startsWith("class:")) stampPosted(username, k, v);
+  }
   const json = JSON.stringify(data);
   const hash = crypto.createHash("sha256").update(json).digest("hex");
   const gz = zlib.gzipSync(json);
   const bytes = gz.length;
-  if (entry.snapHash === hash) { snapStore[username] = entry; return { changed: false, bytes, mode: effMode }; }
+  // The first-posted map rides along (gzipped, same codec) so a cold open shows
+  // the shared times before the live sync lands. A new stamp from a device's
+  // /batch changes it without changing the grades, so it gets its own hash.
+  const postedJson = JSON.stringify((postedStore[username] && postedStore[username].t) || {});
+  const postedHash = crypto.createHash("sha256").update(postedJson).digest("hex");
+  if (entry.snapHash === hash && entry.postedHash === postedHash) { snapStore[username] = entry; return { changed: false, bytes, mode: effMode }; }
   await firestore.collection("grades").doc(credKey(username, password)).set({
     codec: "gzip", data: gz.toString("base64"), hash, updatedAt: Date.now(), v: 1,
+    posted: zlib.gzipSync(postedJson).toString("base64"),
   });
   entry.snapHash = hash;
+  entry.postedHash = postedHash;
   snapStore[username] = entry;
   saveSnapStore();
   return { changed: true, bytes, mode: effMode };

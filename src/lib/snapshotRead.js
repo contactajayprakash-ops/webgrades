@@ -26,13 +26,19 @@ async function gunzipBase64(b64) {
   return new TextDecoder().decode(await new Response(stream).arrayBuffer())
 }
 
-// Decode a Firestore REST grades doc into { data, updatedAt }, or null.
+// Decode a Firestore REST grades doc into { data, updatedAt, posted }, or null.
+// `posted` is the Pi's shared first-posted map (null on docs written before it
+// existed); a bad one never costs us the grades.
 async function decodeDoc(doc) {
   const f = (doc && doc.fields) || {}
   const payload = f.data && f.data.stringValue
   if (!payload) return null
-  const json = (f.codec && f.codec.stringValue) === 'gzip' ? await gunzipBase64(payload) : payload
-  return { data: JSON.parse(json), updatedAt: Number(f.updatedAt && f.updatedAt.integerValue) || 0 }
+  const gz = (f.codec && f.codec.stringValue) === 'gzip'
+  const json = gz ? await gunzipBase64(payload) : payload
+  let posted = null
+  const p = f.posted && f.posted.stringValue
+  if (p) { try { posted = JSON.parse(gz ? await gunzipBase64(p) : p) } catch (_) {} }
+  return { data: JSON.parse(json), updatedAt: Number(f.updatedAt && f.updatedAt.integerValue) || 0, posted }
 }
 
 // Every third-party fetch on the boot path gets a hard deadline. On the school
@@ -44,7 +50,7 @@ function deadline(ms) {
   try { return AbortSignal.timeout(ms) } catch (_) { return undefined } // old iOS: no deadline, but the read is non-blocking anyway
 }
 
-// Returns { data, updatedAt } (data in the client's cache-key shape) or null when
+// Returns { data, updatedAt, posted } (data in the client's cache-key shape) or null when
 // there's no doc / it's unreachable / times out / the browser can't gunzip.
 export async function readSnapshot(username, password) {
   if (!username || !password) return null

@@ -9,7 +9,7 @@ import { Icon } from '../components/icons.jsx'
 import { parseGrade, letterGrade } from '../lib/gpa.js'
 import { cleanCourseName, courseKey, QUARTERS, scheduleWhitelist, filterPhantomClasses } from '../lib/courses.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
-import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince, loadPosted, recordPosted } from '../lib/seen.js'
+import { loadSeen, saveSeen, snapshotOf, changedSince, postedSince, loadPosted, recordPosted, loadServerPosted } from '../lib/seen.js'
 import { officialAverage, isAssessment, isProgress } from '../lib/whatif.js'
 import { loadTheme } from '../lib/theme.js'
 import { markSettingsChanged } from '../lib/settingsMeta.js'
@@ -74,6 +74,11 @@ function useRecentGrades() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classes, activeUsername])
 
+  // The Pi's shared first-posted times (same on every device). AuthContext merges
+  // new stamps in and bumps dataVersion, so re-read on that.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const serverPosted = useMemo(() => loadServerPosted(activeUsername), [activeUsername, dataVersion])
+
   const changed = useMemo(() => new Set(changedSince(seen, classes)), [seen, classes])
   const markSeen = () => { const snap = snapshotOf(classes); saveSeen(activeUsername, snap); setSeen(snap) }
 
@@ -81,7 +86,7 @@ function useRecentGrades() {
   // graded since last visit (class · assignment · grade), newest first. Empty
   // until there's a snapshot to compare against. Each row carries its own
   // first-seen `postedAt` so the UI shows when it posted, not the global sync time.
-  const feed = useMemo(() => postedSince(seen, classes, posted), [seen, classes, posted])
+  const feed = useMemo(() => postedSince(seen, classes, posted, serverPosted), [seen, classes, posted, serverPosted])
 
   return { quarter, classes, seen, changed, markSeen, feed }
 }

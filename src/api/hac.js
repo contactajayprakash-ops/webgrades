@@ -176,7 +176,9 @@ export async function fetchBatch(creds, requests) {
   if (!j.success) throw new Error(j.message || 'Batch request failed.');
   const results = (j.results || []).map((r) =>
     r.type === 'class' && r.success ? { ...r, data: dedupeClasses(r.data) } : r);
-  return { userName: j.userName, results };
+  // `posted`: the Pi's shared first-posted times for the class rows it scraped
+  // (absent on an older Pi deploy).
+  return { userName: j.userName, results, posted: j.posted || null };
 }
 
 // Used to ping a sleeping (Replit) server awake before the first real request.
