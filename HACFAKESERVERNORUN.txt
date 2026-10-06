@@ -100,7 +100,12 @@ const fetchWithRetry = async (fetch, url, options = {}, retries = 3) => {
 
 // ====================
 // Shared Login Function
-// Returns: { fetch, userName }
+// Returns: { fetch, userName: null }
+// Stops at the 302: the session cookie is set by then. Following it to the home
+// page cost ~2 s per cold login on the Pi (a 76 KB page) and was only there to
+// read the student's display name, which the classwork landing page carries too
+// (getClassworkDom picks it up). /login, which must answer with the name, calls
+// fetchUserName explicitly.
 // ====================
 const loginHAC = async (username, password) => {
   const cookieJar = new CookieJar();
@@ -140,19 +145,24 @@ const loginHAC = async (username, password) => {
 
   if (loginRes.status !== 302) throw new Error("Login failed");
 
-  const homeUrl = new URL(loginRes.headers.get("location"), loginUrl).href;
-  const homePage = await fetch(homeUrl, {
-    headers: { "User-Agent": "Mozilla/5.0", Referer: loginUrl },
+  return { fetch, userName: null };
+};
+
+// The display name in HAC's top menu, present on every MVC page (home, Classwork).
+const nameFromDoc = (doc) =>
+  doc.querySelector(".sg-menu-element-identity span")?.textContent.trim() || null;
+
+// Fill in a session's display name from the home page (only /login needs it
+// before any scrape has run).
+const fetchUserName = async (session) => {
+  if (session.userName) return session.userName;
+  const homePage = await session.fetch("https://hac.friscoisd.org/HomeAccess/", {
+    headers: { "User-Agent": "Mozilla/5.0" },
   });
-  const homeHtml = await homePage.text();
-
-  const userNameElement = toDoc(homeHtml).querySelector(
-    ".sg-menu-element-identity span",
-  );
-
-  const userName = userNameElement?.textContent.trim() || "Unknow n User";
-
-  return { fetch, userName };
+  const doc = toDoc(await homePage.text());
+  assertLoggedIn(doc);
+  session.userName = nameFromDoc(doc) || "Unknow n User";
+  return session.userName;
 };
 
 // ====================
@@ -265,13 +275,14 @@ const showsQuarterAlready = (doc, quarterValue) =>
     ([id, want]) => selectedValue(doc, `plnMain_${id}`) === want,
   );
 
-const getClassworkDom = async (fetch, quarter = null) => {
+const getClassworkDom = async (fetch, quarter = null, cache = {}) => {
   const classworkUrl = "https://hac.friscoisd.org/HomeAccess/Classes/Classwork";
   const classworkPage = await fetch(classworkUrl, {
     headers: { "User-Agent": "Mozilla/5.0" },
   });
   const landing = toDoc(await classworkPage.text());
   assertLoggedIn(landing);
+  cache.userName = cache.userName || nameFromDoc(landing);
 
   const iframe = landing.querySelector("iframe");
   if (!iframe) throw new Error("Classwork iframe not found");
@@ -639,7 +650,7 @@ const scrapeIpr = async (fetch, date) => {
 const scrapeType = async (fetch, { type, quarter, date } = {}, cache = {}) => {
   switch (type) {
     case "class":
-      return parseClasswork(await getClassworkDom(fetch, quarter));
+      return parseClasswork(await getClassworkDom(fetch, quarter, cache));
     case "rank":
       return parseRank(await getTranscriptDoc(fetch, cache));
     case "transcript":
@@ -657,14 +668,18 @@ const scrapeType = async (fetch, { type, quarter, date } = {}, cache = {}) => {
   }
 };
 
+// A session learns its display name from the first classwork page it loads.
+const nameOf = (session, cache) => {
+  if (!session.userName && cache.userName) session.userName = cache.userName;
+  return session.userName;
+};
+
 // Run one scrape, transparently re-logging-in once if the warm session expired.
 const scrapeWithSession = async (username, password, request, cache, pool = "live") => {
   let session = await getSession(username, password, false, pool);
   try {
-    return {
-      data: await scrapeType(session.fetch, request, cache),
-      userName: session.userName,
-    };
+    const data = await scrapeType(session.fetch, request, cache);
+    return { data, userName: nameOf(session, cache) };
   } catch (err) {
     if (err instanceof SessionExpired) {
       // session went stale — drop the per-request page cache, re-login, retry once
@@ -673,10 +688,8 @@ const scrapeWithSession = async (username, password, request, cache, pool = "liv
       // (another worker in this batch may have just re-logged-in).
       const now = await getSession(username, password, false, pool);
       session = now !== session ? now : await getSession(username, password, true, pool);
-      return {
-        data: await scrapeType(session.fetch, request, cache),
-        userName: session.userName,
-      };
+      const data = await scrapeType(session.fetch, request, cache);
+      return { data, userName: nameOf(session, cache) };
     }
     throw err;
   }
@@ -763,6 +776,7 @@ app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   try {
     const session = await getSession(username, password, true); // always verify creds fresh
+    await fetchUserName(session);
     registerSnapshot(username, password); // keep this account's server snapshot warm
     console.log(
       `[${ctTime()}] LOGIN SUCCESS — name=${session.userName}  username=${username}`,
