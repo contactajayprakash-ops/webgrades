@@ -44,7 +44,8 @@ export default function Attendance() {
   //    with no switcher, and the cache-hit fast path would serve it forever.
   const dudRetried = useRef(new Set())
   useEffect(() => {
-    if (loading || error || !data) return
+    // An auto-advance's result is the fall-back's to judge (below), not ours.
+    if (loading || error || !data || advancePending.current) return
     const key = viewArg || 'default'
     if (dudRetried.current.has(key)) return
     const empty = !data.month && days.length === 0
@@ -60,14 +61,25 @@ export default function Attendance() {
   // month. Only fires from the default (viewArg === null), so it can't fight a
   // user paging back into the past; `advanceTried` keeps it to a single attempt so
   // the fall-back below can't bounce it back and forth.
-  const advanceTried = useRef(false)   // advance fires at most once per session
-  const advancePending = useRef(false) // an advance is in flight, awaiting its result
+  const advanceTried = useRef(false)   // advance fires at most once per mount
+  const advancePending = useRef(null)  // the default view's data while an advance is in flight
+  // The view arg that shows the current month: null (HAC's default) unless the
+  // auto-advance had to step past it. "Today" returns here, not to HAC's default.
+  const [todayArg, setTodayArg] = useState(null)
   useEffect(() => {
     if (viewArg !== null || loading || !nextNav || !parsed || advanceTried.current) return
+    // Judge only the first navigable default view. Returning to the default later
+    // (Today, Home) renders a frame of the previous month's data before the
+    // default's own arrives, which would otherwise look "behind" and re-advance.
+    advanceTried.current = true
     const now = new Date()
     const behind = parsed.year < now.getFullYear() ||
       (parsed.year === now.getFullYear() && parsed.monthIndex < now.getMonth())
-    if (behind) { advanceTried.current = true; advancePending.current = true; setViewArg(nextNav.arg) }
+    if (behind) {
+      advancePending.current = data
+      setTodayArg(nextNav.arg)
+      setViewArg(nextNav.arg)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewArg, loading, nextNav, data?.month])
 
@@ -76,13 +88,20 @@ export default function Attendance() {
   // no month label). If the auto-advance landed there, fall back to the default
   // view rather than stranding the page on "No attendance data." Scoped to the
   // pending advance only — once resolved it never fires again, so a user paging
-  // into an empty month is left alone.
+  // into an empty month is left alone. useHacData keeps the previous month's
+  // data on screen until the new one arrives, so wait for `data` to actually
+  // change (or an error) before judging the result.
   useEffect(() => {
-    if (!advancePending.current || loading || viewArg === null) return
-    advancePending.current = false
-    if (!error && days.length === 0) setViewArg(null)
+    const from = advancePending.current
+    if (!from || loading || viewArg === null) return
+    if (!error && data === from) return // still showing the default view's data
+    advancePending.current = null
+    if (!error && days.length === 0) { setTodayArg(null); setViewArg(null) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, error, viewArg, days.length])
+  }, [loading, error, viewArg, data])
+
+  const goToday = () => setViewArg(todayArg)
+  const offToday = viewArg !== todayArg
 
   // Month paging — shared by the buttons, a swipe (touch, with momentum), and
   // the arrow keys (desktop). Swipe LEFT → next month, RIGHT → prev (iOS-style).
@@ -129,7 +148,7 @@ export default function Attendance() {
   const onKeyDown = (e) => {
     if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev() }
     else if (e.key === 'ArrowRight') { e.preventDefault(); goNext() }
-    else if (e.key === 'Home' && viewArg) { e.preventDefault(); setViewArg(null) }
+    else if (e.key === 'Home' && offToday) { e.preventDefault(); goToday() }
   }
 
   return (
@@ -149,7 +168,7 @@ export default function Attendance() {
             disabled={!nextNav || loading} onClick={() => nextNav && setViewArg(nextNav.arg)}>
             <Icon.chevron width={16} height={16} />
           </button>
-          {viewArg && <button className="btn ghost sm" onClick={() => setViewArg(null)}>Today</button>}
+          {offToday && <button className="btn ghost sm" onClick={goToday}>Today</button>}
         </div>
       )}
 
