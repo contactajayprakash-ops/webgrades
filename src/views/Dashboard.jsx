@@ -347,7 +347,11 @@ function GpaCard() {
 function CurrentClasses({ recent }) {
   const { sync, syncAll, syncedAt } = useAuth()
   const navigate = useNavigate()
-  const updating = sync.phase === 'syncing'
+  // Only the current-grades wave counts as "updating"; the rest of the sync runs
+  // in the background. Refresh stays disabled until it all finishes so a second
+  // tap doesn't pile another batch onto the Pi.
+  const updating = sync.phase === 'syncing' && !sync.hotDone
+  const busy = sync.phase === 'syncing'
   const openClass = (courseName) => navigate(`/grades?c=${encodeURIComponent(courseKey(courseName))}`)
   // List (default) vs. tile view — remembered per device. The tile view is a 2.0
   // feature; the classic UI always uses the list.
@@ -383,7 +387,7 @@ function CurrentClasses({ recent }) {
               <button className={`vt-btn ${view === 'grid' ? 'active' : ''}`} onClick={() => pickView('grid')} aria-label="Tile view" title="Tiles"><Icon.grid width={16} height={16} /></button>
             </div>
           )}
-          <button className="btn ghost sm" onClick={() => syncAll({ full: true })} disabled={updating} title="Re-check HAC for new grades">
+          <button className="btn ghost sm" onClick={() => syncAll({ full: true })} disabled={busy} title="Re-check HAC for new grades">
             <Icon.refresh width={14} height={14} /> Refresh
           </button>
           <Link to="/grades" className="btn ghost sm">View all <Icon.chevron width={14} height={14} /></Link>
