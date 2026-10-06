@@ -36,21 +36,50 @@ export default function Attendance() {
 
   const parsed = parseMonth(data?.month)
 
+  // Self-heal dud caches: a healthy scrape ALWAYS has a month label and day
+  // cells (even a markless month returns its padded calendar), so a result with
+  // neither is a stale empty capture (from a backend stall, or the old
+  // same-month-postback bug) that the cache-hit fast path would otherwise serve
+  // forever. Force one network refresh per cache key to replace it.
+  const dudRetried = useRef(new Set())
+  useEffect(() => {
+    if (loading || error) return
+    const key = viewArg || 'default'
+    if (dudRetried.current.has(key)) return
+    if (data && !data.month && days.length === 0) { dudRetried.current.add(key); refresh() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, error, viewArg, data])
+
   // HAC's MonthlyView opens on a month behind today (it lands on the last month
   // with recorded attendance, not the calendar's current month), so the default
   // view shows e.g. September in October. When we're on that default view and the
   // shown month predates today, step forward once so the page opens on the current
   // month. Only fires from the default (viewArg === null), so it can't fight a
-  // user paging back into the past, and it self-disables once the live refresh
-  // lands the current month on its own.
+  // user paging back into the past; `advanceTried` keeps it to a single attempt so
+  // the fall-back below can't bounce it back and forth.
+  const advanceTried = useRef(false)   // advance fires at most once per session
+  const advancePending = useRef(false) // an advance is in flight, awaiting its result
   useEffect(() => {
-    if (viewArg !== null || loading || !nextNav || !parsed) return
+    if (viewArg !== null || loading || !nextNav || !parsed || advanceTried.current) return
     const now = new Date()
     const behind = parsed.year < now.getFullYear() ||
       (parsed.year === now.getFullYear() && parsed.monthIndex < now.getMonth())
-    if (behind) setViewArg(nextNav.arg)
+    if (behind) { advanceTried.current = true; advancePending.current = true; setViewArg(nextNav.arg) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewArg, loading, nextNav, data?.month])
+
+  // HAC won't page into a month it has no recorded attendance for yet: posting
+  // forward into the current month can come back with an empty calendar (no days,
+  // no month label). If the auto-advance landed there, fall back to the default
+  // view rather than stranding the page on "No attendance data." Scoped to the
+  // pending advance only — once resolved it never fires again, so a user paging
+  // into an empty month is left alone.
+  useEffect(() => {
+    if (!advancePending.current || loading || viewArg === null) return
+    advancePending.current = false
+    if (!error && days.length === 0) setViewArg(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, error, viewArg, days.length])
 
   // Month paging — shared by the buttons, a swipe (touch, with momentum), and
   // the arrow keys (desktop). Swipe LEFT → next month, RIGHT → prev (iOS-style).

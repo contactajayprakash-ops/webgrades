@@ -477,6 +477,11 @@ const scrapeAttendance = async (fetch, date) => {
     });
     document = new JSDOM(await postRes.text()).window.document;
     assertLoggedIn(document);
+    // Navigating to the month the page is ALREADY showing makes the ASP.NET
+    // calendar answer with a no-op page that parses empty. The default view we
+    // loaded first is that same month — return it instead of an empty result.
+    const second = parseAttendanceDoc(document);
+    return (second.month || second.days.length) ? second : first;
   }
   return parseAttendanceDoc(document);
 };

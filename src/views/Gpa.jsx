@@ -738,7 +738,7 @@ function GpaTable({ rows, result, whatIf, showYear, editableGrade, officialGpa, 
           <span className="glow" style={{ background: 'var(--green)' }} />
           <span className="label">Most Recent Transcripted 4.0</span>
           <span className="value">{ures.gpa.toFixed(2)}</span>
-          <span className="meta">4.0 scale · A=4 B=3 C=2</span>
+          <span className="meta">FISD 4.0 scale · A(90+)=4 · B(80+)=3 · C(70+)=2 · F(&lt;70)=0</span>
         </div>
         <div className="card stat">
           <span className="label">Total Credits</span>

@@ -1569,7 +1569,8 @@ html[data-theme="galaxy"] .card-menu,
 html[data-theme="galaxy"] .tab-bar,
 html[data-theme="galaxy"] .login-card,
 html[data-theme="galaxy"] .app-shell.v2 .impact {
-  position: relative;
+  /* NO position override here: overlays (.profile-pop, menus) must keep their
+     absolute/fixed positioning; plain cards are already position:relative. */
   background: rgba(255, 255, 255, 0.045);
   -webkit-backdrop-filter: blur(12px) saturate(1.7);
   backdrop-filter: blur(12px) saturate(1.7);
@@ -1794,7 +1795,7 @@ html[data-mega="tide"] .app-shell.v2 .v2-bg {
   filter: blur(26px); mix-blend-mode: screen;
   transition: transform .35s cubic-bezier(.2, .8, .2, 1); }
 /* aurora cards: cold ice glass with a polar-light top edge */
-html[data-mega="aurora"] .app-shell.v2 .card { position: relative;
+html[data-mega="aurora"] .app-shell.v2 .card {
   background: rgba(190, 240, 230, 0.045);
   box-shadow: var(--rim), 0 24px 50px -28px rgba(0, 40, 30, 0.6); }
 html[data-mega="aurora"] .app-shell.v2 .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
@@ -1865,7 +1866,7 @@ html[data-mega="neon"] .navpill .np-tab.active { color: #fff; }
   transition: transform .16s cubic-bezier(.2, .8, .2, 1); }
 @keyframes fxflicker { 50% { opacity: .82; } }
 /* ember cards: forged glass, heat along the bottom edge */
-html[data-mega="ember"] .app-shell.v2 .card { position: relative;
+html[data-mega="ember"] .app-shell.v2 .card {
   background: rgba(46, 18, 8, 0.38);
   box-shadow: var(--rim), inset 0 -1px 0 rgba(255, 106, 61, 0.35), 0 26px 52px -30px rgba(20, 4, 0, 0.85); }
 html[data-mega="ember"] .app-shell.v2 .card::before { content: ""; position: absolute; inset: auto 0 0 0; height: 36%;
