@@ -36,17 +36,20 @@ export default function Attendance() {
 
   const parsed = parseMonth(data?.month)
 
-  // Self-heal dud caches: a healthy scrape ALWAYS has a month label and day
-  // cells (even a markless month returns its padded calendar), so a result with
-  // neither is a stale empty capture (from a backend stall, or the old
-  // same-month-postback bug) that the cache-hit fast path would otherwise serve
-  // forever. Force one network refresh per cache key to replace it.
+  // Self-heal stale caches, once per cache key. Two shapes qualify:
+  //  - EMPTY (no month, no days): captured during a backend stall or the old
+  //    same-month-postback bug — a healthy scrape always has both.
+  //  - NAV-LESS (no prev/next args): scraped by a pre-month-nav backend. It
+  //    looks healthy, so it pins the view to a stale month (e.g. September)
+  //    with no switcher, and the cache-hit fast path would serve it forever.
   const dudRetried = useRef(new Set())
   useEffect(() => {
-    if (loading || error) return
+    if (loading || error || !data) return
     const key = viewArg || 'default'
     if (dudRetried.current.has(key)) return
-    if (data && !data.month && days.length === 0) { dudRetried.current.add(key); refresh() }
+    const empty = !data.month && days.length === 0
+    const navless = !data.prev && !data.next
+    if (empty || navless) { dudRetried.current.add(key); refresh() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, error, viewArg, data])
 
