@@ -5,7 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Dev-only: proxy same-origin /api -> the real backend, so the backend URL
-  // never ships to the browser. In production, vercel.json does the same rewrite.
+  // never ships to the browser. In production, CloudFront's /api/* behavior does the same.
   const env = loadEnv(mode, process.cwd(), '')
   const target = env.VITE_API_URL || 'http://localhost:3000'
   return {

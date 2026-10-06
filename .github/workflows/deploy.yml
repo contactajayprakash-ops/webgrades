@@ -10,11 +10,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Both deploys wait on the tests; neither ships if they fail.
+  test:
+    uses: ./.github/workflows/test.yml
+
   # ---------------------------------------------------------------
   # CloudFront: same-origin /api, proxied to the HAC backend by a
   # cache behavior. Uses the plain build.
   # ---------------------------------------------------------------
   cloudfront:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -92,6 +97,7 @@ jobs:
   # to deploy, the other still updates.
   # ---------------------------------------------------------------
   firebase:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
