@@ -4,9 +4,10 @@ import { ErrorBox } from './ui.jsx'
 import Glass from './Glass.jsx'
 
 export default function Login() {
-  // Short tab title for users. The full SEO title stays in index.html's <title>
-  // (what crawlers read from the served HTML); we only override the visible tab.
-  useEffect(() => { document.title = 'WebGrades - Login' }, [])
+  // Googlebot renders JS and indexes the *rendered* title, so the signed-out
+  // page keeps the full search title from index.html instead of a short tab
+  // label. Set it explicitly so signing out of the app restores it too.
+  useEffect(() => { document.title = 'WebGrades — Frisco ISD HAC Grades & Weighted GPA Calculator' }, [])
 
   const { login } = useAuth()
   const [username, setUsername] = useState('')
@@ -35,10 +36,11 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <Glass className="card login-card" config={{ material: 'thick', borderRadius: 20 }}>
-        <div className="brand">
+        {/* h1 so the rendered page has a real heading; .brand sets its look. */}
+        <h1 className="brand">
           <span className="logo">W</span>
           <span>Web<span className="accent">Grades</span></span>
-        </div>
+        </h1>
         <p className="tagline">A faster, cleaner window into HAC — with real GPA.</p>
 
         <form className="login-form" onSubmit={submit}>
@@ -82,6 +84,9 @@ export default function Login() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+        <p className="small faint" style={{ textAlign: 'center', marginTop: 18, position: 'relative', zIndex: 1 }}>
+          Free and unofficial for Frisco ISD Home Access Center. Not affiliated with Frisco ISD.
+        </p>
       </Glass>
     </div>
   )
