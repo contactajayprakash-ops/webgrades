@@ -2,9 +2,10 @@
 // number shown on the dashboard is computed the EXACT same way (single source
 // of truth — no risk of the two screens disagreeing).
 import { effectiveAverage } from './whatif.js'
-import { detectWeight, parseGrade, semesterGrade, liveSemesterAverage } from './gpa.js'
+import { liveWeight, parseGrade, semesterGrade, liveSemesterAverage } from './gpa.js'
 import { cleanCourseName, courseKey, transcriptPeriod, currentSchoolYear } from './courses.js'
 import { transcriptCourseName } from './courseCatalog.js'
+import { transcriptWeight } from './levels.js'
 
 export const PERIOD_QUARTERS = { s1: ['1', '2'], s2: ['3', '4'], year: ['1', '2', '3', '4'] }
 
@@ -68,7 +69,7 @@ export function buildLiveRows({ quarters, period, edits, weights, liveGrades = {
   const needed = PERIOD_QUARTERS[period]
   const ready = needed.every((q) => quarters[q] && !quarters[q].error)
   const anyError = needed.some((q) => quarters[q]?.error)
-  const weightForLive = (name) => weights[courseKey(name)] ?? detectWeight(name)
+  const weightForLive = (name) => weights[courseKey(name)] ?? liveWeight(name)
   const rows = semRows.map((r) => ({
     key: r.key, name: r.name,
     grade: liveGrades[r.key] !== undefined ? liveGrades[r.key] : r.autoGrade,
@@ -179,7 +180,7 @@ export function effectiveLinks(currentLive, prefs) {
 // 3.5). Splitting per semester also leaves the WEIGHTED 6.0 unchanged — its
 // formula is linear, so two 0.5-credit semesters equal one 1.0-credit year
 // average. Selection stays per COURSE (baseKey); the GPA is computed per row.
-export function buildCumRows({ currentLive, priorCourses, included, period, prefs, latestYear }) {
+export function buildCumRows({ currentLive, priorCourses, included, period, prefs, latestYear, levels }) {
   const rows = []
   const weights = prefs.cumulative.weights || {}
   const creditsOv = prefs.cumulative.credits || {}
@@ -205,13 +206,13 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
   for (const c of currentLive) {
     if (absorbed.has(c.key)) continue // this course is the S2 of a merged pair — its base emits it
     if (!included[c.key]) continue
-    const weight = weights[c.key] ?? detectWeight(c.rawName)
+    const weight = weights[c.key] ?? liveWeight(c.rawName)
     const L = links[c.key] ? byKey.get(links[c.key]) : null
 
     if (L) {
       // Merged year: S1 is THIS course, S2 is the linked continuation, which
       // keeps its own name, weight and grades (e.g. SS Research 5.0 → AP Psych 6.0).
-      const w2 = weights[L.key] ?? detectWeight(L.rawName)
+      const w2 = weights[L.key] ?? liveWeight(L.rawName)
       let cS1 = ['1', '2'].filter((n) => c.qEff?.[n] != null).length * 0.25
       let cS2 = ['3', '4'].filter((n) => L.qEff?.[n] != null).length * 0.25
       const ov = creditsOv[c.key] // a base credit override means the whole-year credit
@@ -235,7 +236,7 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
   // credit (or full credit for a one-semester course).
   for (const c of priorCourses) {
     if (!included[c.code]) continue
-    const weight = weights[c.code] ?? detectWeight(c.description, c.courseCode)
+    const weight = weights[c.code] ?? transcriptWeight(c.description, c.courseCode, c.year, levels)
     const s1 = parseGrade(c.sem1), s2 = parseGrade(c.sem2)
     const full = creditsOv[c.code] ?? parseGrade(c.credit) ?? 1
     const both = s1 != null && s2 != null

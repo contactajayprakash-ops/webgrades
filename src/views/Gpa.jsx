@@ -5,7 +5,7 @@ import { PageHead, Loading, ErrorBox, Empty, WhatIfBanner, NumField } from '../c
 import { Icon } from '../components/icons.jsx'
 import Tour from '../components/Tour.jsx'
 import {
-  detectWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
+  liveWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
   WEIGHT_OPTIONS, weightTagClass, weightLabel, letterGrade,
 } from '../lib/gpa.js'
 import { transcriptGrade, isNonGpaCourse } from '../lib/courses.js'
@@ -15,6 +15,7 @@ import {
 } from '../lib/gpaCompute.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { transcriptCourseName } from '../lib/courseCatalog.js'
+import { loadLevels, transcriptWeight } from '../lib/levels.js'
 import Glass from '../components/Glass.jsx'
 
 const TOUR_SEEN_KEY = 'wg_tour_cumulative_seen'
@@ -146,6 +147,10 @@ export default function Gpa() {
     [currentLiveRaw, currentGroup, latestYear, prefs.cumulative.quarters]
   )
   const priorCourses = useMemo(() => buildPriorCourses(priorGroups), [priorGroups])
+  // Course levels remembered from earlier years' live class names (Adv or not),
+  // so a transcript "BIO" uses the real level instead of the guess. Re-read on
+  // each data load — that's when AuthContext records the current year's.
+  const levels = useMemo(() => loadLevels(activeUsername), [activeUsername, dataVersion])
   // Effective mid-year course links (auto SS Research→AP Psych + any manual ones).
   const links = useMemo(() => effectiveLinks(currentLive, prefs), [currentLive, prefs])
 
@@ -153,8 +158,8 @@ export default function Gpa() {
   const cumIncluded = prefs.cumulative.included
 
   const cumRows = useMemo(
-    () => buildCumRows({ currentLive, priorCourses, included: cumIncluded, period, prefs, latestYear }),
-    [currentLive, priorCourses, cumIncluded, period, prefs, latestYear]
+    () => buildCumRows({ currentLive, priorCourses, included: cumIncluded, period, prefs, latestYear, levels }),
+    [currentLive, priorCourses, cumIncluded, period, prefs, latestYear, levels]
   )
 
   const cumResult = weightedGpa(cumRows)
@@ -198,7 +203,7 @@ export default function Gpa() {
         transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
         priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade}
         confirmed={cumConfirmed} included={cumIncluded}
-        weights={prefs.cumulative.weights}
+        weights={prefs.cumulative.weights} levels={levels}
         credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
         quarters={prefs.cumulative.quarters || {}}
         links={links} explicitLinks={prefs.cumulative.links || {}}
@@ -411,7 +416,7 @@ function MergedCard({ base, cont, on, weightBase, weightCont, cr, qBase, qCont, 
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, credits, grades, quarters = {}, links = {}, explicitLinks = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, levels, credits, grades, quarters = {}, links = {}, explicitLinks = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
   // Mid-year course links: `absorbed` are the S2 courses hidden inside a merged
@@ -580,12 +585,12 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
             <div className="faint small" style={{ padding: '14px 20px' }}>Loading current classes…</div>
           ) : currentLive.filter((c) => !absorbed.has(c.key)).map((c) => {
             const on = !!included[c.key]
-            const w = weights[c.key] ?? detectWeight(c.rawName)
+            const w = weights[c.key] ?? liveWeight(c.rawName)
             const L = links[c.key] ? byKey.get(links[c.key]) : null
             if (L) {
               return (
                 <MergedCard key={c.key} base={c} cont={L} on={on}
-                  weightBase={w} weightCont={weights[L.key] ?? detectWeight(L.rawName)}
+                  weightBase={w} weightCont={weights[L.key] ?? liveWeight(L.rawName)}
                   cr={credits[c.key] ?? 1} qBase={quarters[c.key] || {}} qCont={quarters[L.key] || {}}
                   isAuto={!explicitLinks[c.key]}
                   onToggle={onToggle} setWeight={setWeight} setCredit={setCredit} setQuarter={setQuarter} onDisconnect={unlinkCourse} />
@@ -656,7 +661,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                 const code = c.courseCode || `${g.year}-${c.description}`
                 const grade = transcriptGrade(c)
                 const numeric = grade != null
-                const w = weights[code] ?? detectWeight(c.description, c.courseCode)
+                const w = weights[code] ?? transcriptWeight(c.description, c.courseCode, g.year, levels)
                 const cr = credits[code] ?? (parseGrade(c.credit) ?? 0.5)
                 const on = !!included[code]
                 const lg = letterGrade(grade)

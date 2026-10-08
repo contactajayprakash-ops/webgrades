@@ -232,6 +232,17 @@ Three steps, and skipping either of the last two takes the app down:
    nothing.
 3. Update the CloudFront `hac-api` origin's `DomainName`.
 
+## Course levels (Adv vs on-level)
+
+The transcript drops the level ("BIO" for both Biology and Biology Adv), so
+`detectWeight` guesses 5.5 for courses most students take advanced. Live HAC
+classwork names DO carry it, so current-year courses use `liveWeight` and trust
+the name (no guessing). Each data load records every live course's level in
+`wg_levels_<username>` (`src/lib/levels.js`, keyed `<school year>|<subject>`),
+and `transcriptWeight` uses that instead of the guess once the year is on the
+transcript. Synced with settings but merged, never replaced, on pull; recording
+does not stamp settings as changed. Checked by `npm run test:levels`.
+
 ## Offline behavior — do not "add" a cache, one already exists
 
 The service worker (`vite-plugin-pwa`, `generateSW`) precaches the shell only. It
@@ -325,7 +336,7 @@ git push origin main     # deploys BOTH hosts via .github/workflows/deploy.yml
 The workflow has two independent jobs, `cloudfront` and `firebase`, each running
 its own build. Independent on purpose: if one host fails to deploy, the other
 still updates. Both `needs` a shared `test` job (`.github/workflows/test.yml`,
-also run on every PR) that runs `test:credkey` and `test:transcript`; if either
+also run on every PR) that runs `test:credkey`, `test:transcript` and `test:levels`; if any
 fails, neither host deploys.
 
 Repo secrets required: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`,

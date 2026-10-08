@@ -6,6 +6,7 @@ import { bgProfilesEnabled, pollIntervalMs, syncAllowedFor, snapshotReadEnabled 
 import { loadNotifyPrefs, eventMatches, showGradeNotification } from '../lib/notify.js'
 import { hasPushSubscription } from '../lib/push.js'
 import { mergeServerPosted } from '../lib/seen.js'
+import { rememberLevels } from '../lib/levels.js'
 
 const AuthContext = createContext(null)
 
@@ -250,6 +251,16 @@ export function AuthProvider({ children }) {
     if (!username) return
     try {
       localStorage.setItem(dataKeyFor(username), JSON.stringify(Object.fromEntries(cacheFor(username))))
+    } catch (_) {}
+    // Remember each current class's level ("Biology Adv" vs "Biology") so later
+    // transcripts, which drop it, can use the real level (lib/levels.js).
+    try {
+      const names = new Set()
+      for (const [k, v] of cacheFor(username)) {
+        if (!k.startsWith('class:')) continue
+        for (const c of v?.assignmentsData || []) if (c?.courseName) names.add(c.courseName)
+      }
+      rememberLevels(username, [...names])
     } catch (_) {}
   }, [cacheFor])
 

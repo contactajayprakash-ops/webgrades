@@ -6,6 +6,7 @@ import { weightedGpa, unweightedGpa, fmtGpa } from '../lib/gpa.js'
 import {
   buildLiveRows, buildCurrentLiveRaw, buildCurrentLive, buildPriorCourses, buildCumRows, splitTranscript,
 } from '../lib/gpaCompute.js'
+import { loadLevels } from '../lib/levels.js'
 
 // The GPA numbers a student can pin to the dashboard — each maps to one of the
 // "cards with a number" on the GPA page. `pick` pulls the value from the metrics
@@ -73,6 +74,7 @@ export function useGpaMetrics(period = 'year') {
     const priorCourses = buildPriorCourses(priorGroups)
     const cumRows = buildCumRows({
       currentLive, priorCourses, included: prefs.cumulative.included, period, prefs, latestYear,
+      levels: loadLevels(activeUsername),
     })
     const cumW = weightedGpa(cumRows)
     const cumU = unweightedGpa(cumRows)
@@ -84,5 +86,5 @@ export function useGpaMetrics(period = 'year') {
       live: { weighted: liveW.gpa, unweighted: liveU.gpa, credits: liveW.credits, count: live.rows.length },
       cumulative: { weighted: cumW.gpa, unweighted: cumU.gpa, credits: cumW.credits, count: cumRows.length },
     }
-  }, [quarters, transcript, period, edits, prefs])
+  }, [quarters, transcript, period, edits, prefs, activeUsername])
 }

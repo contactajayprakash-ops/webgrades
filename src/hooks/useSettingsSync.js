@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { applyTheme, loadTheme } from '../lib/theme.js'
 import { SETTINGS_META_KEY as META_KEY } from '../lib/settingsMeta.js'
 import { syncAllowedFor } from '../lib/syncPolicy.js'
+import { levelsKeyFor, mergeLevelsJson } from '../lib/levels.js'
 
 // Logical name -> localStorage key that syncs across a user's devices. `wg_theme`
 // is one JSON blob holding EVERY appearance/dashboard setting, so any future
@@ -15,6 +16,7 @@ const keyMap = (username) => ({
   gradeView: 'wg_grade_view',      // dashboard Current-grades list/tile view
   ui: 'wg_ui',                     // new 2.0 UI vs classic
   prefs: `wg_prefs_${username || '_anon'}`,
+  levels: levelsKeyFor(username),  // remembered Adv/on-level per course (merged, never replaced)
 })
 const localUpdatedAt = () => Number(localStorage.getItem(META_KEY)) || 0
 
@@ -32,7 +34,11 @@ function applyCloud(data, updatedAt, username) {
   const map = keyMap(username)
   for (const [logical, key] of Object.entries(map)) {
     if (data && data[logical] != null) {
-      try { localStorage.setItem(key, data[logical]) } catch (_) {}
+      // Levels only ever accumulate (one entry per course per year, recorded from
+      // live data), so union them — a cloud copy that predates this device's
+      // entries must not erase them.
+      const v = logical === 'levels' ? mergeLevelsJson(localStorage.getItem(key), data[logical]) : data[logical]
+      try { localStorage.setItem(key, v) } catch (_) {}
     }
   }
   try { localStorage.setItem(META_KEY, String(updatedAt || Date.now())) } catch (_) {}

@@ -6,7 +6,7 @@ import { PageHead, Loading, ErrorBox, Empty, GradeBadge, WhatIfBanner, Sparkline
 import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import {
-  parseGrade, detectWeight, weightedGpa, unweightedGpa, roundGrade, liveSemesterAverage,
+  parseGrade, liveWeight, weightedGpa, unweightedGpa, roundGrade, liveSemesterAverage,
   fmtGpa, weightLabel, weightTagClass,
 } from '../lib/gpa.js'
 import { cleanCourseName, courseKey, QUARTERS, SEMESTERS, semesterOfQuarter, scheduleWhitelist, filterPhantomClasses, guessCurrentQuarter } from '../lib/courses.js'
@@ -14,7 +14,7 @@ import { editKey, classRows, effectiveAverage } from '../lib/whatif.js'
 import { loadPrefs } from '../lib/prefs.js'
 import { loadSeen, saveSeen, snapshotOf, changedSince } from '../lib/seen.js'
 
-const weightFor = (courseName, prefs) => prefs.weights[courseKey(courseName)] ?? detectWeight(courseName)
+const weightFor = (courseName, prefs) => prefs.weights[courseKey(courseName)] ?? liveWeight(courseName)
 const EMPTY_SET = new Set()
 
 export default function Grades() {
@@ -424,7 +424,7 @@ function Overview({ byQuarter, loading, prefs, edits, query = '', sort = 'name',
         </thead>
         <tbody>
           {courses.map((c) => {
-            const w = prefs.weights[c.key] ?? detectWeight(c.raw)
+            const w = prefs.weights[c.key] ?? liveWeight(c.raw)
             const isNew = newSet.has(c.raw)
             return (
               <tr key={c.key} className={isNew ? 'row-new' : ''}>

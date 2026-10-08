@@ -27,7 +27,12 @@ export const WEIGHT_OPTIONS = [
 // abbreviated transcript forms ("APHUMGEOW", "APPRECAL"). In Frisco, AP/advanced
 // course codes also start with a letter (e.g. "A3360100"), which we use as a hint.
 // Order matters — PAP / Pre-AP must be tested before the bare "AP" rule.
-export function detectWeight(name, code) {
+//
+// `live: true` = a current-year HAC classwork name. Those DO carry the level
+// ("Biology Adv" vs "Biology"), so the name is trusted and none of the
+// "most students take it advanced" guesses below apply — those exist only for
+// terse transcript abbreviations ("BIO", "ALG1") that drop the level.
+export function detectWeight(name, code, { live = false } = {}) {
   const n = (name || '').toUpperCase();
   const nz = n.replace(/\s+/g, '');
   const c = (code || '').toUpperCase().trim();
@@ -39,8 +44,9 @@ export function detectWeight(name, code) {
   if (/\bGT\b|GIFTED/.test(n)) return WEIGHTS.ADV;
   if (/\bHON(?:ORS)?\b/.test(n)) return WEIGHTS.ADV;
   if (/\bADV(?:ANCED)?\b/.test(n)) return WEIGHTS.ADV;
+  if (live) return WEIGHTS.REG;
   // Algebra 1/2 and Geometry are the advanced (high-school-credit) track in
-  // Frisco — and taken in middle school they carry no "Adv" label -> default 5.5.
+  // Frisco — and on the transcript they carry no "Adv" label -> default 5.5.
   if (/\bALG(?:EBRA)?\.?\s*(?:1|I)\b/.test(n) || /^ALG(?:EBRA)?0?1\b/.test(nz)) return WEIGHTS.ADV;
   if (/\bALG(?:EBRA)?\.?\s*(?:2|II)\b/.test(n) || /^ALG(?:EBRA)?0?2\b/.test(nz)) return WEIGHTS.ADV;
   if (/\bGEOM(?:ETRY)?\b/.test(n) || /^GEOM/.test(nz)) return WEIGHTS.ADV;
@@ -56,6 +62,9 @@ export function detectWeight(name, code) {
 
   return WEIGHTS.REG;
 }
+
+// Weight for a current-year (live HAC classwork) course name — trusts the name.
+export const liveWeight = (name) => detectWeight(name, null, { live: true })
 
 export function weightLabel(w) {
   if (w >= 6) return 'AP';
