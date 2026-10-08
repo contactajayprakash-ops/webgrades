@@ -1152,6 +1152,13 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .tb-brand {
   display: flex; align-items: center; gap: 11px;
   font-weight: 700; font-size: var(--t-title3); letter-spacing: -0.022em; color: var(--text);
+  /* Frosted pill so scrolled class content is occluded, not bled through, by the
+     fixed transparent topbar (matches the floating navpill's glass). */
+  padding: 6px 17px 6px 6px; border-radius: var(--pill);
+  background: var(--mat-thin);
+  -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--rim), var(--drop);
 }
 .tb-brand .logo {
   width: 34px; height: 34px; border-radius: 10px;
