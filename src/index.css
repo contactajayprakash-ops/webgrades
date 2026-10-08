@@ -1154,7 +1154,9 @@ tr.aol-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   font-weight: 700; font-size: var(--t-title3); letter-spacing: -0.022em; color: var(--text);
   /* Frosted pill so scrolled class content is occluded, not bled through, by the
      fixed transparent topbar (matches the floating navpill's glass). */
-  padding: 6px 17px 6px 6px; border-radius: var(--pill);
+  /* Even inset: the logo sits as far from the left edge as the wordmark does
+     from the right. */
+  padding: 6px 16px; border-radius: var(--pill);
   background: var(--mat-thin);
   -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
   border: 0.5px solid var(--glass-border);

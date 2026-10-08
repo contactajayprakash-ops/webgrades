@@ -6,7 +6,7 @@ import { Icon } from './icons.jsx'
 import { OfflineBanner, Loading } from './ui.jsx'
 import ProfileSwitcher from './ProfileSwitcher.jsx'
 import PullToRefresh from './PullToRefresh.jsx'
-import Glass from './Glass.jsx'
+import Glass, { GlassLink } from './Glass.jsx'
 import GalaxyBg from './GalaxyBg.jsx'
 import ThemeFX from './ThemeFX.jsx'
 import { getNavSide, subscribeGlassMode } from '../lib/glassMode.js'
@@ -169,10 +169,10 @@ export default function Layout() {
       <ThemeFX />
       {/* Desktop floating Liquid Glass nav */}
       <header className="topbar">
-        <NavLink to="/" end className="tb-brand">
+        <GlassLink to="/" className="tb-brand" config={{ material: 'thin', borderRadius: 999 }}>
           <span className="logo">W</span>
           <span className="tb-word">Web<span className="accent">Grades</span></span>
-        </NavLink>
+        </GlassLink>
 
         <div className="topbar-right">
           <Glass as="nav" className={`navpill ${navSide ? 'navpill-side' : ''}`} config={{ material: 'thin', borderRadius: navSide ? 30 : 999 }} aria-label="Primary">
