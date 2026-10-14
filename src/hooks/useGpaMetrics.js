@@ -82,7 +82,7 @@ export function useGpaMetrics(period = 'year') {
     return {
       ready: live.ready,
       hasTranscript: Array.isArray(transcript),
-      cumConfirmed: !!prefs.cumulative.confirmed,
+      cumConfirmed: Object.keys(prefs.cumulative.included || {}).length > 0,
       live: { weighted: liveW.gpa, unweighted: liveU.gpa, credits: liveW.credits, count: live.rows.length },
       cumulative: { weighted: cumW.gpa, unweighted: cumU.gpa, credits: cumW.credits, count: cumRows.length },
     }

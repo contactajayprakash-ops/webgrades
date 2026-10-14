@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useWhatIf } from '../context/WhatIfContext.jsx'
-import { PageHead, Loading, ErrorBox, Empty, WhatIfBanner, NumField } from '../components/ui.jsx'
+import { PageHead, Loading, ErrorBox, WhatIfBanner, NumField } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
 import Tour from '../components/Tour.jsx'
 import {
-  liveWeight, parseGrade, classGpa, weightedGpa, unweightedGpa, fmtGpa,
+  liveWeight, parseGrade, weightedGpa, unweightedGpa, fmtGpa,
   WEIGHT_OPTIONS, weightTagClass, weightLabel, letterGrade,
 } from '../lib/gpa.js'
 import { transcriptGrade, isNonGpaCourse } from '../lib/courses.js'
@@ -50,9 +50,8 @@ const CUM_TOUR_STEPS = [
     body: 'Make sure the credit each course is worth is right — full-year classes = 1.0, single-semester ones (like Health) = 0.5.',
   },
   {
-    selector: '[data-tour="confirm"]',
-    title: 'Show your GPA',
-    body: 'When it all looks right, hit “Show cumulative GPA”. You can come back and edit any of this anytime.',
+    title: 'That’s it',
+    body: 'Your cumulative GPA updates live in the cards at the top as you tick courses and edit grades — there’s no “show” button to press. Come back and change any of this anytime.',
   },
 ]
 
@@ -154,7 +153,6 @@ export default function Gpa() {
   // Effective mid-year course links (auto SS Research→AP Psych + any manual ones).
   const links = useMemo(() => effectiveLinks(currentLive, prefs), [currentLive, prefs])
 
-  const cumConfirmed = prefs.cumulative.confirmed
   const cumIncluded = prefs.cumulative.included
 
   const cumRows = useMemo(
@@ -164,15 +162,15 @@ export default function Gpa() {
 
   const cumResult = weightedGpa(cumRows)
   const cumUnweighted = useMemo(() => unweightedGpa(cumRows), [cumRows])
-  // HAC's official cumulative weighted GPA (6.0), as last posted to the transcript.
-  const officialGpa = peekData('rank')?.gpa || null
+  // Once at least one course is ticked we show the live GPA; before that the
+  // headline cards invite the user to pick courses in the editor below.
+  const hasSelection = Object.keys(cumIncluded).length > 0
 
   // ---- handlers ----
   const toggleCum = (code) => updatePrefs((p) => {
     if (p.cumulative.included[code]) delete p.cumulative.included[code]
     else p.cumulative.included[code] = true
   })
-  const editSelection = () => updatePrefs((p) => { p.cumulative.confirmed = false })
 
   return (
     <>
@@ -180,21 +178,21 @@ export default function Gpa() {
 
       <WhatIfBanner />
 
-      {/* headline cards — weighted + 4.0 cumulative, both from your selections.
-          Tap the left card to change what's included. */}
+      {/* headline cards — weighted + 4.0 cumulative, both computed live from the
+          selections you make in the editor below. */}
       <div className="grid grid-2 mb-3">
         <HeadlineCard
-          active onClick={cumConfirmed ? editSelection : undefined} accent="var(--accent)"
+          active accent="var(--accent)"
           label="Cumulative GPA"
-          value={!cumConfirmed ? 'Set up' : (Array.isArray(transcript) ? fmtGpa(cumResult.gpa) : null)}
-          note={!cumConfirmed ? 'Pick which courses count →' : `Weighted · ${cumRows.length} courses · ${cumResult.credits.toFixed(1)} cr · tap to edit`}
+          value={!hasSelection ? 'Set up' : (Array.isArray(transcript) ? fmtGpa(cumResult.gpa) : null)}
+          note={!hasSelection ? 'Pick which courses count below →' : `Weighted · ${cumRows.length} courses · ${cumResult.credits.toFixed(1)} cr`}
           whatIf={whatIfCount > 0}
         />
         <HeadlineCard
           active accent="var(--accent-2)"
           label="4.0 Cumulative"
-          value={!cumConfirmed ? '—' : (Array.isArray(transcript) ? fmtGpa(cumUnweighted.gpa) : null)}
-          note={!cumConfirmed ? 'Unweighted, based on your selections' : `Unweighted 4.0 scale · ${cumUnweighted.credits.toFixed(1)} cr`}
+          value={!hasSelection ? '—' : (Array.isArray(transcript) ? fmtGpa(cumUnweighted.gpa) : null)}
+          note={!hasSelection ? 'Unweighted, based on your selections' : `Unweighted 4.0 scale · ${cumUnweighted.credits.toFixed(1)} cr`}
           whatIf={whatIfCount > 0}
         />
       </div>
@@ -202,14 +200,13 @@ export default function Gpa() {
       <CumulativeView
         transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
         priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade}
-        confirmed={cumConfirmed} included={cumIncluded}
+        included={cumIncluded}
         weights={prefs.cumulative.weights} levels={levels}
         credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
         quarters={prefs.cumulative.quarters || {}}
         links={links} explicitLinks={prefs.cumulative.links || {}}
         manual={prefs.cumulative.manual || []}
         saves={prefs.cumulative.saves || []}
-        rows={cumRows} result={cumResult} officialGpa={officialGpa}
         period={period}
         onToggle={toggleCum} updatePrefs={updatePrefs}
         onRetry={() => loadTranscript(true)}
@@ -416,7 +413,7 @@ function MergedCard({ base, cont, on, weightBase, weightCont, cr, qBase, qCont, 
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, confirmed, included, weights, levels, credits, grades, quarters = {}, links = {}, explicitLinks = {}, manual = [], saves = [], rows, result, officialGpa, onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, included, weights, levels, credits, grades, quarters = {}, links = {}, explicitLinks = {}, manual = [], saves = [], onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
   // Mid-year course links: `absorbed` are the S2 courses hidden inside a merged
@@ -424,13 +421,14 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   const byKey = new Map(currentLive.map((c) => [c.key, c]))
   const absorbed = new Set(Object.values(links))
 
-  // First-time walkthrough — auto-opens once the setup table is on screen.
+  // First-time walkthrough — auto-opens once the editor is on screen, but only
+  // for a fresh setup (nothing picked yet) and only until it's been seen once.
   useEffect(() => {
-    if (confirmed || !setupReady) return
+    if (!setupReady || Object.keys(included).length > 0) return
     let seen = false
     try { seen = !!localStorage.getItem(TOUR_SEEN_KEY) } catch (_) {}
     if (!seen) setTourOpen(true)
-  }, [confirmed, setupReady])
+  }, [setupReady, included])
 
   const closeTour = () => { setTourOpen(false); try { localStorage.setItem(TOUR_SEEN_KEY, '1') } catch (_) {} }
 
@@ -451,8 +449,6 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     }
   })
   const clearAll = () => updatePrefs((p) => { p.cumulative.included = {} })
-  const confirm = () => updatePrefs((p) => { p.cumulative.confirmed = true })
-  const editSelection = () => updatePrefs((p) => { p.cumulative.confirmed = false })
   const setWeight = (key, w) => updatePrefs((p) => { p.cumulative.weights[key] = Number(w) })
   // Merge a period that changes course mid-year: S1 stays `baseKey`, S2 becomes
   // `s2Key` (its own name/weight/grades). e.g. SS Research → AP Psychology.
@@ -548,262 +544,156 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
   }
   const savedMenu = <SavedConfigsMenu saves={saves} onSave={saveConfig} onLoad={loadConfig} onOverwrite={overwriteConfig} onDelete={deleteConfig} />
 
-  if (!confirmed) {
-    return (
-      <div className="card cum-setup">
-        {tourOpen && <Tour steps={CUM_TOUR_STEPS} onClose={closeTour} />}
-        <div style={{ padding: '18px 20px' }}>
-          <div className="row-between" style={{ gap: 12 }}>
-            <h3>Pick the courses that count toward your GPA</h3>
-            <button className="btn ghost sm" onClick={() => setTourOpen(true)}>Guide</button>
-          </div>
-          <p className="small faint mt-2" style={{ marginBottom: 0 }}>
-            Current-year classes come from live grades (real names, both semesters). Older courses come from your
-            transcript. Check the ones that count toward class rank — pass/fail courses (grade “P”) can’t be averaged.
-            Weights and the credit each course is worth (1.0 full-year, 0.5 single-semester) are editable here and remembered.
-          </p>
-          <div className="flex mt-3" style={{ flexWrap: 'wrap' }}>
-            <button className="btn ghost sm" data-tour="select-all" onClick={selectAllNumeric}>Select all graded</button>
-            <button className="btn ghost sm" onClick={clearAll}>Clear</button>
-            {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
-            {savedMenu}
-            <span className="small faint">{selectedCount} selected</span>
-          </div>
+  return (
+    <div className="card cum-setup">
+      {tourOpen && <Tour steps={CUM_TOUR_STEPS} onClose={closeTour} />}
+      <div style={{ padding: '18px 20px' }}>
+        <div className="row-between" style={{ gap: 12 }}>
+          <h3>Pick the courses that count toward your GPA</h3>
+          <button className="btn ghost sm" onClick={() => setTourOpen(true)}>Guide</button>
         </div>
-
-        {/* current year — from live classwork */}
-        <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
-          {currentGroup ? `${latestYear} · Grade ${currentGroup.grade} · ${currentGroup.building}` : `Current year${currentGrade ? ` · Grade ${currentGrade}` : ''}`} · from live grades
-        </div>
-        <p className="small faint" style={{ padding: '2px 20px 6px' }}>
-          Each course averages your four quarters (HAC-official rounding). Finished
-          quarters auto-fill from your real grades — type over any to predict, or fill
-          future quarters. The number on the right is what feeds your GPA.
+        <p className="small faint mt-2" style={{ marginBottom: 0 }}>
+          Current-year classes come from live grades (real names, both semesters). Older courses come from your
+          transcript. Check the ones that count toward class rank — pass/fail courses (grade “P”) can’t be averaged.
+          Weights and the credit each course is worth (1.0 full-year, 0.5 single-semester) are editable here and remembered.
         </p>
-        <div className="cum-courses" data-tour="quarters">
-          {currentLive.length === 0 ? (
-            <div className="faint small" style={{ padding: '14px 20px' }}>Loading current classes…</div>
-          ) : currentLive.filter((c) => !absorbed.has(c.key)).map((c) => {
-            const on = !!included[c.key]
-            const w = weights[c.key] ?? liveWeight(c.rawName)
-            const L = links[c.key] ? byKey.get(links[c.key]) : null
-            if (L) {
-              return (
-                <MergedCard key={c.key} base={c} cont={L} on={on}
-                  weightBase={w} weightCont={weights[L.key] ?? liveWeight(L.rawName)}
-                  cr={credits[c.key] ?? 1} qBase={quarters[c.key] || {}} qCont={quarters[L.key] || {}}
-                  isAuto={!explicitLinks[c.key]}
-                  onToggle={onToggle} setWeight={setWeight} setCredit={setCredit} setQuarter={setQuarter} onDisconnect={unlinkCourse} />
-              )
-            }
-            const candidates = currentLive
-              .filter((x) => x.key !== c.key && !absorbed.has(x.key) && !links[x.key])
-              .map((x) => ({ key: x.key, name: x.name }))
-            return (
-              <SingleCard key={c.key} c={c} on={on} w={w}
-                cr={credits[c.key] ?? c.credit} qov={quarters[c.key] || {}} period={period} candidates={candidates}
-                onToggle={onToggle} setWeight={setWeight} setCredit={setCredit} setQuarter={setQuarter} onLink={linkCourse} />
-            )
-          })}
+        <div className="flex mt-3" style={{ flexWrap: 'wrap' }}>
+          <button className="btn ghost sm" data-tour="select-all" onClick={selectAllNumeric}>Select all graded</button>
+          <button className="btn ghost sm" onClick={clearAll}>Clear</button>
+          {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
+          {savedMenu}
+          <button className="btn ghost sm" onClick={onRetry}><Icon.refresh width={15} height={15} /> Refresh</button>
+          <span className="small faint">{selectedCount} selected</span>
         </div>
+      </div>
 
-        {/* manually-added courses — summer / not-yet-transcripted outliers */}
-        <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
-          Added courses · summer / not yet on your transcript
-        </div>
-        <div className="cum-courses">
-          {manual.map((m) => {
-            const key = `manual:${m.id}`
-            const on = !!included[key]
+      {/* current year — from live classwork */}
+      <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
+        {currentGroup ? `${latestYear} · Grade ${currentGroup.grade} · ${currentGroup.building}` : `Current year${currentGrade ? ` · Grade ${currentGrade}` : ''}`} · from live grades
+      </div>
+      <p className="small faint" style={{ padding: '2px 20px 6px' }}>
+        Each course averages your four quarters (HAC-official rounding). Finished
+        quarters auto-fill from your real grades — type over any to predict, or fill
+        future quarters. The number on the right is what feeds your GPA.
+      </p>
+      <div className="cum-courses" data-tour="quarters">
+        {currentLive.length === 0 ? (
+          <div className="faint small" style={{ padding: '14px 20px' }}>Loading current classes…</div>
+        ) : currentLive.filter((c) => !absorbed.has(c.key)).map((c) => {
+          const on = !!included[c.key]
+          const w = weights[c.key] ?? liveWeight(c.rawName)
+          const L = links[c.key] ? byKey.get(links[c.key]) : null
+          if (L) {
             return (
-              <div key={m.id} className={`cum-course ${on ? '' : 'off'}`}>
-                <div className="cum-course-head">
-                  <label className="cum-check">
-                    <input type="checkbox" checked={on} onChange={() => onToggle(key)} />
-                    <input className="input mini cum-name-input" placeholder="Course name"
-                      value={m.name || ''} onChange={(e) => setManualName(m.id, e.target.value)} />
-                  </label>
-                  <div className="cum-course-right">
-                    <WeightSelect value={weights[key] ?? 5} onChange={(e) => setWeight(key, e.target.value)} />
-                    <button className="cum-remove" onClick={() => removeManual(m.id)} title="Remove course">
-                      <Icon.trash width={15} height={15} />
-                    </button>
-                  </div>
-                </div>
-                <div className="cum-quarters cum-simple">
-                  <label className="cum-q">
-                    <span className="cum-q-label">Grade</span>
-                    <NumField placeholder="grade"
-                      value={grades[key] ?? null} onChange={(v) => setGrade(key, v)} />
-                  </label>
-                  <label className="cum-q cum-cr">
-                    <span className="cum-q-label">Cr</span>
-                    <NumField title="Credit" value={credits[key] ?? 1} onChange={(v) => setCredit(key, v)} />
-                  </label>
+              <MergedCard key={c.key} base={c} cont={L} on={on}
+                weightBase={w} weightCont={weights[L.key] ?? liveWeight(L.rawName)}
+                cr={credits[c.key] ?? 1} qBase={quarters[c.key] || {}} qCont={quarters[L.key] || {}}
+                isAuto={!explicitLinks[c.key]}
+                onToggle={onToggle} setWeight={setWeight} setCredit={setCredit} setQuarter={setQuarter} onDisconnect={unlinkCourse} />
+            )
+          }
+          const candidates = currentLive
+            .filter((x) => x.key !== c.key && !absorbed.has(x.key) && !links[x.key])
+            .map((x) => ({ key: x.key, name: x.name }))
+          return (
+            <SingleCard key={c.key} c={c} on={on} w={w}
+              cr={credits[c.key] ?? c.credit} qov={quarters[c.key] || {}} period={period} candidates={candidates}
+              onToggle={onToggle} setWeight={setWeight} setCredit={setCredit} setQuarter={setQuarter} onLink={linkCourse} />
+          )
+        })}
+      </div>
+
+      {/* manually-added courses — summer / not-yet-transcripted outliers */}
+      <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
+        Added courses · summer / not yet on your transcript
+      </div>
+      <div className="cum-courses">
+        {manual.map((m) => {
+          const key = `manual:${m.id}`
+          const on = !!included[key]
+          return (
+            <div key={m.id} className={`cum-course ${on ? '' : 'off'}`}>
+              <div className="cum-course-head">
+                <label className="cum-check">
+                  <input type="checkbox" checked={on} onChange={() => onToggle(key)} />
+                  <input className="input mini cum-name-input" placeholder="Course name"
+                    value={m.name || ''} onChange={(e) => setManualName(m.id, e.target.value)} />
+                </label>
+                <div className="cum-course-right">
+                  <WeightSelect value={weights[key] ?? 5} onChange={(e) => setWeight(key, e.target.value)} />
+                  <button className="cum-remove" onClick={() => removeManual(m.id)} title="Remove course">
+                    <Icon.trash width={15} height={15} />
+                  </button>
                 </div>
               </div>
-            )
-          })}
-          <div style={{ padding: '12px 20px' }}>
-            <button className="btn ghost sm" onClick={addManual}><Icon.plus width={14} height={14} /> Add course</button>
-            <span className="small faint" style={{ marginLeft: 10 }}>For summer or missing classes not yet on your transcript — not for a whole missing year.</span>
-          </div>
-        </div>
-
-        {/* prior years — from transcript */}
-        {priorGroups.map((g, gi) => (
-          <div key={gi}>
-            <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
-              {g.year} · Grade {g.grade} · {g.building}
+              <div className="cum-quarters cum-simple">
+                <label className="cum-q">
+                  <span className="cum-q-label">Grade</span>
+                  <NumField placeholder="grade"
+                    value={grades[key] ?? null} onChange={(v) => setGrade(key, v)} />
+                </label>
+                <label className="cum-q cum-cr">
+                  <span className="cum-q-label">Cr</span>
+                  <NumField title="Credit" value={credits[key] ?? 1} onChange={(v) => setCredit(key, v)} />
+                </label>
+              </div>
             </div>
-            <div className="cum-courses">
-              {(g.courses || []).map((c, ci) => {
-                const code = c.courseCode || `${g.year}-${c.description}`
-                const grade = transcriptGrade(c)
-                const numeric = grade != null
-                const w = weights[code] ?? transcriptWeight(c.description, c.courseCode, g.year, levels)
-                const cr = credits[code] ?? (parseGrade(c.credit) ?? 0.5)
-                const on = !!included[code]
-                const lg = letterGrade(grade)
-                return (
-                  <div key={ci} className={`cum-course ${numeric && on ? '' : 'off'}`}>
-                    <div className="cum-course-head">
-                      <label className="cum-check">
-                        <input type="checkbox" disabled={!numeric} checked={on} onChange={() => onToggle(code)} />
-                        <span className="cum-course-name">{transcriptCourseName(c.description)}</span>
-                      </label>
-                      <div className="cum-course-right">
-                        {numeric && <WeightSelect value={w} onChange={(e) => setWeight(code, e.target.value)} />}
-                        <span className={`cum-year ${numeric ? lg.cls : ''}`} title="Transcript year grade">{numeric ? grade : (c.sem1 || '—')}</span>
-                      </div>
-                    </div>
-                    {numeric && (
-                      <div className="cum-quarters cum-simple">
-                        <div className="cum-q">
-                          <span className="cum-q-label">S1 / S2</span>
-                          <span className="cum-static">{[c.sem1, c.sem2].filter((v) => v).join(' / ') || '—'}</span>
-                        </div>
-                        <label className="cum-q cum-cr">
-                          <span className="cum-q-label">Cr</span>
-                          <NumField title="Credit" value={cr} onChange={(v) => setCredit(code, v)} />
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+          )
+        })}
+        <div style={{ padding: '12px 20px' }}>
+          <button className="btn ghost sm" onClick={addManual}><Icon.plus width={14} height={14} /> Add course</button>
+          <span className="small faint" style={{ marginLeft: 10 }}>For summer or missing classes not yet on your transcript — not for a whole missing year.</span>
+        </div>
+      </div>
+
+      {/* prior years — from transcript */}
+      {priorGroups.map((g, gi) => (
+        <div key={gi}>
+          <div className="nav-section" style={{ padding: '8px 20px', textTransform: 'none', fontSize: 12.5 }}>
+            {g.year} · Grade {g.grade} · {g.building}
           </div>
-        ))}
-
-        <div className="row-between" style={{ padding: '16px 20px' }}>
-          <span className="small faint">Weights &amp; credits are editable (last column) — change any before showing.</span>
-          <button className="btn" data-tour="confirm" disabled={!selectedCount} onClick={confirm}>Show cumulative GPA ({selectedCount})</button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <>
-      <div className="row-between mb-3" style={{ flexWrap: 'wrap', gap: 10 }}>
-        <span className="small faint">Full-year cumulative · {rows.length} semester grades</span>
-        <div className="flex">
-          {savedMenu}
-          {hasOverrides && <button className="btn ghost sm" onClick={resetOverrides}>Reset edits</button>}
-          <button className="btn ghost sm" onClick={editSelection}>Edit selection</button>
-          <button className="btn ghost sm" onClick={onRetry}><Icon.refresh width={15} height={15} /> Refresh</button>
-        </div>
-      </div>
-      {rows.length === 0
-        ? <Empty>None of your selected courses have a grade for this period. Try Full Year.</Empty>
-        : <GpaTable
-            rows={rows} result={result} showYear semesterView officialGpa={officialGpa}
-            onWeight={(k, w) => updatePrefs((p) => { p.cumulative.weights[k] = Number(w) })}
-            onInclude={(k) => onToggle(k)}
-          />}
-    </>
-  )
-}
-
-// ---- shared table ----
-function GpaTable({ rows, result, whatIf, showYear, editableGrade, officialGpa, onGrade, onWeight, onCredit, onInclude }) {
-  const res = result || weightedGpa(rows)
-  const ures = unweightedGpa(rows)
-  return (
-    <div className="grid" style={{ gridTemplateColumns: '1fr', gap: 18 }}>
-      <div className="grid grid-3">
-        <div className="card stat">
-          <span className="glow" style={{ background: 'var(--accent)' }} />
-          <span className="label">Most Recent Transcripted 6.0</span>
-          <span className="value">{officialGpa || '—'}</span>
-          <span className="meta">Official · HAC 6.0 scale</span>
-        </div>
-        <div className="card stat">
-          <span className="glow" style={{ background: 'var(--green)' }} />
-          <span className="label">Most Recent Transcripted 4.0</span>
-          <span className="value">{ures.gpa.toFixed(2)}</span>
-          <span className="meta">FISD 4.0 scale · A(90+)=4 · B(80+)=3 · C(70+)=2 · F(&lt;70)=0</span>
-        </div>
-        <div className="card stat">
-          <span className="label">Total Credits</span>
-          <span className="value">{res.credits.toFixed(1)}</span>
-          <span className="meta">{res.points.toFixed(2)} weighted pts</span>
-        </div>
-      </div>
-      <div className="card" style={{ overflowX: 'auto' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th style={{ width: 30 }}></th>
-              <th>Class</th>
-              {showYear && <th>Year</th>}
-              <th className="num">Grade</th>
-              <th>Weight</th>
-              <th className="num">Credit</th>
-              <th className="num">Class GPA</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const cg = r.include ? classGpa(r.grade, r.weight, r.credit) : null
-              const edited = r.autoGrade != null && r.grade != null && Math.abs(r.grade - r.autoGrade) > 0.001
+          <div className="cum-courses">
+            {(g.courses || []).map((c, ci) => {
+              const code = c.courseCode || `${g.year}-${c.description}`
+              const grade = transcriptGrade(c)
+              const numeric = grade != null
+              const w = weights[code] ?? transcriptWeight(c.description, c.courseCode, g.year, levels)
+              const cr = credits[code] ?? (parseGrade(c.credit) ?? 0.5)
+              const on = !!included[code]
+              const lg = letterGrade(grade)
               return (
-                <tr key={r.key} className={r.include ? '' : 'dim'}>
-                  <td>
-                    <input type="checkbox" checked={r.include} onChange={(e) => onInclude?.(r.baseKey || r.key, e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                  </td>
-                  <td>{r.name}{edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow-text)' }}>edited</span>}</td>
-                  {showYear && <td className="faint small">{r.year}</td>}
-                  <td className="num">
-                    {editableGrade
-                      ? <NumField value={r.grade ?? null} onChange={(v) => onGrade?.(r.key, v)} />
-                      : <span className="mono">{r.grade ?? '—'}</span>}
-                  </td>
-                  <td>
-                    <select className={`select mini ${weightTagClass(r.weight)}`} value={r.weight} onChange={(e) => onWeight?.(r.baseKey || r.key, e.target.value, r)}>
-                      {WEIGHT_OPTIONS.map((w) => <option key={w.value} value={w.value}>{w.value} · {weightLabel(w.value)}</option>)}
-                    </select>
-                  </td>
-                  <td className="num">
-                    {onCredit
-                      ? <NumField value={r.credit ?? null} onChange={(v) => onCredit(r.key, v)} />
-                      : <span className="mono faint">{r.credit}</span>}
-                  </td>
-                  <td className="num mono">{cg == null ? '—' : cg.toFixed(3)}</td>
-                </tr>
+                <div key={ci} className={`cum-course ${numeric && on ? '' : 'off'}`}>
+                  <div className="cum-course-head">
+                    <label className="cum-check">
+                      <input type="checkbox" disabled={!numeric} checked={on} onChange={() => onToggle(code)} />
+                      <span className="cum-course-name">{transcriptCourseName(c.description)}</span>
+                    </label>
+                    <div className="cum-course-right">
+                      {numeric && <WeightSelect value={w} onChange={(e) => setWeight(code, e.target.value)} />}
+                      <span className={`cum-year ${numeric ? lg.cls : ''}`} title="Transcript year grade">{numeric ? grade : (c.sem1 || '—')}</span>
+                    </div>
+                  </div>
+                  {numeric && (
+                    <div className="cum-quarters cum-simple">
+                      <div className="cum-q">
+                        <span className="cum-q-label">S1 / S2</span>
+                        <span className="cum-static">{[c.sem1, c.sem2].filter((v) => v).join(' / ') || '—'}</span>
+                      </div>
+                      <label className="cum-q cum-cr">
+                        <span className="cum-q-label">Cr</span>
+                        <NumField title="Credit" value={cr} onChange={(v) => setCredit(code, v)} />
+                      </label>
+                    </div>
+                  )}
+                </div>
               )
             })}
-            <tr>
-              <td colSpan={showYear ? 6 : 5} className="faint small" style={{ fontWeight: 700 }}>Weighted GPA</td>
-              <td className="num mono" style={{ fontWeight: 700 }}>{fmtGpa(res.gpa)}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div className="small faint" style={{ padding: '14px 20px' }}>
-          Formula: <span className="mono">(weight − (100 − grade) × 0.1) × credit</span>, summed ÷ total credits = {res.points.toFixed(2)} ÷ {res.credits.toFixed(1)}.
+          </div>
         </div>
+      ))}
+
+      <div className="row-between" style={{ padding: '16px 20px' }}>
+        <span className="small faint">Weights &amp; credits are editable — your cumulative GPA updates live in the cards up top as you change these.</span>
       </div>
     </div>
   )
