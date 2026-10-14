@@ -169,7 +169,7 @@ export default function Layout() {
       <ThemeFX />
       {/* Desktop floating Liquid Glass nav */}
       <header className="topbar">
-        <GlassLink to="/" className="tb-brand" config={{ material: 'thin', borderRadius: 999 }}>
+        <GlassLink to="/" className="tb-brand" config={{ material: 'thin', borderRadius: navSide ? 30 : 999 }}>
           <span className="logo">W</span>
           <span className="tb-word">Web<span className="accent">Grades</span></span>
         </GlassLink>

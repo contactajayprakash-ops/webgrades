@@ -1660,7 +1660,12 @@ html[data-theme="galaxy"] .navpill .profile-pop {
     flex-direction: column; align-items: stretch; justify-content: flex-start;
     gap: 20px; padding: 24px 18px;
   }
-  html[data-nav="side"] .app-shell.v2 .tb-brand { padding: 0 8px; }
+  /* Brand pill spans the rail's width (same left/right edges as the nav panel
+     below), is as tall as a nav row, and centres the logo on the nav icon
+     column (8px rail padding + 18px row padding + 10px half-icon = 36px). */
+  html[data-nav="side"] .app-shell.v2 .tb-brand {
+    padding: 8px 19px; border-radius: 30px; flex: none;
+  }
   html[data-nav="side"] .app-shell.v2 .topbar-right {
     flex-direction: column; align-items: stretch; gap: 16px; flex: 1; min-height: 0;
   }
