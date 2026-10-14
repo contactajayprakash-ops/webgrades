@@ -165,6 +165,9 @@ export default function Gpa() {
   // Once at least one course is ticked we show the live GPA; before that the
   // headline cards invite the user to pick courses in the editor below.
   const hasSelection = Object.keys(cumIncluded).length > 0
+  // HAC's official cumulative weighted GPA (6.0), as last posted to the
+  // transcript — shown as a reference line under the live headline cards.
+  const officialGpa = peekData('rank')?.gpa || null
 
   // ---- handlers ----
   const toggleCum = (code) => updatePrefs((p) => {
@@ -196,6 +199,13 @@ export default function Gpa() {
           whatIf={whatIfCount > 0}
         />
       </div>
+
+      {officialGpa && (
+        <p className="small faint mb-3" style={{ margin: '-4px 2px 12px' }}>
+          Most recent transcripted 6.0: <strong style={{ color: 'var(--text)' }}>{officialGpa}</strong>
+          {' · '}HAC’s official posted GPA
+        </p>
+      )}
 
       <CumulativeView
         transcript={transcript} currentLive={currentLive} currentGroup={currentGroup}
