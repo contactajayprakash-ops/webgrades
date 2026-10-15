@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { PageHead } from '../components/ui.jsx'
 import { Icon } from '../components/icons.jsx'
@@ -27,6 +27,19 @@ async function forceUpdate() {
 export default function Settings() {
   const { session, clearCache, logout } = useAuth()
   const [theme, setTheme] = useState(loadTheme)
+
+  // Keep the form in sync with the active profile. On a profile switch the
+  // component stays mounted (no reload), and useSettingsSync pulls the new
+  // profile's appearance into wg_theme asynchronously — re-read it so the
+  // controls show the current profile's values instead of the one we left.
+  // Without this, the next edit merges onto the previous profile's state and
+  // writes it back over the new profile.
+  useEffect(() => {
+    const resync = () => setTheme(loadTheme())
+    resync() // adopt whatever's in storage right now for this profile
+    window.addEventListener('wg-settings-applied', resync)
+    return () => window.removeEventListener('wg-settings-applied', resync)
+  }, [session?.username])
 
   // every change persists + applies to the live document immediately
   const update = (patch) => {

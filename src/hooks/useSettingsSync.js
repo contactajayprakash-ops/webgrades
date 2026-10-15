@@ -43,6 +43,11 @@ function applyCloud(data, updatedAt, username) {
   }
   try { localStorage.setItem(META_KEY, String(updatedAt || Date.now())) } catch (_) {}
   applyTheme(loadTheme()) // apply the (possibly new) appearance live
+  // Tell any open Settings form to re-read from storage so it reflects the
+  // profile we just adopted — otherwise it keeps the prior profile's values and
+  // the next edit writes them back over this one. Distinct from
+  // 'wg-settings-changed' (which signals a PUSH); this is a pulled/applied state.
+  try { window.dispatchEvent(new Event('wg-settings-applied')) } catch (_) {}
 }
 
 // Keep appearance/settings + GPA setup in sync across a user's devices
