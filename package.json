@@ -13,7 +13,8 @@
     "test:credkey": "node scripts/test-credkey-parity.mjs",
     "test:transcript": "node scripts/test-transcript-split.mjs",
     "test:posted": "node scripts/test-posted-sync.mjs",
-    "test:levels": "node scripts/test-levels.mjs"
+    "test:levels": "node scripts/test-levels.mjs",
+    "test:boot": "node scripts/test-boot-parity.mjs"
   },
   "dependencies": {
     "firebase": "^12.18.0",

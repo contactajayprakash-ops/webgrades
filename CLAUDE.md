@@ -112,6 +112,16 @@ Speed rules for the scrape path (each cost real seconds on a Pi 3):
   the requested quarter with default filters (the hot wave's usual case).
 - **The client queue is per account** (`serialize` in `hac.js`), so a profile
   switch never waits behind the previous account's batch.
+- **A cold live session takes over the poller's warm one** (`getSession`, pool
+  `live` ← `snap`): active students are hot-polled every 15 min, so the login
+  round trips (0.4–2 s on the Pi's link) are usually already paid. The jar
+  *moves* (the snap entry is deleted; the poller logs in afresh next time) so the
+  two pools never share a HAC session, and it is never taken while a poller
+  scrape is in flight (`snapBusy`).
+- **JSON responses are gzipped** (middleware at the top of `server.mjs`, ≥1 KB,
+  level 6). The Pi's Wi-Fi is ~0.4 Mbit/s down / ~2–3 Mbit/s up; a GPA-wave
+  response is >100 KB raw and a few KB gzipped. CloudFront forwards
+  `Accept-Encoding` and passes `Content-Encoding` through.
 
 `scripts/hac-bench.mjs` times every HAC round-trip and parse on the Pi; run it
 there before and after touching the scrape path.
@@ -283,6 +293,15 @@ fixed the *boot* path. The current cold open, in order:
    the prefletched account's data), else falls through to its own fetch. Preceded
    by a `preconnect` to `firestore.googleapis.com`. The inline hash is a **third**
    copy of the credKey string — `scripts/test-credkey-parity.mjs` covers it.
+   **Live preflight** — a second `<head>` IIFE (`window.__wgBatch`) POSTs the hot
+   wave (`class` for the guessed current quarter) to `/batch` at the same moment,
+   so the Pi's 2–4 s of HAC work overlaps the bundle download, parse and mount.
+   `fetchBatch` in `hac.js` adopts it (through the account's serial queue) only for
+   the same account, same password and exactly that one request; anything else,
+   or a failed preflight, falls through to the normal request. The inline quarter
+   guess is a copy of `guessCurrentQuarter` — `npm run test:boot` keeps them equal.
+   `%VITE_API_BASE%` in the snippet is Vite's HTML env replacement (left literal
+   on the CloudFront build, where the snippet falls back to `/api`).
 4. **Boot skeleton** painted from the HTML itself (inline `<style>` + markup in
    `#root`), theme-aware via `data-theme`. Cleared synchronously for signed-out.
    React replaces `#root` on mount. Shape on screen ~0.5 s vs blank-until-React.

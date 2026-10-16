@@ -47,6 +47,27 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Gzip JSON responses. The Pi sits behind a ~1 Mbit/s Wi-Fi link, so the
+// response is paid for byte by byte on the way OUT too: a hot-wave gradebook is
+// tens of KB of JSON and the GPA wave (transcript + 3 quarters) over 100 KB.
+// Gzip takes them to a few KB each — one TCP window instead of several round
+// trips of slow start. Browsers decode transparently; CloudFront forwards
+// Accept-Encoding to the origin and passes Content-Encoding back unchanged.
+// Tiny bodies (/ping, errors) go out as-is.
+const GZIP_MIN_BYTES = 1024;
+app.use((req, res, next) => {
+  res.json = (body) => {
+    const str = JSON.stringify(body);
+    const gzOk = /\bgzip\b/.test(String(req.headers["accept-encoding"] || ""));
+    res.type("application/json");
+    if (!gzOk || Buffer.byteLength(str) < GZIP_MIN_BYTES) return res.send(str);
+    res.set("Content-Encoding", "gzip");
+    res.set("Vary", "Accept-Encoding");
+    return res.send(zlib.gzipSync(str, { level: 6 }));
+  };
+  next();
+});
+
 app.use((req, res, next) => {
   const origin = req.headers.origin || req.headers.referer || "unknown";
   next();
@@ -181,6 +202,7 @@ const fetchUserName = async (session) => {
 // ====================
 const sessions = new Map(); // `${pool}|${username}` -> { fetch, userName, password, ts }
 const loginsInFlight = new Map(); // same key -> Promise<entry>
+const snapBusy = new Map(); // username -> poller ("snap" pool) scrapes in flight right now
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 15 * 60 * 1000);
 
 const getSession = async (username, password, fresh = false, pool = "live") => {
@@ -195,6 +217,29 @@ const getSession = async (username, password, fresh = false, pool = "live") => {
     Date.now() - cached.ts < SESSION_TTL_MS
   ) {
     return cached;
+  }
+  // A cold LIVE session takes over the poller's warm one instead of paying the
+  // login round trips (LogOn page + credential POST — 0.4–2 s on the Pi's link).
+  // Active students are hot-polled every 15 min, so the "snap" session is almost
+  // always warm when they open the app. The jar MOVES pools (the snap entry is
+  // deleted), so the two never share a HAC session — the poller simply logs in
+  // afresh next time, which is the login the student would have paid. Never
+  // taken while a poller scrape is mid-flight on it (HAC runs one request at a
+  // time per session, and that queue is exactly what the separate pool avoids).
+  if (!fresh && pool === "live") {
+    const snapKey = `snap|${username}`;
+    const warm = sessions.get(snapKey);
+    if (
+      warm &&
+      warm.password === password &&
+      Date.now() - warm.ts < SESSION_TTL_MS &&
+      !snapBusy.get(username) &&
+      !loginsInFlight.has(snapKey)
+    ) {
+      sessions.delete(snapKey);
+      sessions.set(key, warm);
+      return warm;
+    }
   }
   // Single-flight: when a session expires mid-batch every worker notices at
   // once, and N simultaneous logins for one account make HAC reject all but
@@ -676,22 +721,32 @@ const nameOf = (session, cache) => {
 
 // Run one scrape, transparently re-logging-in once if the warm session expired.
 const scrapeWithSession = async (username, password, request, cache, pool = "live") => {
-  let session = await getSession(username, password, false, pool);
+  // Mark the poller's session busy for the whole scrape so a live request can't
+  // take it over mid-page (see getSession).
+  if (pool === "snap") snapBusy.set(username, (snapBusy.get(username) || 0) + 1);
   try {
-    const data = await scrapeType(session.fetch, request, cache);
-    return { data, userName: nameOf(session, cache) };
-  } catch (err) {
-    if (err instanceof SessionExpired) {
-      // session went stale — drop the per-request page cache, re-login, retry once
-      delete cache.transcriptDoc;
-      // Only force a new login if nobody replaced the stale session meanwhile
-      // (another worker in this batch may have just re-logged-in).
-      const now = await getSession(username, password, false, pool);
-      session = now !== session ? now : await getSession(username, password, true, pool);
+    let session = await getSession(username, password, false, pool);
+    try {
       const data = await scrapeType(session.fetch, request, cache);
       return { data, userName: nameOf(session, cache) };
+    } catch (err) {
+      if (err instanceof SessionExpired) {
+        // session went stale — drop the per-request page cache, re-login, retry once
+        delete cache.transcriptDoc;
+        // Only force a new login if nobody replaced the stale session meanwhile
+        // (another worker in this batch may have just re-logged-in).
+        const now = await getSession(username, password, false, pool);
+        session = now !== session ? now : await getSession(username, password, true, pool);
+        const data = await scrapeType(session.fetch, request, cache);
+        return { data, userName: nameOf(session, cache) };
+      }
+      throw err;
     }
-    throw err;
+  } finally {
+    if (pool === "snap") {
+      const n = (snapBusy.get(username) || 1) - 1;
+      if (n > 0) snapBusy.set(username, n); else snapBusy.delete(username);
+    }
   }
 };
 

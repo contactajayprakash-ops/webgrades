@@ -168,11 +168,37 @@ export async function fetchIprDates(creds) {
   return j.availableDates;
 }
 
+// The boot-time hot-wave request started by the inline <script> in index.html
+// (window.__wgBatch), if it is for this account and this exact wave. Null when
+// there is none, it was already taken, or it is for someone/something else.
+function takePreflight(creds, requests) {
+  const pre = typeof window !== 'undefined' ? window.__wgBatch : null;
+  if (!pre || pre.used || !pre.promise) return null;
+  if (!creds || pre.username !== creds.username || pre.password !== creds.password) return null;
+  if (!Array.isArray(requests) || requests.length !== 1) return null;
+  const [r] = requests;
+  if (r.type !== 'class' || String(r.quarter) !== pre.quarter || Object.keys(r).length !== 2) return null;
+  pre.used = true;
+  return pre.promise;
+}
+
 // Batch fetch: one server round-trip that logs into HAC once and scrapes every
 // requested resource. `requests` = [{ type, quarter?, date? }]. Returns the
 // per-request results array (each { type, quarter?, success, data?, message? }).
 export async function fetchBatch(creds, requests) {
-  const j = await post('/batch', { ...creds, requests }, 1);
+  // The boot preflight in index.html already POSTed this exact hot wave (same
+  // account, same single current-quarter request) before the bundle loaded, so
+  // the Pi has had a head start on HAC. Adopt its result in place of a second,
+  // identical request — through the account's queue so nothing else for that
+  // account overlaps it. Taken once; a failed preflight falls through to the
+  // normal request (with its gateway + transient retries) as if it never ran.
+  let j = null;
+  const pre = takePreflight(creds, requests);
+  if (pre) {
+    try { j = await serialize(creds.username || '', () => pre); } catch (_) { j = null; }
+    if (!j?.success) j = null; // let the normal path (and its transient retry) have it
+  }
+  if (!j) j = await post('/batch', { ...creds, requests }, 1);
   if (!j.success) throw new Error(j.message || 'Batch request failed.');
   const results = (j.results || []).map((r) =>
     r.type === 'class' && r.success ? { ...r, data: dedupeClasses(r.data) } : r);

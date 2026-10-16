@@ -63,6 +63,40 @@
       })();
     </script>
 
+    <!-- Live-grades preflight: the same idea for the LIVE scrape. The first thing
+         the app does once React mounts is POST the current quarter to /batch, and
+         the Pi then spends 2–4 s talking to HAC. Nothing about that request needs
+         the bundle, so start it here and the Pi's work overlaps the JS download,
+         parse and mount instead of waiting behind them. src/api/hac.js
+         (fetchBatch) adopts this promise for the active profile's first hot wave
+         and only then; any failure here just falls through to the normal request.
+         The quarter guess MUST match src/lib/courses.js guessCurrentQuarter
+         (checked by scripts/test-boot-parity.mjs); the API base is Vite's HTML
+         env replacement, which stays literal when VITE_API_BASE is unset. -->
+    <script>
+      window.__wgBatch = (function () {
+        try {
+          var profs = JSON.parse(localStorage.getItem('wg_profiles') || '[]');
+          var active = localStorage.getItem('wg_active');
+          var p = profs.filter(function (x) { return x && x.username === active; })[0] || profs[0];
+          if (!p || !p.username || !p.password) return null;
+          var m = new Date().getMonth();
+          var q = (m >= 7 && m <= 9) ? '1' : (m === 10 || m === 11) ? '2' : (m <= 2) ? '3' : '4';
+          var base = '%VITE_API_BASE%';
+          if (!base || base.charAt(0) === '%') base = '/api';
+          var sig; try { sig = AbortSignal.timeout(45000); } catch (e) { sig = undefined; }
+          var promise = fetch(base + '/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: p.username, password: p.password, requests: [{ type: 'class', quarter: q }] }),
+            signal: sig,
+          }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+          promise.catch(function () {}); // adopted (or not) by hac.js; never an unhandled rejection
+          return { username: p.username, password: p.password, quarter: q, promise: promise, used: false };
+        } catch (e) { return null; }
+      })();
+    </script>
+
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-TTB99XSK4T"></script>
     <script>
