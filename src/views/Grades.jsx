@@ -19,7 +19,7 @@ const EMPTY_SET = new Set()
 
 export default function Grades() {
   const { getData, peekData, dataVersion, activeUsername, syncedAt } = useAuth()
-  const { edits, setEdit, reset: resetEdits, count: whatIfCount } = useWhatIf()
+  const { edits, setEdit, removeEdit, reset: resetEdits, count: whatIfCount } = useWhatIf()
   // Default to the current quarter: the most recent one that already has grades,
   // else a calendar-based guess (so it's not stuck on Q4 at the start of Q1).
   const [tab, setTab] = useState(() => {
@@ -163,7 +163,7 @@ export default function Grades() {
         ? <Overview byQuarter={byQuarter} loading={loading} prefs={prefs} edits={edits} query={query} sort={sort} newSet={changed} wl={schedWl} />
         : <QuarterView
             quarter={tab} byQuarter={byQuarter} loading={loading} prefs={prefs}
-            edits={edits} setEdit={setEdit} whatIfCount={whatIfCount} query={query} sort={sort}
+            edits={edits} setEdit={setEdit} removeEdit={removeEdit} whatIfCount={whatIfCount} query={query} sort={sort}
             onRetry={() => loadQuarter(tab, true)}
             newSet={tab === liveQuarter ? changed : EMPTY_SET}
             wl={schedWl} focusKey={focusKey}
@@ -196,7 +196,7 @@ function semesterGpa(byQuarter, semQuarters, edits, prefs) {
   return { w: weightedGpa(rows).gpa, u: unweightedGpa(rows).gpa }
 }
 
-function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatIfCount, onRetry, query = '', sort = 'name', newSet = EMPTY_SET, wl = null, focusKey = null }) {
+function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, removeEdit, whatIfCount, onRetry, query = '', sort = 'name', newSet = EMPTY_SET, wl = null, focusKey = null }) {
   const state = byQuarter[quarter]
   if (loading[quarter] || state === undefined) return <Loading label={`Loading ${QUARTERS.find((q) => q.value === quarter)?.label}…`} />
   if (state.error) return <ErrorBox message={state.error} onRetry={onRetry} />
@@ -240,7 +240,7 @@ function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, whatI
       {classes.length === 0
         ? <Empty>No classes match “{query}”.</Empty>
         : classes.map((c, i) => (
-            <ClassCard key={c.courseName || i} quarter={quarter} course={c} edits={edits} setEdit={setEdit} prefs={prefs}
+            <ClassCard key={c.courseName || i} quarter={quarter} course={c} edits={edits} setEdit={setEdit} removeEdit={removeEdit} prefs={prefs}
               defaultOpen={classes.length <= 2} isNew={newSet.has(c.courseName)}
               focus={!!focusKey && courseKey(c.courseName) === focusKey} />
           ))}
@@ -265,7 +265,7 @@ function ImpactCell({ label, cur, base, digits, active }) {
   )
 }
 
-function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew = false, focus = false }) {
+function ClassCard({ quarter, course, edits, setEdit, removeEdit, prefs, defaultOpen, isNew = false, focus = false }) {
   const [open, setOpen] = useState(!!defaultOpen || focus)
   const cardRef = useRef(null)
   // Deep-linked from the dashboard — open this card and scroll it into view.
@@ -332,6 +332,12 @@ function ClassCard({ quarter, course, edits, setEdit, prefs, defaultOpen, isNew 
                                   placeholder="New assignment" onChange={(e) => setEdit(r.key, { name: e.target.value })} />
                               : r.name}
                             {r.edited && <span className="pill" style={{ marginLeft: 8, color: 'var(--yellow-text)' }}>{r.hypo ? 'added' : 'edited'}</span>}
+                            {r.hypo && (
+                              <button className="row-del" style={{ marginLeft: 8 }} title="Delete assignment"
+                                aria-label="Delete assignment" onClick={() => removeEdit(r.key)}>
+                                <Icon.trash width={14} height={14} />
+                              </button>
+                            )}
                           </td>
                           <td>
                             {r.hypo
