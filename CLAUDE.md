@@ -190,6 +190,13 @@ JSDOM. Scraping, Web Push, VAPID and `push-subs.json` are unchanged.
   **independent of push** — auto-populated on every verified `/login` and
   `/batch` (product decision: fast loading for everyone). A user can have fast
   loads without notifications and vice versa.
+- **Memory: the Pi's Node is 32-bit, V8's heap ceiling is 236 MB.** The server
+  OOM-crashed 111 times (every ~1–1.5 h, at ~216 MB) between 2026-10-06 and
+  2026-10-16 because the HOT-poll base (`snapDataCache`) held every polled
+  account's gradebook as parsed objects. It is now kept **gzipped** (the same
+  bytes as the Firestore doc, ~3 KB each) and gunzipped per hot poll; expired
+  HAC sessions are swept from `sessions` every minute. Don't reintroduce a
+  per-account parsed cache without a budget.
 - **Poller tiers** (budgeted against HAC, not Firestore — env-configurable):
   current quarter refreshes each cycle; the other quarters + rank + transcript +
   schedule + attendance re-scrape ~daily (a HOT poll patches just the current

@@ -204,6 +204,14 @@ const sessions = new Map(); // `${pool}|${username}` -> { fetch, userName, passw
 const loginsInFlight = new Map(); // same key -> Promise<entry>
 const snapBusy = new Map(); // username -> poller ("snap" pool) scrapes in flight right now
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 15 * 60 * 1000);
+// Drop expired sessions instead of leaving them in the map until the same account
+// logs in again: that is what actually bounds how long a password (and a cookie
+// jar) stays in memory to the TTL, and keeps the map at "recently active", not
+// "everyone ever seen". A request holding an expired entry keeps its reference.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, e] of sessions) if (now - e.ts >= SESSION_TTL_MS) sessions.delete(k);
+}, 60 * 1000).unref();
 
 const getSession = async (username, password, fresh = false, pool = "live") => {
   const key = `${pool}|${username}`;
@@ -1278,10 +1286,19 @@ const scrapeResources = async (username, password, resources, curQ) => {
   return data;
 };
 
-// Last full uncompressed snapshot per user, kept in memory so a HOT poll can
-// patch just the current quarter onto it without re-scraping everything. Lost on
-// restart → the first poll after boot is forced FULL to rebuild it.
-const snapDataCache = new Map(); // username -> data object
+// Last full snapshot per user, kept in memory so a HOT poll can patch just the
+// current quarter onto it without re-scraping everything. Kept GZIPPED (the same
+// bytes the Firestore doc holds, ~3 KB each): as parsed objects, ~550 accounts'
+// gradebooks were 100–200 MB of V8 heap, which on this 32-bit Node build hit
+// the heap ceiling and crashed the server every couple of hours — taking every
+// warm HAC session with it. Gunzipping 3 KB per hot poll costs a few ms.
+const snapDataCache = new Map(); // username -> gzipped JSON Buffer
+const cachedPrior = (username) => {
+  const gz = snapDataCache.get(username);
+  if (!gz) return undefined;
+  try { return JSON.parse(zlib.gunzipSync(gz).toString("utf8")); }
+  catch (e) { snapDataCache.delete(username); return undefined; }
+};
 
 // After a restart the in-memory base is gone, which used to force a FULL
 // re-scrape (8 HAC pages) of every registered account — hundreds of them — all
@@ -1295,8 +1312,9 @@ const priorFromFirestore = async (username, password) => {
     const doc = await firestore.collection("grades").doc(credKey(username, password)).get();
     const d = doc.exists ? doc.data() : null;
     if (!d || d.codec !== "gzip" || d.hash !== entry.snapHash) return undefined;
-    const data = JSON.parse(zlib.gunzipSync(Buffer.from(d.data, "base64")).toString("utf8"));
-    snapDataCache.set(username, data);
+    const gz = Buffer.from(d.data, "base64");
+    const data = JSON.parse(zlib.gunzipSync(gz).toString("utf8"));
+    snapDataCache.set(username, gz);
     return data;
   } catch (e) {
     return undefined;
@@ -1311,7 +1329,7 @@ const priorFromFirestore = async (username, password) => {
 const writeSnapshot = async (username, password, mode = "full") => {
   if (!SNAPSHOT_ENABLED) return { changed: false, bytes: 0, mode };
   const curQ = guessCurrentQuarter();
-  const prior = snapDataCache.get(username) || (mode === "hot" ? await priorFromFirestore(username, password) : undefined);
+  const prior = mode === "hot" ? (cachedPrior(username) || await priorFromFirestore(username, password)) : undefined;
   // Can't patch onto nothing — a hot poll with no in-memory base becomes full.
   const effMode = mode === "hot" && prior ? "hot" : "full";
   const scraped = await scrapeResources(
@@ -1321,7 +1339,6 @@ const writeSnapshot = async (username, password, mode = "full") => {
   );
   if (!Object.keys(scraped).length) return { changed: false, bytes: 0, mode: effMode }; // total failure
   const data = effMode === "hot" ? { ...prior, ...scraped } : scraped;
-  snapDataCache.set(username, data);
   const entry = snapStore[username] || {};
   entry.password = password;
   if (effMode === "full") entry.lastFull = Date.now();
@@ -1332,6 +1349,7 @@ const writeSnapshot = async (username, password, mode = "full") => {
   const hash = crypto.createHash("sha256").update(json).digest("hex");
   const gz = zlib.gzipSync(json);
   const bytes = gz.length;
+  snapDataCache.set(username, gz); // the base for the next HOT poll, compressed
   // The first-posted map rides along (gzipped, same codec) so a cold open shows
   // the shared times before the live sync lands. A new stamp from a device's
   // /batch changes it without changing the grades, so it gets its own hash.
