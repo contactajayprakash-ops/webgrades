@@ -5,8 +5,7 @@ import { Icon } from '../components/icons.jsx'
 import Segmented from '../components/Segmented.jsx'
 import { ACCENTS, THEMES, loadTheme, saveTheme } from '../lib/theme.js'
 import { useInstall } from '../hooks/useInstall.js'
-import { syncLock, setSyncLock, bgProfilesEnabled, setBgProfilesEnabled,
-  pollIntervalMin, setPollIntervalMin, POLL_MIN_MIN, POLL_MIN_MAX } from '../lib/syncPolicy.js'
+import { syncLock, setSyncLock, bgProfilesEnabled, setBgProfilesEnabled } from '../lib/syncPolicy.js'
 import { notifySupported, notifyPermission, requestNotifyPermission, loadNotifyPrefs, saveNotifyPrefs } from '../lib/notify.js'
 import { subscribeToPush, unsubscribeFromPush } from '../lib/push.js'
 
@@ -246,36 +245,9 @@ function DeviceSyncSection({ username }) {
   const [bgOn, setBgOn] = useState(bgProfilesEnabled)
   const toggleBg = (next) => { setBgProfilesEnabled(next); setBgOn(next) }
 
-  const [poll, setPoll] = useState(pollIntervalMin)
-  const changePoll = (v) => { const n = Number(v); setPoll(n); setPollIntervalMin(n) }
-
   return (
     <div className="card card-pad">
       <h3 className="mb-3">This device</h3>
-      <div className="row-between" style={{ gap: 16 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>Auto-check for new grades</div>
-          <div className="small faint">
-            How often the app quietly re-checks HAC for new grades while it's open. Lower is fresher; higher is gentler on your battery and the server. Applies to this browser only.
-          </div>
-          <input
-            type="range"
-            min={POLL_MIN_MIN}
-            max={POLL_MIN_MAX}
-            step={1}
-            value={poll}
-            onChange={(e) => changePoll(e.target.value)}
-            aria-label="Auto-check interval in minutes"
-            style={{ width: '100%', marginTop: 12, accentColor: 'var(--accent)' }}
-          />
-          <div className="row-between small faint" style={{ marginTop: 2 }}>
-            <span>{POLL_MIN_MIN} min</span>
-            <span style={{ fontWeight: 600, color: 'var(--accent-text)' }}>Every {poll} min</span>
-            <span>{POLL_MIN_MAX} min</span>
-          </div>
-        </div>
-      </div>
-      <div style={{ height: 16 }} />
       <ToggleRow
         label="Only sync this account here"
         hint={on

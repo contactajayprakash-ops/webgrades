@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake, dedupeClasses } from '../api/hac.js'
 import { cleanCourseName, guessCurrentQuarter } from '../lib/courses.js'
 import { clearPrefs } from '../lib/prefs.js'
-import { bgProfilesEnabled, pollIntervalMs, syncAllowedFor, snapshotReadEnabled } from '../lib/syncPolicy.js'
+import { bgProfilesEnabled, syncAllowedFor, snapshotReadEnabled } from '../lib/syncPolicy.js'
 import { loadNotifyPrefs, eventMatches, showGradeNotification } from '../lib/notify.js'
 import { hasPushSubscription } from '../lib/push.js'
 import { mergeServerPosted } from '../lib/seen.js'
@@ -438,7 +438,7 @@ export function AuthProvider({ children }) {
         // Suppress notifications on the FIRST live sync of the session: a fresh
         // login or a snapshot-hydrated cache would otherwise diff a whole (or
         // partial) gradebook into a notification burst. Genuine new-grade
-        // notifications come from later background-poll syncs (and the Pi push).
+        // notifications come from later re-syncs (and, with the app closed, the Pi push).
         if (!firstLive) maybeNotify(gradeEvents, username)
       }
     } finally { signalHot() }
@@ -687,36 +687,10 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  // Background polling: keep pulling new grades on a timer even while the app is
-  // minimized / unfocused (but still open, e.g. a backgrounded Chromebook PWA on
-  // Wi‑Fi) — unlike `resync` above, this does NOT require the page to be visible.
-  // So grades are already fresh when the student reopens it instead of waiting on
-  // a cold sync. Browsers throttle background timers (~1/min), so an unfocused app
-  // effectively checks a bit slower than set; a frozen/closed tab simply stops and
-  // resumes via `resync` on reopen. Skips when offline or a sync is in flight.
-  //
-  // Interval is user-configurable (Settings → 2–20 min, default 5) and read live
-  // each tick, so a slider change takes effect on the next tick without a reload.
-  // setTimeout reschedule (not setInterval) so the new interval is picked up.
-  useEffect(() => {
-    let timer
-    const schedule = (ms) => { timer = setTimeout(tick, ms) }
-    const tick = () => {
-      const pollMs = pollIntervalMs() // read live from localStorage
-      const stale = Date.now() - lastSyncAt.current >= pollMs - 15_000
-      const ok = credsRef.current
-        && !syncing.current
-        && !(typeof navigator !== 'undefined' && navigator.onLine === false)
-        && stale // don't stack with a recent resync
-      if (ok) {
-        lastSyncAt.current = Date.now()
-        ;(async () => { await apiWake(); syncAllRef.current() })()
-      }
-      schedule(pollMs)
-    }
-    schedule(pollIntervalMs())
-    return () => clearTimeout(timer)
-  }, [])
+  // There is deliberately NO background timer re-syncing an open tab (removed
+  // 2026-10-16). It made every open tab scrape HAC every few minutes; the Pi's
+  // snapshot + Web Push pollers watch for new grades server-side, and `resync`
+  // above refreshes the moment the app is looked at again.
 
   // Keep OTHER signed-in profiles warm on a slow, staggered timer so switching
   // accounts shows fresh grades instantly. Deliberately gentle on the Pi/HAC:

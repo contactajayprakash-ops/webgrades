@@ -39,30 +39,11 @@ export function setBgProfilesEnabled(on) {
   } catch (_) {}
 }
 
-// Per-BROWSER background auto-check interval for the ACTIVE account, in minutes.
-// How often the app quietly re-checks HAC for new grades while it's open (even
-// unfocused). Default 5 min; a slider in Settings lets you pick 2–20. Stored
-// browser-local like the toggles above, so it never follows you to another
-// device. Read live on each poll tick, so a change takes effect without reload.
-const POLL_MIN_KEY = 'wg_poll_min'
-export const POLL_MIN_DEFAULT = 5
-export const POLL_MIN_MIN = 2
-export const POLL_MIN_MAX = 20
-
-const clampPoll = (n) => Math.min(POLL_MIN_MAX, Math.max(POLL_MIN_MIN, Math.round(n)))
-
-export function pollIntervalMin() {
-  try {
-    const raw = parseInt(localStorage.getItem(POLL_MIN_KEY), 10)
-    return Number.isFinite(raw) ? clampPoll(raw) : POLL_MIN_DEFAULT
-  } catch (_) { return POLL_MIN_DEFAULT }
-}
-
-export function setPollIntervalMin(min) {
-  try { localStorage.setItem(POLL_MIN_KEY, String(clampPoll(min))) } catch (_) {}
-}
-
-export function pollIntervalMs() { return pollIntervalMin() * 60_000 }
+// The per-browser "Auto-check for new grades" timer (wg_poll_min, 2–20 min) was
+// removed on 2026-10-16: every open tab re-scraping HAC on a clock was load on
+// the Pi for nothing now that opens are fast and the Pi's own pollers (snapshot +
+// Web Push) watch for new grades server-side. The app still re-syncs on open,
+// focus and pull-to-refresh.
 
 // Rollout gate for reading the Pi's server-side grade snapshot on cold open
 // (server-side snapshot sync). Now ON by default — rolled out to everyone. A
