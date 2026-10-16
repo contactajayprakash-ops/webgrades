@@ -164,8 +164,7 @@ export function letterGrade(g) {
   if (g == null) return { letter: '—', cls: 'g-na' };
   if (g >= 90) return { letter: 'A', cls: 'g-a' };
   if (g >= 80) return { letter: 'B', cls: 'g-b' };
-  if (g >= 75) return { letter: 'C', cls: 'g-c' };
-  if (g >= 70) return { letter: 'D', cls: 'g-d' };
+  if (g >= 70) return { letter: 'C', cls: 'g-c' }; // FISD has no D: 70-79 is a C
   return { letter: 'F', cls: 'g-f' };
 }
 
