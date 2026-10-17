@@ -30,15 +30,26 @@ const BASE = {
   hoverLighting: false,
 }
 
-// Enhanced glass only engages where SVG backdrop refraction actually renders
-// (Chromium). Safari/Firefox would get quick-liquid's CSS fallback, which is
-// just a worse version of the app's own hand-tuned glass — and on iOS Safari
-// the fallback's lens blur doesn't reliably paint at all, leaving chrome bars
-// nearly fully transparent. So non-Chromium keeps the original CSS material
-// and never downloads the engine. (Same probe the engine itself uses.)
+// WebKit (every iOS browser, desktop Safari) accepts `backdrop-filter: url()`
+// in the computed style but never paints the SVG lens — and when the url() part
+// is invalid it drops the WHOLE backdrop-filter, blur included. The engine's own
+// probe passes there, so left on 'auto' a glass surface comes out transparent
+// and unblurred (the iPhone tab bar bug). Force the engine's CSS lens (plain
+// blur + saturate, which WebKit renders fine) so WebKit gets the same material,
+// tint, rim and sheen as Chromium, minus the refraction.
+const isWebKit = typeof navigator !== 'undefined' && (() => {
+  const ua = navigator.userAgent || ''
+  return /iPhone|iPad|iPod/.test(ua)
+    || (/AppleWebKit/.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox/.test(ua))
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+})()
+// Firefox has no SVG backdrop and a weaker CSS fallback than the app's own
+// hand-tuned glass, so it keeps the original CSS material and never downloads
+// the engine. (Same probe the engine itself uses.)
 let svgBackdropOK = null
 function supportsSvgBackdrop() {
   if (svgBackdropOK != null) return svgBackdropOK
+  if (isWebKit) { svgBackdropOK = true; return true }
   try {
     const probe = document.createElement('div')
     probe.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;' +
@@ -106,13 +117,13 @@ export default function Glass({ as = 'div', className = '', config, liquidPress,
   // background — everything read as invisible. A much stronger frost + firmer
   // edge gives the surfaces definition (dark mode keeps the airier defaults).
   const appearanceExtra = appearance === 'light'
-    ? { tint: '#ffffff', tintOpacity: 0.55 }
+    ? { tint: '255, 255, 255', tintOpacity: 0.55 }
     : null
   return (
     <LG
       as={as}
       className={className ? `glass-host ${className}` : 'glass-host'}
-      config={{ ...BASE, appearance, ...appearanceExtra, ...config }}
+      config={{ ...BASE, appearance, ...appearanceExtra, ...config, ...(isWebKit ? { refractionMode: 'css' } : null) }}
       liquidPress={liquidPress}
       animateIn={animateIn}
       {...rest}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from './icons.jsx'
-import Glass from './Glass.jsx'
+import Glass, { useGlassState } from './Glass.jsx'
 
 // iPhone floating tab bar, modeled on the iOS 26 Liquid Glass tab bar (Apple
 // Music): the selected tab sits in a glass lens; press anywhere on the bar and
@@ -31,6 +31,7 @@ const reducedMotion = () =>
 export default function TabBar({ tabs, moreActive, onMore, glass = true }) {
   const loc = useLocation()
   const navigate = useNavigate()
+  const { appearance } = useGlassState()
   const lensRef = useRef(null)
   const itemRefs = useRef([])
   const count = tabs.length + 1 // + More
@@ -267,7 +268,10 @@ export default function TabBar({ tabs, moreActive, onMore, glass = true }) {
     onPointerCancel: (e) => finish(e, false),
     onClickCapture,
   }
+  // Thicker than the desktop pill: it floats over scrolling rows, so the tint
+  // has to hide them (the engine scales dark tint ×1.75 → ~0.6 effective).
+  const material = { material: 'thick', tintOpacity: appearance === 'light' ? 0.62 : 0.4, borderRadius: 999 }
   return glass
-    ? <Glass as="nav" config={{ material: 'thin', borderRadius: 999 }} {...props}>{content}</Glass>
+    ? <Glass as="nav" config={material} {...props}>{content}</Glass>
     : <nav {...props}>{content}</nav>
 }
