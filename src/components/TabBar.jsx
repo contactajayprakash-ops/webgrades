@@ -270,7 +270,14 @@ export default function TabBar({ tabs, moreActive, onMore, glass = true }) {
   }
   // Thicker than the desktop pill: it floats over scrolling rows, so the tint
   // has to hide them (the engine scales dark tint ×1.75 → ~0.6 effective).
-  const material = { material: 'thick', tintOpacity: appearance === 'light' ? 0.62 : 0.4, borderRadius: 999 }
+  // Lighting is turned well up vs. the desktop pill: on WebKit there is no SVG
+  // refraction, so the two-lobe rim light and the specular are what make the
+  // bar read as glass instead of a blurred tint.
+  const material = {
+    material: 'thick', tintOpacity: appearance === 'light' ? 0.62 : 0.4, borderRadius: 999,
+    edgeHighlight: 1, specularStrength: 0.42, fresnelPower: 1.6, chromaticAberration: 0.14,
+    refractionStrength: 12, bezelWidth: 40, thickness: 16,
+  }
   return glass
     ? <Glass as="nav" config={material} {...props}>{content}</Glass>
     : <nav {...props}>{content}</nav>
