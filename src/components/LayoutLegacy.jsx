@@ -6,6 +6,7 @@ import { Icon } from './icons.jsx'
 import { OfflineBanner, Loading } from './ui.jsx'
 import ProfileSwitcher from './ProfileSwitcher.jsx'
 import PullToRefresh from './PullToRefresh.jsx'
+import TabBar from './TabBar.jsx'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: 'home', end: true },
@@ -151,28 +152,7 @@ export default function LayoutLegacy() {
       </div>
 
       {/* Floating Liquid Glass tab bar (iPhone) */}
-      <nav className="tab-bar" aria-label="Tabs">
-        {TABS.map((t) => (
-          <NavLink
-            key={t.to}
-            to={t.to}
-            end={t.end}
-            className={({ isActive }) => `tab-item ${isActive ? 'active' : ''}`}
-          >
-            <span className="tab-glass" />
-            {(() => { const C = Icon[t.icon]; return <C className="ico" width={24} height={24} /> })()}
-            <span>{t.label}</span>
-          </NavLink>
-        ))}
-        <button
-          className={`tab-item ${open ? 'active' : ''}`}
-          onClick={() => setOpen(true)}
-        >
-          <span className="tab-glass" />
-          <Icon.more className="ico" width={24} height={24} />
-          <span>More</span>
-        </button>
-      </nav>
+      <TabBar tabs={TABS} moreActive={open} onMore={() => setOpen(true)} glass={false} />
     </div>
   )
 }

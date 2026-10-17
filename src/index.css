@@ -280,11 +280,9 @@ html[data-glass="enhanced"] .glass-host {
      can't tolerate on its host element — the engine's animateIn covers entry. */
   animation: none !important;
 }
-/* The floating tab bar centers itself with transform: translateX(-50%), which
-   would fight the engine's transform-based press/entrance animations. Center the
-   enhanced host with inset margins instead. */
+/* The floating tab bar is positioned with left/right insets (no transform), so
+   it doesn't fight the engine's transform-based press/entrance animations. */
 html[data-glass="enhanced"] .tab-bar.glass-host {
-  left: 0; right: 0; transform: none; margin-inline: auto; width: fit-content;
   /* Pure refraction left the tab bar see-through: rows scrolled under it stayed
      readable behind the labels. Keep a near-opaque fill under the lens. */
   background: var(--mat-bar) !important;
@@ -968,31 +966,57 @@ html[data-theme="light"] .seg-indicator { background: #ffffff; }
      14px + safe-area and is ~62px tall) so it never hides behind it. */
   .sync-toast { left: 14px; right: 14px; bottom: calc(92px + env(safe-area-inset-bottom)); max-width: none; }
 
-  /* Floating Liquid Glass tab bar */
+  /* Floating Liquid Glass tab bar (iOS 26 / Apple Music). Width is relative
+     to the screen, not the content, so it spans the same share of the width at
+     any zoom / text size; capped so it doesn't stretch absurdly on tablets. */
   .tab-bar {
     display: flex; position: fixed; z-index: 200;
-    left: 50%; transform: translateX(-50%);
+    left: max(30px, calc(50% - 240px)); right: max(30px, calc(50% - 240px));
     bottom: calc(14px + env(safe-area-inset-bottom));
     background: var(--mat-bar); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
     border: 0.5px solid var(--glass-border); border-radius: var(--pill);
     box-shadow: var(--rim-strong), var(--drop-lg);
-    padding: 7px 8px; gap: 2px;
+    padding: 5px; gap: 0;
+    /* the bar owns its gestures: no page scroll, text selection or link callout */
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .tab-item {
+    flex: 1 1 0; min-width: 0; position: relative; z-index: 1;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-    min-width: 62px; padding: 5px 6px 4px; border-radius: 16px; border: none; background: transparent;
-    color: var(--text-faint); transition: color .2s, background .2s var(--ease), transform .2s var(--spring);
+    padding: 7px 2px 6px; border-radius: var(--pill); border: none; background: transparent;
+    color: var(--text); -webkit-user-drag: none;
+    transition: color .22s var(--ease);
   }
-  .tab-item .ico { width: 24px; height: 24px; }
-  .tab-item span { font-size: 10px; font-weight: 500; letter-spacing: -0.01em; }
-  .tab-item:active { transform: scale(.9); }
+  .tab-item .ico { width: 25px; height: 25px; transition: transform .35s var(--spring); }
+  .tab-item span { font-size: 10px; font-weight: 600; letter-spacing: 0; white-space: nowrap; }
   .tab-item.active { color: var(--accent); }
-  .tab-item.active .tab-glass {
-    /* the selected tab lifts into its own glass lozenge */
+  /* the lifted lens magnifies what's under it, like the real glass droplet */
+  .tab-bar.pressing .tab-item.active .ico { transform: scale(1.12); }
+
+  /* The selected-tab lens. At rest: a soft filled pill (Apple's selected tab).
+     Pressed: it lifts into clear glass — brighter rim, specular top edge, a
+     faint inner shadow — and swells past the bar's edges. TabBar.jsx drives
+     transform/width with a spring and sets --lift (0..1). */
+  .tab-lens {
+    position: absolute; left: 0; top: 5px; bottom: 5px; z-index: 0;
+    border-radius: var(--pill); pointer-events: none; transform-origin: 50% 50%;
+    will-change: transform, width;
     background: var(--fill-2);
+    box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, calc(0.06 + var(--lift, 0) * 0.5)),
+      inset 0 1px 0 rgba(255, 255, 255, calc(var(--lift, 0) * 0.55)),
+      inset 0 -6px 12px -8px rgba(0, 0, 0, calc(var(--lift, 0) * 0.5)),
+      0 calc(var(--lift, 0) * 10px) calc(var(--lift, 0) * 24px) -8px rgba(0, 0, 0, calc(var(--lift, 0) * 0.45));
+    transition: background .25s var(--ease), opacity .2s var(--ease);
   }
-  .tab-glass { position: absolute; inset: 3px; border-radius: 14px; z-index: -1; transition: background .25s var(--ease); }
-  .tab-item { position: relative; }
+  .tab-lens.lifted {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 55%, rgba(255, 255, 255, 0.10));
+  }
+  .tab-lens.off { opacity: 0; }
+  html[data-theme="light"] .tab-lens { background: rgba(0, 0, 0, 0.07); }
+  html[data-theme="light"] .tab-lens.lifted {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.45) 55%, rgba(255, 255, 255, 0.7));
+  }
 }
 
 /* ============================================================================
@@ -1532,9 +1556,6 @@ html[data-theme="light"] .app-shell.v2 .grade-tile {
 /* the slider IS the active background now */
 .navpill .np-tab.active { background: none; box-shadow: none; }
 
-/* mobile tab bar: the selected lozenge pops in with the same bounce */
-.tab-item.active .tab-glass { animation: tabpop .5s var(--bounce); }
-@keyframes tabpop { from { transform: scale(.6); } }
 
 /* segmented controls: same spring on the sliding indicator */
 .seg-indicator { transition: transform .5s var(--bounce), width .45s var(--bounce), height .2s var(--ease), opacity .18s; }

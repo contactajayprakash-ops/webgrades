@@ -9,6 +9,7 @@ import PullToRefresh from './PullToRefresh.jsx'
 import Glass, { GlassLink } from './Glass.jsx'
 import GalaxyBg from './GalaxyBg.jsx'
 import ThemeFX from './ThemeFX.jsx'
+import TabBar from './TabBar.jsx'
 import { getNavSide, subscribeGlassMode } from '../lib/glassMode.js'
 
 const NAV = [
@@ -294,21 +295,7 @@ export default function Layout() {
       </div>
 
       {/* Floating Liquid Glass tab bar (iPhone) */}
-      <Glass as="nav" className="tab-bar" config={{ material: 'thin', borderRadius: 999 }} aria-label="Tabs">
-        {TABS.map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.end}
-            className={({ isActive }) => `tab-item ${isActive ? 'active' : ''}`}>
-            <span className="tab-glass" />
-            {(() => { const C = Icon[t.icon]; return <C className="ico" width={24} height={24} /> })()}
-            <span>{t.label}</span>
-          </NavLink>
-        ))}
-        <button className={`tab-item ${sheet ? 'active' : ''}`} onClick={() => setSheet(true)}>
-          <span className="tab-glass" />
-          <Icon.more className="ico" width={24} height={24} />
-          <span>More</span>
-        </button>
-      </Glass>
+      <TabBar tabs={TABS} moreActive={sheet} onMore={() => setSheet(true)} />
     </div>
   )
 }
