@@ -133,13 +133,20 @@ function entryOf(seen, courseName) {
 }
 
 // Course names whose average OR any assignment changed vs the last-seen snapshot.
+// A class that has nothing graded now (no average, no graded assignments: a
+// fresh quarter, or "N/A" with 0 assignments) is never "changed", even if the
+// snapshot held last quarter's grades. Updating to nothing isn't news; it gets
+// flagged once a grade actually posts. Averages compare by value so "N/A" vs ""
+// or "95" vs "95.00" don't count as a change.
 export function changedSince(seen, classes) {
   if (!seen) return []
   const out = []
   for (const c of classes || []) {
+    const avg = parseGrade(c.overallAverage)
+    if (avg == null && !Object.keys(assignmentsOf(c)).length) continue
     const e = entryOf(seen, c.courseName)
     if (!e) { out.push(c.courseName); continue } // brand-new class
-    if (e.avg !== c.overallAverage) { out.push(c.courseName); continue }
+    if (parseGrade(e.avg) !== avg) { out.push(c.courseName); continue }
     if (e.hadAssignments && JSON.stringify(assignmentsOf(c)) !== JSON.stringify(e.a)) out.push(c.courseName)
   }
   return out
