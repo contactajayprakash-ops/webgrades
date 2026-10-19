@@ -39,7 +39,7 @@ export default function Week() {
       )}
 
       {!loading && !error && total > 0 && (
-        <div className="grid" style={{ gridTemplateColumns: '1fr', gap: 14 }}>
+        <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr)', gap: 14 }}>
           {DAYS.map((day, i) => (
             byDay[i].length > 0 && (
               <div className="card" key={day}>

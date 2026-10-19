@@ -51,7 +51,7 @@ export default function Settings() {
     <>
       <PageHead title="Settings" sub="Make WebGrades yours — appearance, performance, and your session." />
 
-      <div className="grid" style={{ gridTemplateColumns: '1fr' }}>
+      <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
         {/* Appearance */}
         <div className="card card-pad">
           <h3 className="mb-3">Appearance</h3>

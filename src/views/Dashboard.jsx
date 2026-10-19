@@ -409,7 +409,7 @@ function CurrentClasses({ recent }) {
       {classes.length > 0 && view === 'list' && (
         <table className="table">
           <thead>
-            <tr><th>Class</th><th>Assignments</th><th className="num">Average</th></tr>
+            <tr><th>Class</th><th className="col-count">Assignments</th><th className="num">Average</th></tr>
           </thead>
           <tbody>
             {classes.map((c, i) => (
@@ -417,7 +417,7 @@ function CurrentClasses({ recent }) {
                 onClick={() => openClass(c.courseName)}
                 title={`Open ${cleanCourseName(c.courseName)}`}>
                 <td>{cleanCourseName(c.courseName)}{changed.has(c.courseName) && <span className="pill pill-new">new</span>}</td>
-                <td className="faint small">{(c.assignments?.length || 0)} assignments</td>
+                <td className="faint small col-count">{(c.assignments?.length || 0)} assignments</td>
                 <td className="num">
                   <span className="flex" style={{ gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
                     <GradeBadge value={officialAverage(c)} />

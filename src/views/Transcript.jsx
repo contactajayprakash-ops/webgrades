@@ -19,7 +19,7 @@ export default function Transcript() {
       {!loading && !error && groups.length === 0 && <Empty>No transcript records found.</Empty>}
 
       {!loading && !error && (
-        <div className="grid" style={{ gridTemplateColumns: '1fr' }}>
+        <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
           {groups.map((g, i) => (
             <div className="card" key={i}>
               <div className="row-between" style={{ padding: '16px 20px' }}>

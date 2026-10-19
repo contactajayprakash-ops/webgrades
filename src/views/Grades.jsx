@@ -222,7 +222,7 @@ function QuarterView({ quarter, byQuarter, loading, prefs, edits, setEdit, remov
   const semReady = sem.quarters.every((q) => byQuarter[q] && !byQuarter[q].error)
 
   return (
-    <div className="grid" style={{ gridTemplateColumns: '1fr' }}>
+    <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
       {/* GPA impact — a distinct panel, kept separate from the grade tables */}
       <div className="impact">
         <div className="impact-head">

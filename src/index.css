@@ -484,6 +484,10 @@ input, select { font-family: inherit; }
    shells (2.0 adds glass/animation on top via .app-shell.v2 overrides). */
 .dash-v2 { display: grid; gap: 16px; }
 .dash-tiles { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
+/* Grid items default to min-width:auto, so a 1fr (or implicit auto) track grows
+   to fit its widest content (a table, a long grade value) and pushes the page
+   wider than the phone. Let tracks shrink; content wraps or scrolls inside. */
+.grid > *, .dash-v2 > *, .dash-tiles > *, .grade-grid > *, .cal > * { min-width: 0; }
 @media (max-width: 760px) { .dash-tiles { grid-template-columns: 1fr; } }
 
 /* clickable cards — subtle iOS press */
@@ -502,6 +506,9 @@ button.card:active, .card-link:active { transform: translateY(-1px) scale(.992);
   background: var(--menu-bg); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
   border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm); box-shadow: var(--drop-lg);
   display: flex; flex-direction: column; gap: 1px; animation: popin .28s var(--ease) backwards; max-height: 340px; overflow-y: auto; }
+/* Phones: the GPA tile is the narrow first of three, so a right-anchored menu
+   opened off the left edge of the screen. Anchor it to the tile's left edge. */
+@media (max-width: 760px) { .card-menu { left: 0; right: auto; max-width: calc(100vw - 36px); } }
 /* The GPA "Saved" menu sits under a left-ish button in a wrapping toolbar; a
    fixed right:0 pushed it off the left edge on narrow screens. Cap its width to
    the viewport, and on mobile open it rightward from the trigger so it stays on. */
@@ -692,6 +699,12 @@ body { overscroll-behavior-y: contain; } /* replace the browser's native pull-to
 .table tr:last-child td { border-bottom: none; }
 .table tr.dim td { color: var(--text-faint); }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Small phones: the class name and the grade are what matter; the assignment
+   count column is what pushed the dashboard table past a 375px screen. */
+@media (max-width: 420px) {
+  .table .col-count { display: none; }
+  .table th, .table td { padding-left: 12px; padding-right: 12px; }
+}
 
 /* ============================================================================
    INPUTS
@@ -1387,7 +1400,7 @@ html[data-theme="light"] .app-shell.v2 .grade-tile {
   .app-shell.v2 .dash-tiles { grid-template-columns: repeat(3, 1fr); gap: 9px; }
   .app-shell.v2 .dash-tiles .stat { min-height: 0; padding: 13px 13px 14px; }
   .app-shell.v2 .dash-tiles .stat .label { font-size: 11px; }
-  .app-shell.v2 .dash-tiles .stat .value { font-size: 20px !important; gap: 3px !important; margin-top: 4px; }
+  .app-shell.v2 .dash-tiles .stat .value { font-size: clamp(15px, 5.2vw, 20px) !important; gap: 3px !important; margin-top: 4px; overflow-wrap: anywhere; }
   .app-shell.v2 .dash-tiles .stat .value svg { width: 15px; height: 15px; }
   .app-shell.v2 .dash-tiles .stat .meta,
   .app-shell.v2 .dash-tiles .upcoming-list { display: none; }
