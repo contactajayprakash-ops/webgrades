@@ -249,6 +249,19 @@ Three steps, and skipping either of the last two takes the app down:
    nothing.
 3. Update the CloudFront `hac-api` origin's `DomainName`.
 
+## Current quarter — never guess it from the calendar
+
+The hot wave (refresh, app open, resume) and the Pi's HOT snapshot poll scrape
+HAC's **default** classwork view (`class` with no quarter). The Pi reads which
+quarter that view shows from the report-card-run dropdown (`quarterOfDoc`) and
+returns it as `currentQuarter` on `/batch`; the client files the result under both
+`class:{}` and `class:{"quarter":N}`, and the GPA wave fetches the other three.
+`guessCurrentQuarter` (Aug–Oct = Q1, …) is weeks off at the Q1→Q2 and Q3→Q4
+boundaries: when the hot wave used it, a refresh re-scraped finished Q1, said
+"Updated just now", and the new Q2 grade popped in ~5 s later with the GPA wave.
+When the quarter is unknown (older Pi, `/data` fallback) the default view is not
+filed under any number, since a wrong guess would overwrite another quarter.
+
 ## Course levels (Adv vs on-level)
 
 The transcript drops the level ("BIO" for both Biology and Biology Adv), so
@@ -301,12 +314,12 @@ fixed the *boot* path. The current cold open, in order:
    by a `preconnect` to `firestore.googleapis.com`. The inline hash is a **third**
    copy of the credKey string — `scripts/test-credkey-parity.mjs` covers it.
    **Live preflight** — a second `<head>` IIFE (`window.__wgBatch`) POSTs the hot
-   wave (`class` for the guessed current quarter) to `/batch` at the same moment,
+   wave (`class` with no quarter, HAC's default view) to `/batch` at the same moment,
    so the Pi's 2–4 s of HAC work overlaps the bundle download, parse and mount.
    `fetchBatch` in `hac.js` adopts it (through the account's serial queue) only for
    the same account, same password and exactly that one request; anything else,
-   or a failed preflight, falls through to the normal request. The inline quarter
-   guess is a copy of `guessCurrentQuarter` — `npm run test:boot` keeps them equal.
+   or a failed preflight, falls through to the normal request. `npm run test:boot`
+   keeps the inline request, the app's hot wave and that adopt rule in step.
    `%VITE_API_BASE%` in the snippet is Vite's HTML env replacement (left literal
    on the CloudFront build, where the snippet falls back to `/api`).
 4. **Boot skeleton** painted from the HTML itself (inline `<style>` + markup in
