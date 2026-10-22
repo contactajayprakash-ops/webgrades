@@ -361,7 +361,17 @@ const getClassworkDom = async (fetch, quarter = null, cache = {}) => {
 
   let doc = toDoc(await iframePage.text());
   assertLoggedIn(doc);
-  cache.currentQuarter = cache.currentQuarter || quarterOfDoc(doc);
+  // HAC remembers the last-selected report-card run for the rest of the HAC
+  // session, so only the FIRST classwork load of a session shows HAC's real
+  // default (the current quarter). Record it on the session then; every later
+  // load would just show whatever the previous postback selected. A request
+  // with no quarter means "the current quarter", so it is steered there like a
+  // keyed request (a no-op POST when the page already shows it).
+  const sess = cache.session;
+  if (sess && sess.currentQuarter == null) sess.currentQuarter = quarterOfDoc(doc);
+  const curQ = sess ? sess.currentQuarter : quarterOfDoc(doc);
+  cache.currentQuarter = cache.currentQuarter || curQ;
+  quarter = quarter || curQ;
 
   if (quarter) {
     const quarterValue = getQuarterValue(doc, quarter);
@@ -747,6 +757,7 @@ const scrapeWithSession = async (username, password, request, cache, pool = "liv
   if (pool === "snap") snapBusy.set(username, (snapBusy.get(username) || 0) + 1);
   try {
     let session = await getSession(username, password, false, pool);
+    cache.session = session; // getClassworkDom reads the session's current quarter
     try {
       const data = await scrapeType(session.fetch, request, cache);
       return { data, userName: nameOf(session, cache) };
@@ -758,6 +769,7 @@ const scrapeWithSession = async (username, password, request, cache, pool = "liv
         // (another worker in this batch may have just re-logged-in).
         const now = await getSession(username, password, false, pool);
         session = now !== session ? now : await getSession(username, password, true, pool);
+        cache.session = session;
         const data = await scrapeType(session.fetch, request, cache);
         return { data, userName: nameOf(session, cache) };
       }

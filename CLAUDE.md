@@ -254,7 +254,10 @@ Three steps, and skipping either of the last two takes the app down:
 The hot wave (refresh, app open, resume) and the Pi's HOT snapshot poll scrape
 HAC's **default** classwork view (`class` with no quarter). The Pi reads which
 quarter that view shows from the report-card-run dropdown (`quarterOfDoc`) and
-returns it as `currentQuarter` on `/batch`; the client files the result under both
+returns it as `currentQuarter` on `/batch`. **HAC remembers the last-selected run
+for the rest of the HAC session**, so only the first classwork load of a session
+shows the real default: the Pi records it on the session entry then
+(`session.currentQuarter`) and steers every later no-quarter request to it; the client files the result under both
 `class:{}` and `class:{"quarter":N}`, and the GPA wave fetches the other three.
 `guessCurrentQuarter` (Aug–Oct = Q1, …) is weeks off at the Q1→Q2 and Q3→Q4
 boundaries: when the hot wave used it, a refresh re-scraped finished Q1, said
