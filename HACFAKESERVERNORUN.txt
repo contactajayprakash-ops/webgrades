@@ -1134,12 +1134,16 @@ const sendPush = async (entry, payload) => {
 // Poll each subscriber's CURRENT grades, diff against lastSeen, push the new ones.
 const POLL_INTERVAL_MS = Number(process.env.PUSH_POLL_MS || 15 * 60 * 1000); // 15 min
 let polling = false;
+// The hour in Central Time right now (0–23), DST-aware. The Pi's own clock is
+// not on Central Time, so never use getHours(); and a fixed UTC offset was an
+// hour off for the CST half of the year.
+const ctHour = () =>
+  Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false })
+    .format(new Date()).replace(/^24$/, "0"));
 const inActiveHours = () => {
   // Poll waking hours EVERY day — teachers post grades in the evening and on
-  // weekends too, so a Mon–Fri 9-to-5 gate misses most real drops. Coarse
-  // Central-Time gate (offset assumes CDT; close enough for a window this wide).
-  const ct = new Date(Date.now() - 5 * 60 * 60 * 1000);
-  const hr = ct.getUTCHours();
+  // weekends too, so a Mon–Fri 9-to-5 gate misses most real drops.
+  const hr = ctHour();
   return hr >= 6 && hr < 23; // 6am–11pm CT, all 7 days
 };
 
@@ -1498,7 +1502,7 @@ app.post("/snapshot/run", async (req, res) => {
 
 if (SNAPSHOT_ENABLED) {
   setInterval(() => { if (inActiveHours()) snapshotPollOnce(); }, SNAP_POLL_MS);
-  setTimeout(() => snapshotPollOnce(), 12000); // baseline shortly after boot
+  setTimeout(() => { if (inActiveHours()) snapshotPollOnce(); }, 12000); // baseline shortly after boot (not at night)
   console.log(`[${ctTime()}] Snapshot poller: cycle ${Math.round(SNAP_POLL_MS / 60000)}m, concurrency ${SNAP_CONCURRENCY}, full≈daily, 6am–11pm CT`);
 }
 
