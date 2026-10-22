@@ -328,6 +328,18 @@ const showsQuarterAlready = (doc, quarterValue) =>
     ([id, want]) => selectedValue(doc, `plnMain_${id}`) === want,
   );
 
+// The quarter HAC's default classwork view shows — HAC's own notion of the
+// current grading period ("1"–"4"), or null if it can't be read. The calendar
+// guess (guessCurrentQuarter) is weeks off at the Q1->Q2 and Q3->Q4 boundaries,
+// and asking for the guessed quarter made a refresh re-scrape a finished quarter.
+const quarterOfDoc = (doc) => {
+  const value = selectedValue(doc, "plnMain_ddlReportCardRuns");
+  const opt = Array.from(doc.querySelectorAll("#plnMain_ddlReportCardRuns option"))
+    .find((o) => val(o) === value);
+  const m = (opt?.textContent || "").trim().match(/^([1-4])(?!\d)/);
+  return m ? m[1] : null;
+};
+
 const getClassworkDom = async (fetch, quarter = null, cache = {}) => {
   const classworkUrl = "https://hac.friscoisd.org/HomeAccess/Classes/Classwork";
   const classworkPage = await fetch(classworkUrl, {
@@ -349,6 +361,7 @@ const getClassworkDom = async (fetch, quarter = null, cache = {}) => {
 
   let doc = toDoc(await iframePage.text());
   assertLoggedIn(doc);
+  cache.currentQuarter = cache.currentQuarter || quarterOfDoc(doc);
 
   if (quarter) {
     const quarterValue = getQuarterValue(doc, quarter);
@@ -918,14 +931,17 @@ app.post("/batch", async (req, res) => {
     // Shared first-posted times for every class row this batch scraped.
     const posted = {};
     for (const r of results) {
-      if (r.success && r.type === "class") Object.assign(posted, stampPosted(username, classResKey(r.quarter), r.data).stamps);
+      if (r.success && r.type === "class") Object.assign(posted, stampPosted(username, classResKey(r.quarter || cache.currentQuarter), r.data).stamps);
     }
 
     const okCount = results.filter((x) => x.success).length;
     console.log(
-      `[${ctTime()}] BATCH — username=${username} ${okCount}/${requests.length} ok`,
+      `[${ctTime()}] BATCH — username=${username} ${okCount}/${requests.length} ok q=${cache.currentQuarter || "?"}`,
     );
-    res.json({ success: true, userName, results, posted });
+    // currentQuarter: the quarter HAC's default view shows (null if unread). The
+    // app's hot wave asks for the default view (`class` with no quarter) and files
+    // it under this quarter, instead of trusting a calendar guess.
+    res.json({ success: true, userName, results, posted, currentQuarter: cache.currentQuarter || null });
   } catch (err) {
     console.log(
       `[${ctTime()}] BATCH FAILED — username=${username} reason=${err.message}`,
@@ -1243,8 +1259,8 @@ const registerSnapshot = (username, password) => {
   if (isNew) setTimeout(() => snapshotNow(username, password, "full"), 0);
 };
 
-// Same calendar guess the client uses (src/lib/courses.js guessCurrentQuarter),
-// so the generic `class:{}` view aliases to the same quarter on both sides.
+// Calendar guess (same as src/lib/courses.js). Only a fallback for when HAC's
+// own current quarter (cache.currentQuarter, from quarterOfDoc) couldn't be read.
 const guessCurrentQuarter = (d = new Date()) => {
   const m = d.getMonth();
   if (m >= 7 && m <= 9) return "1";
@@ -1265,13 +1281,14 @@ const fullResources = () => [
   ["class", { quarter: "3" }], ["class", { quarter: "4" }],
   ["rank", {}], ["transcript", {}], ["schedule", {}], ["attendance", {}],
 ];
-const hotResources = (curQ) => [["class", { quarter: curQ }]];
+// HOT = HAC's default classwork view, filed under the quarter it shows.
+const hotResources = () => [["class", {}]];
 
 // Scrape a set of resources in ONE session (the per-request page cache shares the
 // transcript page across rank+transcript, like /batch). A failed resource is
 // skipped, not fatal. Aliases the current quarter into the generic `class:{}`
 // view (same HAC page) so the client's Dashboard/Agenda fallback is populated.
-const scrapeResources = async (username, password, resources, curQ) => {
+const scrapeResources = async (username, password, resources) => {
   const cache = {};
   const data = {};
   for (const [type, extra] of resources) {
@@ -1281,8 +1298,15 @@ const scrapeResources = async (username, password, resources, curQ) => {
       data[snapKey(type, extra)] = d;
     } catch (e) { /* skip this resource; keep the rest */ }
   }
-  const curData = data[snapKey("class", { quarter: curQ })];
-  if (curData !== undefined) data[snapKey("class", {})] = curData;
+  // The quarter HAC itself shows by default; the calendar guess only if HAC's
+  // page couldn't be read. Never file the default view under a guessed quarter.
+  const curQ = cache.currentQuarter;
+  const def = data[snapKey("class", {})];
+  if (def !== undefined && curQ) data[snapKey("class", { quarter: curQ })] = def;
+  else if (def === undefined) {
+    const keyed = data[snapKey("class", { quarter: curQ || guessCurrentQuarter() })];
+    if (keyed !== undefined) data[snapKey("class", {})] = keyed;
+  }
   return data;
 };
 
@@ -1328,14 +1352,12 @@ const priorFromFirestore = async (username, password) => {
 // updatedAt, v }; updatedAt is the snapshot's real age (the client shows it).
 const writeSnapshot = async (username, password, mode = "full") => {
   if (!SNAPSHOT_ENABLED) return { changed: false, bytes: 0, mode };
-  const curQ = guessCurrentQuarter();
   const prior = mode === "hot" ? (cachedPrior(username) || await priorFromFirestore(username, password)) : undefined;
   // Can't patch onto nothing — a hot poll with no in-memory base becomes full.
   const effMode = mode === "hot" && prior ? "hot" : "full";
   const scraped = await scrapeResources(
     username, password,
-    effMode === "hot" ? hotResources(curQ) : fullResources(),
-    curQ,
+    effMode === "hot" ? hotResources() : fullResources(),
   );
   if (!Object.keys(scraped).length) return { changed: false, bytes: 0, mode: effMode }; // total failure
   const data = effMode === "hot" ? { ...prior, ...scraped } : scraped;

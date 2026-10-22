@@ -177,17 +177,19 @@ function takePreflight(creds, requests) {
   if (!creds || pre.username !== creds.username || pre.password !== creds.password) return null;
   if (!Array.isArray(requests) || requests.length !== 1) return null;
   const [r] = requests;
-  if (r.type !== 'class' || String(r.quarter) !== pre.quarter || Object.keys(r).length !== 2) return null;
+  if (r.type !== 'class' || Object.keys(r).length !== 1) return null;
   pre.used = true;
   return pre.promise;
 }
 
 // Batch fetch: one server round-trip that logs into HAC once and scrapes every
 // requested resource. `requests` = [{ type, quarter?, date? }]. Returns the
-// per-request results array (each { type, quarter?, success, data?, message? }).
+// per-request results array (each { type, quarter?, success, data?, message? })
+// and `currentQuarter`: the quarter HAC's default classwork view shows ("1"–"4"),
+// or null when the Pi couldn't read it (or is an older deploy).
 export async function fetchBatch(creds, requests) {
   // The boot preflight in index.html already POSTed this exact hot wave (same
-  // account, same single current-quarter request) before the bundle loaded, so
+  // account, same single default-view `class` request) before the bundle loaded, so
   // the Pi has had a head start on HAC. Adopt its result in place of a second,
   // identical request — through the account's queue so nothing else for that
   // account overlaps it. Taken once; a failed preflight falls through to the
@@ -204,7 +206,8 @@ export async function fetchBatch(creds, requests) {
     r.type === 'class' && r.success ? { ...r, data: dedupeClasses(r.data) } : r);
   // `posted`: the Pi's shared first-posted times for the class rows it scraped
   // (absent on an older Pi deploy).
-  return { userName: j.userName, results, posted: j.posted || null };
+  const currentQuarter = /^[1-4]$/.test(String(j.currentQuarter ?? '')) ? String(j.currentQuarter) : null;
+  return { userName: j.userName, results, posted: j.posted || null, currentQuarter };
 }
 
 // Used to ping a sleeping (Replit) server awake before the first real request.

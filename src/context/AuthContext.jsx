@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { login as apiLogin, fetchData as apiFetchData, fetchIprDates as apiFetchIprDates, fetchBatch as apiFetchBatch, wake as apiWake, dedupeClasses } from '../api/hac.js'
-import { cleanCourseName, guessCurrentQuarter } from '../lib/courses.js'
+import { cleanCourseName } from '../lib/courses.js'
 import { clearPrefs } from '../lib/prefs.js'
 import { bgProfilesEnabled, syncAllowedFor, snapshotReadEnabled } from '../lib/syncPolicy.js'
 import { loadNotifyPrefs, eventMatches, showGradeNotification } from '../lib/notify.js'
@@ -48,24 +48,30 @@ const isRealName = (userName, username) => !!userName && userName !== username
 // quarters + rank + transcript) even starts. GPA data follows; rarely-changing
 // cold data is last and only fetched when it's missing from the cache.
 //
-// The pages read grades keyed by quarter number (`class {quarter:N}`), so wave 1
-// MUST fetch that keyed current quarter — not just the generic `class {}` — or
-// the Dashboard/Grades keep showing stale data until the whole GPA wave finishes.
+// Wave 1 is HAC's DEFAULT classwork view (`class {}`), which is HAC's own current
+// quarter, and the Pi reports which quarter that is (`currentQuarter`). The pages
+// read grades keyed by quarter number (`class {quarter:N}`), so the hot result is
+// filed under BOTH `class:{}` and that keyed quarter (fileHot).
 //
-// `class {}` (HAC's default "current") and `class {quarter:curQ}` are the SAME
-// HAC page, so we fetch ONLY the keyed one and alias it into the `class:{}` cache
-// key (see the alias step in syncAll/syncProfileQuiet). Dashboard/Agenda fall back
-// to `class:{}`; keeping it populated by alias avoids scraping the page twice.
+// It used to ask for a calendar-guessed quarter (Aug–Oct = Q1). FISD's Q2 starts
+// in mid-October, so for weeks a refresh re-scraped finished Q1, said "Updated
+// now" with nothing new, and the real current quarter only arrived seconds later
+// with the GPA wave. Never guess the quarter here.
+//
+// When the quarter is unknown (an older Pi, or the per-resource fallback), the
+// default view is NOT filed under any number — a wrong guess would overwrite
+// another quarter's grades — and the GPA wave fetches all four quarters.
 const ALL_QUARTERS = ['4', '3', '2', '1']
-function buildHotGpaWaves(curQ) {
-  const hot = [['class', { quarter: curQ }]]
-  const gpa = [
+const WAVE_HOT = [['class', {}]]
+function buildGpaWave(curQ) {
+  return [
     ['rank', {}],
     ['transcript', {}], // rank + transcript share one HAC page — merged server-side
     ...ALL_QUARTERS.filter((q) => q !== curQ).map((q) => ['class', { quarter: q }]),
   ]
-  return [hot, gpa]
 }
+// The cache key the hot result is filed under besides `class:{}` (null = none).
+const hotKeyedKey = (curQ) => (curQ ? `class:${JSON.stringify({ quarter: curQ })}` : null)
 const WAVE_COLD = [
   ['schedule', {}],
   ['attendance', {}],
@@ -354,15 +360,15 @@ export function AuthProvider({ children }) {
       // -state visibility/poll re-syncs to just the one page people open the app for.
       const full = opts.full === true || initial ||
         Date.now() - (lastFullSyncAt.current.get(username) || 0) >= GPA_TTL_MS
-      // Wave 1 refreshes the current quarter (calendar guess) so its grades paint
-      // first; the remaining quarters ride along in the GPA wave.
-      const curQ = guessCurrentQuarter()
-      const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(curQ)
+      // Wave 1 refreshes HAC's current quarter so its grades paint first; the
+      // remaining quarters ride along in the GPA wave, built once wave 1 has said
+      // which quarter is current ('gpa' placeholder below).
+      let curQ = null
       // Cold resources rarely change — refetch when missing, ~daily, or on a manual refresh.
       const due = coldDue(username, acct)
       const coldNeeded = WAVE_COLD.filter(([t, e]) => opts.full === true || due(t, e))
-      const waves = [WAVE_HOT, ...(full ? [WAVE_GPA, coldNeeded] : [])].filter((w) => w.length)
-      const total = waves.reduce((n, w) => n + w.length, 0)
+      const plan = [WAVE_HOT, ...(full ? ['gpa', coldNeeded] : [])].filter((w) => w.length)
+      let total = plan.reduce((n, w) => n + (w === 'gpa' ? buildGpaWave('1').length : w.length), 0)
       setSync({ phase: 'syncing', done: 0, total, changes: [], initial, hotDone: false })
       const changes = []
       const gradeEvents = [] // structured new-grade events for notifications
@@ -374,14 +380,16 @@ export function AuthProvider({ children }) {
         if (userRef.current === username) setSyncedAt(now)
         return now
       }
-      for (const wave of waves) {
+      for (const step of plan) {
         if (syncGen.current !== myGen) return // superseded by an account switch
-        const olds = wave.map(([t, e]) => acct.get(keyOf(t, e)))
+        const wave = step === 'gpa' ? buildGpaWave(curQ) : step
+        if (step === 'gpa' && !curQ) { total += 1; setSync((s) => ({ ...s, total })) } // all 4 quarters
         // Fetch the whole wave in one batched request; if the server doesn't
         // support /batch (older deploy) or it errors, fall back to per-resource.
         const gotByKey = {}
         try {
-          const { userName: batchName, results, posted } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          const { userName: batchName, results, posted, currentQuarter } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          if (wave === WAVE_HOT) curQ = currentQuarter
           mergeServerPosted(username, posted) // shared "Recently posted" times; bump() below re-renders
           backfillUserName(username, batchName) // fill in a missing real name
           wave.forEach(([type, extra], i) => {
@@ -398,21 +406,23 @@ export function AuthProvider({ children }) {
           }
         }
         if (syncGen.current !== myGen) return
-        wave.forEach(([type, extra], i) => {
+        wave.forEach(([type, extra]) => {
           const key = keyOf(type, extra)
           if (gotByKey[key] !== undefined) {
+            // The hot result is diffed against the SAME quarter's old data, not
+            // whatever `class:{}` held (last quarter's grades right after a
+            // rollover — that would read as every grade changing at once).
+            const diffKey = wave === WAVE_HOT ? (hotKeyedKey(curQ) || key) : key
+            const old = acct.get(diffKey)
             acct.set(key, gotByKey[key])
-            changes.push(...diffResource(type, extra, olds[i], gotByKey[key]))
-            if (type === 'class') gradeEvents.push(...classGradeEvents(olds[i], gotByKey[key]))
+            if (diffKey !== key) acct.set(diffKey, gotByKey[key]) // file under its quarter too
+            changes.push(...diffResource(type, extra, old, gotByKey[key]))
+            if (type === 'class') gradeEvents.push(...classGradeEvents(old, gotByKey[key]))
             fetched++
           }
         })
         if (wave === coldNeeded && wave.length === WAVE_COLD.length
           && wave.every(([t, e]) => gotByKey[keyOf(t, e)] !== undefined)) stampCold(username)
-        // Same page — alias the keyed current quarter into the generic `class:{}`
-        // view so Dashboard/Agenda's fallback stays fresh without a second scrape.
-        const curKey = keyOf('class', { quarter: curQ })
-        if (gotByKey[curKey] !== undefined) acct.set(keyOf('class', {}), gotByKey[curKey])
         persistCache(username)
         done += wave.length
         // Stamp "Updated" as soon as the current grades land, not after the
@@ -527,16 +537,17 @@ export function AuthProvider({ children }) {
       // Same hourly gate as syncAll: a warm background profile only needs its
       // current grades refreshed each cycle; GPA/cold ride the hourly cadence.
       const full = initial || Date.now() - (lastFullSyncAt.current.get(username) || 0) >= GPA_TTL_MS
-      const curQ = guessCurrentQuarter()
-      const [WAVE_HOT, WAVE_GPA] = buildHotGpaWaves(curQ)
+      let curQ = null // HAC's current quarter, from the hot wave (see WAVE_HOT)
       const due = coldDue(username, acct)
       const coldNeeded = WAVE_COLD.filter(([t, e]) => due(t, e))
-      const waves = [WAVE_HOT, ...(full ? [WAVE_GPA, coldNeeded] : [])].filter((w) => w.length)
+      const plan = [WAVE_HOT, ...(full ? ['gpa', coldNeeded] : [])].filter((w) => w.length)
       let fetched = 0
-      for (const wave of waves) {
+      for (const step of plan) {
+        const wave = step === 'gpa' ? buildGpaWave(curQ) : step
         const gotByKey = {}
         try {
-          const { userName: batchName, results, posted } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          const { userName: batchName, results, posted, currentQuarter } = await apiFetchBatch(c, wave.map(([type, extra]) => ({ type, ...extra })))
+          if (wave === WAVE_HOT) curQ = currentQuarter
           mergeServerPosted(username, posted)
           backfillUserName(username, batchName) // fill in a missing real name for this profile
           wave.forEach(([type, extra], i) => {
@@ -550,9 +561,9 @@ export function AuthProvider({ children }) {
         }
         if (wave === coldNeeded && wave.length === WAVE_COLD.length
           && wave.every(([t, e]) => gotByKey[keyOf(t, e)] !== undefined)) stampCold(username)
-        // Alias the keyed current quarter into `class:{}` (same page as syncAll).
-        const curKey = keyOf('class', { quarter: curQ })
-        if (gotByKey[curKey] !== undefined) acct.set(keyOf('class', {}), gotByKey[curKey])
+        // File HAC's default view under its quarter too (same as syncAll).
+        const hotKey = keyOf('class', {})
+        if (wave === WAVE_HOT && curQ && gotByKey[hotKey] !== undefined) acct.set(hotKeyedKey(curQ), gotByKey[hotKey])
         persistCache(username)
       }
       if (fetched > 0) {
