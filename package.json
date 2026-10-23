@@ -15,7 +15,8 @@
     "test:posted": "node scripts/test-posted-sync.mjs",
     "test:levels": "node scripts/test-levels.mjs",
     "test:boot": "node scripts/test-boot-parity.mjs",
-    "test:careerplan": "node scripts/test-careerplan.mjs"
+    "test:careerplan": "node scripts/test-careerplan.mjs",
+    "test:planner": "node scripts/test-planner.mjs"
   },
   "dependencies": {
     "firebase": "^12.18.0",

@@ -19,6 +19,7 @@ const NAV = [
   { to: '/ipr', label: 'Interim Progress', icon: 'clipboard' },
   { to: '/transcript', label: 'Transcript', icon: 'scroll' },
   { to: '/attendance', label: 'Attendance', icon: 'calendar' },
+  { to: '/plan', label: 'Course Plan', icon: 'map', badge: 'New' },
   { section: 'More' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]

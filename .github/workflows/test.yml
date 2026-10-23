@@ -21,3 +21,4 @@ jobs:
       - run: npm run test:levels
       - run: npm run test:boot
       - run: npm run test:careerplan
+      - run: npm run test:planner

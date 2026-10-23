@@ -2002,3 +2002,131 @@ html[data-mega="tide"] .app-shell.v2 .card {
 html[data-mega="tide"] .app-shell.v2 .card:hover {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(34, 160, 229, 0.3),
     0 26px 54px -24px rgba(20, 90, 130, 0.45); }
+
+/* ============================================================================
+   COURSE PLAN — /plan (src/views/Plan.jsx): HAC's 4-year Career Plan grid and
+   next year's course requests, with a draft and a "to enter in HAC" list.
+   ============================================================================ */
+.plan-tiles { margin-bottom: 4px; }
+.plan-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0 14px; }
+.plan-card { padding: 18px 20px; margin-bottom: 16px; }
+.plan-notice { margin-bottom: 16px; }
+
+/* desktop grid: subjects down, school years across; scrolls inside the card */
+.plan-grid { display: grid; overflow-x: auto; overscroll-behavior-x: contain; margin: -4px -6px 0; padding: 0 6px 4px; }
+.plan-gh { padding: 6px 8px 10px; font-size: var(--t-caption); font-weight: 600; color: var(--text-dim); white-space: nowrap; }
+.plan-gh .faint { font-weight: 500; margin-left: 4px; }
+.plan-gh.now { color: var(--accent-text); }
+.plan-gh-first { color: var(--text-faint); }
+.plan-subj, .plan-cell { border-top: 0.5px solid var(--hairline); padding: 9px 8px; min-width: 0; }
+.plan-subj { display: flex; flex-direction: column; gap: 3px; }
+.plan-subj-name { font-weight: 600; font-size: var(--t-footnote); line-height: 1.25; letter-spacing: -0.01em; }
+.plan-subj-credits { font-size: var(--t-caption2); font-variant-numeric: tabular-nums; font-weight: 600; }
+.plan-subj-credits.ok { color: var(--green-text); }
+.plan-subj-credits.short { color: var(--orange-text); }
+.plan-cell { display: flex; flex-direction: column; gap: 6px; }
+.plan-cell.now { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+
+/* one course in the plan; the left bar color is its status */
+.plan-chip {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  padding: 6px 9px 7px 11px; border-radius: 10px; text-align: left;
+  background: var(--fill-4); border: 0.5px solid var(--hairline); color: var(--text);
+  box-shadow: inset 3px 0 0 var(--chip-bar, var(--text-faint)); font: inherit;
+}
+.plan-chip-name { font-weight: 600; font-size: var(--t-caption); line-height: 1.25; overflow-wrap: anywhere; }
+.plan-chip-meta { font-size: var(--t-caption2); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.plan-chip.done { --chip-bar: var(--green); }
+.plan-chip.current { --chip-bar: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.plan-chip.requested { --chip-bar: var(--accent-2); }
+.plan-chip.incomplete { --chip-bar: var(--orange); }
+.plan-chip.draft { --chip-bar: var(--accent); border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.plan-chip.dropped { opacity: .55; }
+.plan-chip.dropped .plan-chip-name { text-decoration: line-through; }
+.plan-chip.mini { display: inline-block; width: 13px; height: 13px; padding: 0; border-radius: 4px; flex-shrink: 0; }
+.plan-chip.mini.draft { border-width: 1px; }
+
+.plan-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 14px; margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--hairline); }
+.plan-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: var(--t-caption); color: var(--text-dim); }
+.plan-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
+/* phone / narrow: one school year at a time */
+.plan-yearbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 6px; }
+.plan-ysubj { padding: 11px 0 12px; border-top: 0.5px solid var(--hairline); }
+.plan-yearbar + .plan-ysubj { border-top: 0; }
+.plan-ysubj-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.plan-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 6px; }
+
+/* requests */
+.req-intro { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 14px; }
+.req-intro-main { min-width: 0; }
+.req-intro-title { font-weight: 700; font-size: var(--t-headline); letter-spacing: -0.02em; margin-bottom: 2px; }
+.todo-card { border-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+.todo-head { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 6px; }
+.todo-head svg { flex-shrink: 0; margin-top: 2px; color: var(--accent-text); }
+.todo-title { font-weight: 700; font-size: var(--t-callout); letter-spacing: -0.015em; }
+.todo-list { margin: 8px 0 10px; padding-left: 22px; font-size: var(--t-subhead); line-height: 1.45; }
+.todo-list li { margin: 9px 0; }
+.todo-list li::marker { color: var(--text-dim); font-weight: 600; }
+.todo-step { display: block; margin-top: 3px; color: var(--text-dim); overflow-wrap: anywhere; }
+.todo-step b { color: var(--text); }
+.todo-step::before { display: inline-block; width: 16px; font-weight: 800; }
+.todo-step.add::before { content: '+'; color: var(--green-text); }
+.todo-step.drop::before { content: '−'; color: var(--red-text); }
+
+.req-grid { grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); align-items: start; }
+.req-grid .plan-card { margin-bottom: 0; }
+.req-subject { padding: 15px 16px 8px; }
+.req-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.req-head-text { min-width: 0; }
+.req-name { font-weight: 700; font-size: var(--t-callout); letter-spacing: -0.015em; }
+.req-empty { font-size: var(--t-footnote); color: var(--text-faint); padding: 8px 0 10px; }
+.req-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 0.5px solid var(--hairline); }
+.req-row-main { flex: 1; min-width: 0; }
+.req-row-name { display: block; font-weight: 600; font-size: var(--t-subhead); line-height: 1.3; overflow-wrap: anywhere; }
+.req-row-sub { display: block; font-size: var(--t-caption); color: var(--text-dim); margin-top: 2px; }
+.req-row.dropped .req-row-name { text-decoration: line-through; color: var(--text-dim); }
+.req-row.dropped .req-row-sub { opacity: .7; }
+.req-row.draft .req-row-name::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 7px; vertical-align: 2px; }
+.req-flag { color: var(--orange-text); }
+.req-alt { font-size: var(--t-caption); gap: 5px; flex-shrink: 0; }
+.req-alt input { width: 16px; height: 16px; }
+.req-x { width: 30px; height: 30px; color: var(--red-text); }
+.wtag { display: inline-block; margin-left: 5px; padding: 1px 6px; border-radius: 6px; background: var(--fill-3); font-size: 10.5px; font-weight: 700; letter-spacing: .02em; line-height: 1.5; vertical-align: 1px; }
+
+/* course picker: a bottom sheet on phones, a centered sheet on desktop */
+.picker-wrap { position: fixed; z-index: 211; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto; animation: sheetup .34s var(--spring) backwards; }
+.picker-sheet {
+  display: flex; flex-direction: column; gap: 12px; max-height: min(80dvh, 680px); padding: 18px 16px 12px;
+  background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-heavy); backdrop-filter: var(--blur-heavy);
+  border: 0.5px solid var(--glass-border); border-radius: 26px; box-shadow: var(--rim), var(--drop-lg);
+}
+.picker-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.picker-search { margin: 0; }
+.picker-scope { align-self: flex-start; }
+.picker-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 0 6px; }
+.picker-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 8px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.picker-row:hover { background: var(--fill-4); }
+.picker-row:active { background: var(--fill-3); }
+.picker-row.have { opacity: .45; cursor: default; }
+.picker-row-main { flex: 1; min-width: 0; }
+.picker-row-act { font-size: var(--t-footnote); font-weight: 600; color: var(--accent-text); flex-shrink: 0; }
+@media (min-width: 761px) {
+  .picker-wrap { top: 10dvh; bottom: auto; }
+}
+@media (max-width: 760px) {
+  .plan-card { padding: 14px 14px; }
+  .req-subject { padding: 13px 14px 6px; }
+  .plan-tabs { margin: 14px 0 12px; }
+}
+.picker-row-main > span { display: block; }
+.picker-row.later .req-row-name { color: var(--text-dim); }
+.picker-warn { color: var(--orange-text); }
+.picker-prereq { font-size: var(--t-caption); color: var(--text-faint); margin-top: 2px; line-height: 1.35; display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.req-head .btn { white-space: nowrap; flex-shrink: 0; }
+.plan-rigor-adv { margin-left: .3em; font-size: .62em; font-weight: 600; color: var(--text-dim); letter-spacing: -0.02em; }
+@media (max-width: 760px) {
+  .plan-rigor-adv { display: block; margin: 3px 0 0; font-size: 12px; }
+}
+.req-intro .small.faint, .todo-card .small.faint { color: var(--text-dim); }
+.picker-prereq { color: var(--text-dim); opacity: .85; }

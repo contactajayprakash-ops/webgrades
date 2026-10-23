@@ -720,10 +720,252 @@ const scrapeIpr = async (fetch, date) => {
 };
 
 // ====================
+// Career Plan (CareerPlan.aspx) — the graduation plan grid: one row group per
+// subject area, one column pair (course, credit) per school year, every cell
+// "Course Name (CODE - section)" or "Course Name (CODEY)" for year-long courses.
+// Italics mean "not complete": in progress this year, or only planned/requested
+// for a future year. The row of "Enter Requests" buttons says which future years
+// are open for course requests. The page carries no weights — the course names
+// are the only level signal (AP / Adv / GT in the name, EA = credit by exam,
+// CR = credit recovery/summer, OC/Online/@VL = off-campus or virtual).
+// ====================
+const cpClean = (s) => String(s || "").replace(/\s+/g, " ").trim();
+const cpNum = (s) => {
+  const n = parseFloat(String(s ?? "").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+};
+const cpGrade = (g) => String(g || "").replace(/\D/g, "").padStart(2, "0");
+// "AP Calculus BC YR (MTH45305Y)" -> { name, code, section }
+const splitCourseCell = (text) => {
+  const t = cpClean(text);
+  const m = t.match(/^(.*?)\s*\(([A-Za-z0-9]+)(?:\s*-\s*([A-Za-z0-9]+))?\)$/);
+  if (!m) return { name: t, code: null, section: null };
+  return { name: m[1].trim(), code: m[2].toUpperCase(), section: m[3] || null };
+};
+
+// One plan table (the page repeats the grid for each supplemental plan, all
+// with id=TblMain, each under its own .sg-header-heading).
+const parseCareerPlanTable = (table) => {
+  // Header: "Grade 08 (2024 - 2025)" per year column, in column order. The
+  // bottom "To-Date Totals:" / "Estimated Totals:" rows are <th> too.
+  const years = [];
+  const totals = {};
+  for (const tr of table.querySelectorAll("tr")) {
+    const ths = Array.from(tr.querySelectorAll("th")).map((th) => cpClean(th.textContent));
+    if (!ths.length) continue;
+    for (const label of ths) {
+      const m = label.match(/^Grade\s*(\d+)\s*\(\s*(\d{4})\s*-\s*(\d{4})\s*\)/i);
+      if (m) years.push({ grade: cpGrade(m[1]), year: m[2] + "-" + m[3], label });
+    }
+    if (/^To-?Date Totals/i.test(ths[0])) totals.toDate = { creditNeeded: cpNum(ths[1]), estCredit: cpNum(ths[2]), byYear: ths.slice(3).map(cpNum) };
+    else if (/^Estimated Totals/i.test(ths[0])) totals.estimated = { byYear: ths.slice(1).map(cpNum) };
+  }
+  // "Enter Requests: [Grade 11] [Grade 12]" — each button links to
+  // CourseRequests.aspx?request_year=2028&grade= 11.
+  const requestYears = [];
+  for (const b of table.querySelectorAll("button")) {
+    const m = (b.getAttribute("onclick") || "").match(/request_year=(\d{4})[^'"]*?grade=\s*(\d+)/i);
+    if (m) requestYears.push({ grade: cpGrade(m[2]), year: (Number(m[1]) - 1) + "-" + m[1], requestYear: m[1], label: cpClean(b.textContent) });
+  }
+
+  // Body: a subject's first row starts with [name, credit needed, est. credit]
+  // (rowspan'd), then (course, credit) pairs per year; its continuation rows are
+  // pairs only — told apart by cell count. Cells are paired by position, so an
+  // empty course cell is skipped without losing the column.
+  const subjects = [];
+  let cur = null;
+  for (const tr of table.querySelectorAll("tr")) {
+    if (tr.querySelector("button")) continue; // the Enter Requests row
+    const tds = Array.from(tr.querySelectorAll("td"));
+    if (!tds.length) continue; // header rows
+    let cells = tds;
+    if (tds.length === 3 + 2 * years.length || (tds.length !== 2 * years.length && /^\d+\.\s*\S/.test(cpClean(tds[0].textContent)))) {
+      cur = {
+        name: cpClean(tds[0].textContent),
+        creditNeeded: cpNum(tds[1]?.textContent),
+        estCredit: cpNum(tds[2]?.textContent),
+        courses: [],
+      };
+      subjects.push(cur);
+      cells = tds.slice(3);
+    }
+    if (!cur) continue;
+    for (let i = 0; i + 1 < cells.length; i += 2) {
+      const raw = cpClean(cells[i].textContent);
+      if (!raw) continue;
+      const y = years[i / 2] || {};
+      const { name, code, section } = splitCourseCell(raw);
+      cur.courses.push({
+        grade: y.grade || null,
+        year: y.year || null,
+        name, code, section,
+        credit: cpNum(cells[i + 1]?.textContent),
+        complete: !/<i[\s>]/i.test(cells[i].innerHTML || ""),
+        raw,
+      });
+    }
+  }
+  return { years, requestYears, subjects, totals };
+};
+
+const parseCareerPlan = (doc) => {
+  // Headings come in page order: "Graduation Plan : Foundation Plan with
+  // Endorsements", then "Supplemental Plan : Distinguished Level of
+  // Achievement", ... — one per TblMain table. The supplemental tables repeat
+  // the same courses, so the top-level fields are the graduation plan only.
+  const headings = Array.from(doc.querySelectorAll(".sg-header-heading")).map((h) => cpClean(h.textContent));
+  const tables = Array.from(doc.querySelectorAll("table")).filter((t) => t.getAttribute("id") === "TblMain");
+  if (!tables.length) throw new Error("Career plan table not found");
+  const plans = tables.map((t, i) => {
+    const h = headings[i] || "";
+    const m = h.match(/^(Graduation|Supplemental) Plan\s*:\s*(.*)$/i);
+    return { name: m ? m[2].trim() : h || null, kind: m && /^Supplemental/i.test(m[1]) ? "supplemental" : "graduation", ...parseCareerPlanTable(t) };
+  });
+  const main = plans.find((p) => p.kind === "graduation") || plans[0];
+  const note = cpClean(doc.querySelector("#spnReqGroupFDE span")?.textContent) || null;
+  return {
+    plan: main.name, note,
+    years: main.years, requestYears: main.requestYears, subjects: main.subjects, totals: main.totals,
+    supplemental: plans.filter((p) => p !== main).map(({ requestYears, ...p }) => p),
+  };
+};
+
+// The Content/Student/*.aspx pages are what HAC's Classes/* menu entries load
+// (the same way Transcript.aspx works). If HAC ever serves something else there
+// (no `marker` in the HTML), fall back to the menu page and follow its iframe,
+// like getClassworkDom.
+const hacStudentPage = async (fetch, contentUrl, menuUrl, marker, fix = (t) => t) => {
+  const page = await fetch(contentUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  let html = await page.text();
+  let doc = toDoc(fix(html));
+  assertLoggedIn(doc);
+  if (html.includes(marker)) return doc;
+  const menu = await fetch(menuUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  const landing = toDoc(await menu.text());
+  assertLoggedIn(landing);
+  const src = landing.querySelector("iframe")?.getAttribute("src") || "";
+  if (!src) throw new Error("HAC page not found: " + menuUrl);
+  const url = src.startsWith("http") ? src : "https://hac.friscoisd.org" + src;
+  const inner = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", Referer: menuUrl } });
+  html = await inner.text();
+  doc = toDoc(fix(html));
+  assertLoggedIn(doc);
+  if (!html.includes(marker)) throw new Error("HAC page has no " + marker + ": " + url);
+  return doc;
+};
+
+const scrapeCareerPlan = async (fetch) => {
+  const doc = await hacStudentPage(fetch,
+    "https://hac.friscoisd.org/HomeAccess/Content/Student/CareerPlan.aspx",
+    "https://hac.friscoisd.org/HomeAccess/Classes/CareerPlan",
+    "TblMain");
+  return parseCareerPlan(doc);
+};
+
+// ====================
+// Course Requests (CourseRequests.aspx) — next year's requested courses, grouped
+// by subject area (header / item / footer rows), with HAC's per-subject-area
+// graduation credit table and the request credit limits. The Edit buttons open
+// RequestsPopup.aspx in a new window; this reads only. `year`/`grade` pick a
+// different request year (the Career Plan's "Enter Requests" buttons).
+// ====================
+// HAC leaves the footer's <span class='sg-footer-credits'> unclosed before </td>,
+// and node-html-parser then loses the whole table (every <tr> ends up at the
+// document root). Close any span that runs straight into </td> before parsing.
+const closeStraySpans = (html) => String(html).replace(/(<span\b[^>]*>[^<]*)(<\/td>)/gi, "$1</span>$2");
+
+const parseCourseRequests = (doc) => {
+  const yearTxt = cpClean(doc.querySelector("#plnMain_dgYear_lblYear")?.textContent);
+  const ym = yearTxt.match(/(\d{4})\s*-\s*(\d{4})/);
+  const year = ym ? ym[1] + "-" + ym[2] : null;
+  const bg = cpClean(doc.querySelector("#plnMain_dgYear_lblBuildingAndGrade")?.textContent);
+  const bgm = bg.match(/^(.*?)\s*-\s*Grade\s*(\d+)\s*$/i);
+  const school = bgm ? bgm[1] : bg || null;
+  const grade = bgm ? cpGrade(bgm[2]) : null;
+
+  const table = doc.querySelector("#plnMain_dgYear_dgCourseRequests");
+  if (!table) throw new Error("Course requests table not found");
+  const hiddenIn = (tr, part) => cpClean(tr.querySelector('input[id*="' + part + '"]')?.getAttribute("value"));
+  const subjects = [];
+  let cur = null;
+  let total = null, altTotal = null;
+  for (const tr of table.querySelectorAll("tr")) {
+    const cls = tr.getAttribute("class") || "";
+    const tds = Array.from(tr.querySelectorAll("td"));
+    if (cls.includes("sg-requests-header")) {
+      const btn = tr.querySelector("button");
+      const bm = (btn?.getAttribute("onclick") || "").match(/BtnSelect_onclick\(\s*'([^']*)'\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*'([^']*)'/);
+      cur = {
+        name: cpClean(tr.querySelector(".sg-requests-header-heading")?.textContent),
+        code: hiddenIn(tr, "hidSubjAreaCode") || (bm ? bm[1] : null),
+        editable: !!btn,
+        planYear: bm ? bm[2] : null,
+        planDetId: bm ? bm[3] : null,
+        courses: [],
+        total: 0,
+        altTotal: 0,
+      };
+      subjects.push(cur);
+    } else if (cls.includes("sg-requests-item") && cur) {
+      const a = tr.querySelector("a");
+      const text = cpClean(a ? a.textContent : tds[1]?.textContent);
+      const { name, code } = splitCourseCell(text);
+      const om = (a?.getAttribute("onclick") || "").match(/LnkCourse_onclick\(\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"/);
+      const flags = Array.from(tr.querySelectorAll("img"))
+        .map((im) => (im.getAttribute("src") || "").split("/").pop().replace(/\.\w+$/, ""))
+        .filter(Boolean);
+      cur.courses.push({
+        name,
+        code: hiddenIn(tr, "hidCourse") || code,
+        credit: cpNum(tds[2]?.textContent),
+        altCredit: cpNum(tds[3]?.textContent),
+        status: om ? om[3] : null, // PLANNED / REQUESTED / ...
+        flags, // required / locked / incomplete-prerequisite / alternate-request
+      });
+    } else if (cls.includes("sg-requests-footer") && cur) {
+      cur.total = cpNum(tds[2]?.textContent) ?? 0;
+      cur.altTotal = cpNum(tds[3]?.textContent) ?? 0;
+    } else if (cls.includes("sg-asp-table-header-row") && /Total/i.test(tr.textContent)) {
+      total = cpNum(tds[2]?.textContent);
+      altTotal = cpNum(tds[3]?.textContent);
+    }
+  }
+
+  // "Graduation Subject Area Requirements": required / completed / scheduled /
+  // planned / needed credits per subject area, plus a Total row.
+  const requirements = [];
+  for (const tr of doc.querySelectorAll("#plnMain_dgSubjectAreas tr")) {
+    const tds = Array.from(tr.querySelectorAll("td")).map((td) => cpClean(td.textContent));
+    if (tds.length < 6 || !cpNum(tds[1]) && tds[1] !== "0.0000") continue; // the column-title row
+    const row = { name: tds[0], required: cpNum(tds[1]), completed: cpNum(tds[2]), scheduled: cpNum(tds[3]), planned: cpNum(tds[4]), needed: cpNum(tds[5]) };
+    if (/^Total/i.test(tds[0])) row.total = true;
+    requirements.push(row);
+  }
+  const hv = (id) => cpNum(doc.querySelector("#" + id)?.getAttribute("value"));
+  return {
+    year, school, grade,
+    subjects, total, altTotal,
+    requirements,
+    limits: { min: hv("plnMain_hdnMinCredit"), max: hv("plnMain_hdnMaxCredit"), requested: hv("plnMain_hdnReqCredit") },
+  };
+};
+
+const scrapeCourseRequests = async (fetch, { year, grade } = {}) => {
+  let qs = "";
+  const ry = String(year || "").replace(/\D/g, "").slice(-4);
+  if (ry) qs = "?request_year=" + ry + "&grade=" + String(grade || "").replace(/\D/g, "");
+  const doc = await hacStudentPage(fetch,
+    "https://hac.friscoisd.org/HomeAccess/Content/Student/CourseRequests.aspx" + qs,
+    "https://hac.friscoisd.org/HomeAccess/Classes/Requests" + qs,
+    "sg-requests-", closeStraySpans);
+  return parseCourseRequests(doc);
+};
+
+// ====================
 // One dispatcher used by BOTH /data and /batch. `cache` is per-request so a
 // batch can share the classwork iframe URL + transcript page across items.
 // ====================
-const scrapeType = async (fetch, { type, quarter, date } = {}, cache = {}) => {
+const scrapeType = async (fetch, { type, quarter, date, year, grade } = {}, cache = {}) => {
   switch (type) {
     case "class":
       return parseClasswork(await getClassworkDom(fetch, quarter, cache));
@@ -739,6 +981,10 @@ const scrapeType = async (fetch, { type, quarter, date } = {}, cache = {}) => {
       return scrapeWeek(fetch);
     case "ipr":
       return scrapeIpr(fetch, date);
+    case "careerplan":
+      return scrapeCareerPlan(fetch);
+    case "requests":
+      return scrapeCourseRequests(fetch, { year, grade });
     default:
       throw new Error("Invalid type requested");
   }
@@ -880,12 +1126,12 @@ app.post("/login", async (req, res) => {
 
 // Single-resource endpoint (kept for backwards compatibility).
 app.post("/data", async (req, res) => {
-  const { username, password, type, quarter, date } = req.body;
+  const { username, password, type, quarter, date, year, grade } = req.body;
   try {
     const { data, userName } = await scrapeWithSession(
       username,
       password,
-      { type, quarter, date },
+      { type, quarter, date, year, grade },
       {},
     );
     if (type === "class") stampPosted(username, classResKey(quarter), data);
@@ -1296,6 +1542,7 @@ const fullResources = () => [
   ["class", { quarter: "1" }], ["class", { quarter: "2" }],
   ["class", { quarter: "3" }], ["class", { quarter: "4" }],
   ["rank", {}], ["transcript", {}], ["schedule", {}], ["attendance", {}],
+  ["careerplan", {}], // the graduation plan grid (daily tier; `requests` is on demand only)
 ];
 // HOT = HAC's default classwork view, filed under the quarter it shows.
 const hotResources = () => [["class", {}]];

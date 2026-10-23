@@ -25,6 +25,7 @@ const Rank = lazy(() => import('./views/Rank.jsx'))
 const Transcript = lazy(() => import('./views/Transcript.jsx'))
 const Attendance = lazy(() => import('./views/Attendance.jsx'))
 const Settings = lazy(() => import('./views/Settings.jsx'))
+const Plan = lazy(() => import('./views/Plan.jsx'))
 
 export default function App() {
   const { isAuthed } = useAuth()
@@ -64,6 +65,7 @@ export default function App() {
           <Route path="/rank" element={<Rank />} />
           <Route path="/transcript" element={<Transcript />} />
           <Route path="/attendance" element={<Attendance />} />
+          <Route path="/plan" element={<Plan />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

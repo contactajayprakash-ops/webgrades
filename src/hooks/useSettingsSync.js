@@ -17,6 +17,7 @@ const keyMap = (username) => ({
   ui: 'wg_ui',                     // new 2.0 UI vs classic
   prefs: `wg_prefs_${username || '_anon'}`,
   levels: levelsKeyFor(username),  // remembered Adv/on-level per course (merged, never replaced)
+  plan: `wg_plan_${username || '_anon'}`, // course planner: planned courses per year (Course Plan page)
 })
 const localUpdatedAt = () => Number(localStorage.getItem(META_KEY)) || 0
 
