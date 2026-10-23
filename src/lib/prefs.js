@@ -29,6 +29,7 @@ const DEFAULT = {
     manual: [],        // manually-added courses [{ id, name }] (grade/weight/credit live in the maps above, keyed `manual:<id>`)
     saves: [],         // named snapshots: [{ id, name, savedAt, config: { included, weights, grades, credits, quarters, manual } }]
     countEa: false,    // count credit-by-exam (EA) courses from the Career Plan? FISD's GPA leaves them out, so off by default
+    planHidden: {},    // Career Plan "not on your transcript yet" suggestion key -> true: the student hid it
     confirmed: false,  // has the user picked courses at least once?
   },
 }
@@ -44,6 +45,7 @@ const normalize = (raw) => {
   if (!Array.isArray(p.cumulative.saves)) p.cumulative.saves = []
   if (!p.cumulative.links || typeof p.cumulative.links !== 'object') p.cumulative.links = {}
   if (!p.cumulative.unlinked || typeof p.cumulative.unlinked !== 'object') p.cumulative.unlinked = {}
+  if (!p.cumulative.planHidden || typeof p.cumulative.planHidden !== 'object') p.cumulative.planHidden = {}
   delete p.cumulative.weightsSem // removed: replaced by course links
   return p
 }

@@ -93,6 +93,30 @@ function nameScore(a, b) {
 }
 const MATCH_MIN = 0.5
 
+// PE / athletics: the transcript says "SUBATH1", the plan says "Tennis JV EQ1".
+// No word overlap, but the plan's subject area settles it.
+const PE_DESC = /^(SUB\s*)?ATH|^PE\b|^PE\d|PHYS\s*ED|^FOUND\w*\s*(OF\s*)?(PERS\w*\s*)?FIT/i
+const PE_AREA = /physical\s*education|athletic/i
+
+// A plan row whose code is the state PEIMS code (8 chars, often with a leading
+// "T"): HAC's echo of the transcript record, carrying the state's generic name
+// ("Computer Science I") instead of the scheduled course's ("Computer Science 1
+// Adv S1"). On a tie the scheduled row — the one with S1/S2 parts — wins, since
+// it is the one that knows the level.
+const PEIMS_RE = /^T?[A-Z0-9]\d{7}$/
+const groupRank = (g) => (g.sems.length ? 2 : g.codes.some((c) => PEIMS_RE.test(c)) ? 0 : 1)
+
+// Which plan column a TRANSCRIPT year reads from. The plan starts at the
+// student's first high-school-credit year (Grade 08 here) and files anything
+// earlier — Algebra 1 taken in 7th grade — under that first column.
+export function planYearFor(idx, year) {
+  if (!idx?.ok || !year) return null
+  const y = String(year)
+  if (idx.byYear.has(y)) return y
+  const first = idx.trustedYears[0]
+  return first && y < first ? first : null
+}
+
 // Build the lookup index the GPA page and dashboard read. Safe on a missing or
 // older-shaped doc: everything comes back empty and the callers fall through to
 // the old guesses.
@@ -142,23 +166,51 @@ export function indexCareerPlan(doc, today = new Date()) {
   return idx
 }
 
-// The Career Plan row for a TRANSCRIPT course (same school year), or null.
-// Each plan row is used at most once per year, so two transcript rows can't
-// both land on the same plan course.
-export function matchPlanCourse(idx, year, description, used = null) {
-  if (!idx?.ok || !year) return null
-  const cands = idx.byYear.get(String(year))
-  if (!cands?.length) return null
+// How well a plan group fits a transcript description (0..1).
+function planScore(g, description) {
   const friendly = transcriptCourseName(description) || description || ''
-  let best = null, bestScore = 0
-  for (const g of cands) {
-    if (used && used.has(g)) continue
-    const s = Math.max(nameScore(g.name, friendly), nameScore(g.name, description || ''))
-    if (s > bestScore) { best = g; bestScore = s }
+  let s = Math.max(nameScore(g.name, friendly), nameScore(g.name, description || ''))
+  if (PE_DESC.test(String(description || '').trim()) && PE_AREA.test(g.subjectArea || '')) s = Math.max(s, 0.6)
+  return s
+}
+// Sort key: best score first, then the scheduled row over the PEIMS echo.
+const byFit = (a, b) => b.score - a.score || groupRank(b.g) - groupRank(a.g)
+
+// The Career Plan row for ONE transcript course, or null. `used` (a Set) keeps
+// a plan row from being handed to two transcript rows.
+export function matchPlanCourse(idx, year, description, used = null) {
+  const planYear = planYearFor(idx, year)
+  const cands = planYear ? idx.byYear.get(planYear) : null
+  if (!cands?.length) return null
+  const ranked = cands.filter((g) => !used?.has(g)).map((g) => ({ g, score: planScore(g, description) })).sort(byFit)
+  const best = ranked[0]
+  if (!best || best.score < MATCH_MIN) return null
+  if (used) used.add(best.g)
+  return best.g
+}
+
+// The Career Plan rows for a whole TRANSCRIPT, as Map(row key -> group). Rows
+// are assigned best fit first across the whole plan column, so a row that only
+// weakly resembles a course can't grab it before the row that is that course,
+// and no plan row goes to two transcript rows.
+export function matchPlanCourses(idx, rows) {
+  const out = new Map()
+  if (!idx?.ok) return out
+  const pairs = []
+  for (const r of rows || []) {
+    const planYear = planYearFor(idx, r.year)
+    for (const g of (planYear && idx.byYear.get(planYear)) || []) {
+      const score = planScore(g, r.description)
+      if (score >= MATCH_MIN) pairs.push({ r, g, score })
+    }
   }
-  if (!best || bestScore < MATCH_MIN) return null
-  if (used) used.add(best)
-  return best
+  pairs.sort(byFit)
+  const taken = new Set()
+  for (const { r, g } of pairs) {
+    if (out.has(r.key) || taken.has(g)) continue
+    out.set(r.key, g); taken.add(g)
+  }
+  return out
 }
 
 // The Career Plan row for a current-year LIVE class, by the course code its
@@ -173,12 +225,47 @@ export function planCourseForLive(idx, rawName) {
 // dashboard metrics and the Transcript page. `weight` is null when the plan
 // has nothing to say (caller falls back to the remembered level / guess).
 export function planFacts(idx, year, description, used = null) {
-  const g = matchPlanCourse(idx, year, description, used)
+  return factsFor(matchPlanCourse(idx, year, description, used), description)
+}
+export function factsFor(g, description) {
   if (!g) return { match: null, ea: false, cr: false, weight: null }
   // An explicit AP/IB/DC transcript abbreviation is already right; a fuzzy name
   // match must never demote it.
   const guess = detectWeight(description)
   return { match: g, ea: g.ea, cr: g.cr, weight: guess >= WEIGHTS.AP ? guess : g.weight }
+}
+
+// Completed PAST-year Career Plan courses with no transcript row — the summer AP
+// CSA that HAC lists as "CR" and hasn't posted yet. The GPA setup offers them as
+// one-tap "Add course" entries (the student types the grade). Left out: the
+// current year (live classes cover it), rows not marked complete, credit by exam
+// (never counted anyway), a PEIMS echo of a transcript row, a second row for a
+// course that was already matched under another name ("Computer Science I" next
+// to "Computer Science 1 Adv"), and the same course listed under two subject
+// areas ("AP Comp Sci A-Math" / "AP Comp Sci A-LOTE" — one suggestion, no suffix).
+const BUCKET_RE = /\s*-\s*(Math|LOTE|Sci(ence)?|Elec(tive)?|Tech\w*|SS)$/i
+export function planSuggestions(idx, priorCourses, facts, today = new Date()) {
+  if (!idx?.ok) return []
+  const cur = currentSchoolYear(today)
+  const matched = new Set(Object.values(facts || {}).map((f) => f?.match).filter(Boolean))
+  const matchedSubject = new Set([...matched].map((g) => `${g.year}|${g.subject}`))
+  const txCodes = new Set((priorCourses || []).map((c) => String(c.courseCode || '').replace(/\s*-.*$/, '').toUpperCase()).filter(Boolean))
+  const seen = new Set()
+  const out = []
+  for (const year of idx.trustedYears) {
+    if (year >= cur) continue
+    for (const g of idx.byYear.get(year) || []) {
+      if (matched.has(g) || !g.complete || g.ea) continue
+      if (g.codes.some((c) => txCodes.has(c.replace(/^T/, '')))) continue
+      if (g.subject && matchedSubject.has(`${g.year}|${g.subject}`)) continue
+      const name = g.name.replace(BUCKET_RE, '').trim()
+      const key = `${g.year}|${levelSubject(name) || name.toUpperCase()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ key, year: g.year, name, weight: g.weight, credit: g.credit || 1, cr: g.cr, group: g })
+    }
+  }
+  return out
 }
 
 // Short labels for the badges.

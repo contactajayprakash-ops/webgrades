@@ -893,6 +893,9 @@ html[data-theme="light"] .seg-indicator { background: #ffffff; }
 .cum-ea-toggle .switch { width: 38px; height: 23px; }
 .cum-ea-toggle .switch .knob { width: 19px; height: 19px; }
 .cum-ea-toggle .switch.on .knob { transform: translateX(15px); }
+.plan-suggest { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.plan-suggest-row .cum-course-name { white-space: normal; }
+.plan-suggest-hide { color: var(--text-dim); font-size: 18px; line-height: 1; padding: 2px 6px; }
 
 .divider { height: 0.5px; background: var(--separator); margin: 18px 0; border: none; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; position: relative; z-index: 1; }

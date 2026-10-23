@@ -12,7 +12,7 @@ import { transcriptGrade, isNonGpaCourse } from '../lib/courses.js'
 import {
   PERIOD_QUARTERS, buildCurrentLiveRaw, buildCurrentLive,
   buildPriorCourses, buildCumRows, splitTranscript, resolvedPeriod, effectiveLinks,
-  transcriptPlanFacts, livePlanFacts,
+  transcriptPlanFacts, livePlanFacts, transcriptPlanSuggestions,
 } from '../lib/gpaCompute.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { transcriptCourseName } from '../lib/courseCatalog.js'
@@ -165,6 +165,12 @@ export default function Gpa() {
   const levels = useMemo(() => loadLevels(activeUsername), [activeUsername, dataVersion])
   const plan = useMemo(() => indexCareerPlan(planDoc), [planDoc])
   const planFactsByCode = useMemo(() => transcriptPlanFacts(plan, priorCourses), [plan, priorCourses])
+  // Completed past-year Career Plan courses the transcript hasn't posted yet
+  // (a summer AP course) — offered as one-tap "Add course" entries.
+  const planSuggestions = useMemo(
+    () => transcriptPlanSuggestions(plan, priorCourses, planFactsByCode, prefs.cumulative.manual).filter((sg) => !prefs.cumulative.planHidden?.[sg.key]),
+    [plan, priorCourses, planFactsByCode, prefs.cumulative.manual, prefs.cumulative.planHidden]
+  )
   // Effective mid-year course links (auto SS Research→AP Psych + any manual ones).
   const links = useMemo(() => effectiveLinks(currentLive, prefs), [currentLive, prefs])
 
@@ -227,7 +233,7 @@ export default function Gpa() {
         priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade}
         included={cumIncluded}
         weights={prefs.cumulative.weights} levels={levels}
-        plan={plan} planFacts={planFactsByCode} countEa={!!prefs.cumulative.countEa}
+        plan={plan} planFacts={planFactsByCode} countEa={!!prefs.cumulative.countEa} suggestions={planSuggestions}
         credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
         quarters={prefs.cumulative.quarters || {}}
         links={links} explicitLinks={prefs.cumulative.links || {}}
@@ -336,7 +342,7 @@ function SingleCard({ c, on, w, cr, qov, period, candidates, facts, blocked, onT
     <div className={`cum-course ${on && !blocked ? '' : 'off'}`}>
       <div className="cum-course-head">
         <label className="cum-check">
-          <input type="checkbox" checked={on} disabled={blocked} onChange={() => onToggle(c.key)} />
+          <input type="checkbox" checked={on && !blocked} disabled={blocked} onChange={() => onToggle(c.key)} />
           <span className="cum-course-name">{c.name}</span>
           <PlanTag facts={facts} />
         </label>
@@ -448,7 +454,7 @@ function MergedCard({ base, cont, on, weightBase, weightCont, cr, qBase, qCont, 
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, included, weights, levels, plan, planFacts = {}, countEa = false, credits, grades, quarters = {}, links = {}, explicitLinks = {}, manual = [], saves = [], onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, included, weights, levels, plan, planFacts = {}, countEa = false, suggestions = [], credits, grades, quarters = {}, links = {}, explicitLinks = {}, manual = [], saves = [], onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
   // Mid-year course links: `absorbed` are the S2 courses hidden inside a merged
@@ -536,6 +542,24 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     const id = mkId()
     p.cumulative.manual.push({ id, name: '' })
     p.cumulative.included[`manual:${id}`] = true
+  })
+  // One tap adds a Career Plan suggestion as a manual course with its name,
+  // level and credit filled in; the student types the grade. `plan` remembers
+  // which suggestion it came from so the suggestion disappears.
+  const addFromPlan = (sg) => updatePrefs((p) => {
+    p.cumulative.manual = p.cumulative.manual || []
+    const id = mkId()
+    const key = `manual:${id}`
+    p.cumulative.manual.push({ id, name: sg.name, plan: sg.key })
+    p.cumulative.included[key] = true
+    p.cumulative.weights = p.cumulative.weights || {}
+    p.cumulative.credits = p.cumulative.credits || {}
+    p.cumulative.weights[key] = sg.weight
+    p.cumulative.credits[key] = sg.credit
+  })
+  const hidePlanSuggestion = (sg) => updatePrefs((p) => {
+    p.cumulative.planHidden = p.cumulative.planHidden || {}
+    p.cumulative.planHidden[sg.key] = true
   })
   const setManualName = (id, name) => updatePrefs((p) => {
     p.cumulative.manual = (p.cumulative.manual || []).map((m) => (m.id === id ? { ...m, name } : m))
@@ -661,6 +685,30 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
         Added courses · summer / not yet on your transcript
       </div>
       <div className="cum-courses">
+        {suggestions.length > 0 && (
+          <div className="plan-suggest">
+            <div className="small faint" style={{ padding: '10px 20px 2px' }}>
+              On your Career Plan but not on your transcript yet — add it and type the grade.
+            </div>
+            {suggestions.map((sg) => (
+              <div key={sg.key} className="cum-course plan-suggest-row">
+                <div className="cum-course-head" style={{ marginBottom: 0 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="cum-course-name">
+                      {sg.name}
+                      {sg.cr && <span className="plan-tag cr" title={PLAN_LABELS.cr.title} style={{ marginLeft: 6 }}>{PLAN_LABELS.cr.tag}</span>}
+                    </div>
+                    <div className="small faint">{sg.year} · {weightLabel(sg.weight)} {sg.weight.toFixed(1)} · {sg.credit} credit</div>
+                  </div>
+                  <div className="cum-course-right">
+                    <button className="btn ghost sm" onClick={() => addFromPlan(sg)}><Icon.plus width={14} height={14} /> Add</button>
+                    <button className="cum-remove plan-suggest-hide" onClick={() => hidePlanSuggestion(sg)} title="Hide this suggestion" aria-label="Hide this suggestion">×</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {manual.map((m) => {
           const key = `manual:${m.id}`
           const on = !!included[key]
@@ -722,7 +770,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
                 <div key={ci} className={`cum-course ${numeric && on && !blocked ? '' : 'off'}`}>
                   <div className="cum-course-head">
                     <label className="cum-check">
-                      <input type="checkbox" disabled={!numeric || blocked} checked={on} onChange={() => onToggle(code)} />
+                      <input type="checkbox" disabled={!numeric || blocked} checked={on && !blocked} onChange={() => onToggle(code)} />
                       <span className="cum-course-name" title={c.description}>{name}</span>
                       <PlanTag facts={f} />
                     </label>

@@ -302,12 +302,30 @@ Rules that keep it honest:
 - **Only the current and past school-year columns are trusted** (`year <=
   currentSchoolYear()`). Later columns are the student's own editable requests.
 - Transcript rows are joined to Career Plan rows by **school year + name**
-  (`matchPlanCourse`: level-free subject key, then word overlap with
-  abbreviations expanded — "APCSA" ↔ "AP Comp Sci A-Math"), each plan row used at
-  most once per year, nothing below a 0.5 overlap. Current-year live classes join
-  by the course code their classwork heading starts with. `transcriptPlanFacts`
-  in `gpaCompute.js` is the one place this runs, so the badge a row shows and the
-  way it is counted can't disagree (GPA page, dashboard metrics, Transcript page).
+  (`matchPlanCourses`: level-free subject key, then word overlap with
+  abbreviations expanded — "APCSA" ↔ "AP Comp Sci A-Math"), assigned **best fit
+  first** across the whole year, each plan row used once, nothing below a 0.5
+  overlap. Current-year live classes join by the course code their classwork
+  heading starts with. `transcriptPlanFacts` in `gpaCompute.js` is the one place
+  this runs, so the badge a row shows and the way it is counted can't disagree
+  (GPA page, dashboard metrics, Transcript page).
+- Real-page quirks the matcher handles (from a real 10th grader's pages,
+  2026-10-23): the plan starts at the first high-school-credit year, so a
+  transcript year **before** its first column (7th-grade Algebra 1) reads the
+  first column (`planYearFor`); HAC adds a **PEIMS echo** row (8-char state code
+  like `T03580200`, state name "Computer Science I", no level) beside the real
+  scheduled course ("Computer Science 1 Adv S1/S2") — on a tie the row with
+  S1/S2 parts wins; PE/athletics ("SUBATH1" ↔ "Tennis JV EQ1") matches by the
+  plan's subject area. With those, that student's GPA computed here (EA out,
+  athletics in) equalled HAC's own cumulative GPA to the rounding digit; counting
+  EA rows or the old level guesses did not.
+- **Not on the transcript yet:** completed past-year plan rows nothing matched
+  (a summer `CR` AP course HAC hasn't posted) show in the GPA setup's "Added
+  courses" as one-tap **Add** (name, level, credit filled in; the student types the
+  grade) or × to hide (`prefs.cumulative.planHidden`). Skipped: the current year,
+  incomplete rows, EA rows, PEIMS echoes, a second row for an already-matched
+  subject, and the same course listed under two subject areas ("A-Math" / "A-LOTE"
+  collapse to one).
 - A missing or older-shaped doc makes every lookup empty and the old guesses
   apply. Checked by `npm run test:careerplan`.
 
@@ -413,7 +431,7 @@ git push origin main     # deploys BOTH hosts via .github/workflows/deploy.yml
 The workflow has two independent jobs, `cloudfront` and `firebase`, each running
 its own build. Independent on purpose: if one host fails to deploy, the other
 still updates. Both `needs` a shared `test` job (`.github/workflows/test.yml`,
-also run on every PR) that runs `test:credkey`, `test:transcript` and `test:levels`; if any
+also run on every PR) that runs `test:credkey`, `test:transcript`, `test:levels` and `test:careerplan` (plus the others in `test.yml`); if any
 fails, neither host deploys.
 
 Repo secrets required: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`,
