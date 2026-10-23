@@ -18,6 +18,20 @@ import {
 
 const fmtCredit = (n) => (n == null ? '—' : Number.isInteger(n) ? `${n}.0` : String(Math.round(n * 100) / 100))
 const shortYear = (y) => (y ? y.replace(/^(\d{4})-(\d{2})(\d{2})$/, '$1–$3') : '')
+// An older Pi answers a scrape type it doesn't know with this.
+const notOnServerYet = (msg) => /invalid type requested/i.test(msg || '')
+function SettingUp({ onRetry }) {
+  return (
+    <div className="card plan-card plan-setup">
+      <div className="req-intro-title">Course Plan is still being switched on</div>
+      <div className="small" style={{ color: 'var(--text-dim)', margin: '4px 0 12px' }}>
+        The server that reads HAC is getting the update that adds this page. Check back in a few minutes.
+      </div>
+      <button className="btn ghost sm" onClick={onRetry}><Icon.refresh width={15} height={15} /> Try again</button>
+    </div>
+  )
+}
+
 const STATUS_LABEL = { done: 'Earned', current: 'In progress', requested: 'Requested', incomplete: 'Not complete', draft: 'Your draft', dropped: 'Dropping' }
 
 function useMediaQuery(q) {
@@ -128,7 +142,7 @@ export default function Plan() {
       </PageHead>
 
       {loading && <Loading />}
-      {error && !loading && <ErrorBox message={error} onRetry={refresh} />}
+      {error && !loading && (notOnServerYet(error) ? <SettingUp onRetry={refresh} /> : <ErrorBox message={error} onRetry={refresh} />)}
 
       {!loading && !error && careerPlan && (
         <>
@@ -173,7 +187,7 @@ export default function Plan() {
           )}
           {tab === 'requests' && (
             rq.error && !requests
-              ? <ErrorBox message={rq.error} onRetry={rq.refresh} />
+              ? (notOnServerYet(rq.error) ? <SettingUp onRetry={rq.refresh} /> : <ErrorBox message={rq.error} onRetry={rq.refresh} />)
               : requests
                 ? <RequestsView requests={requests} draft={draft} year={year} todo={todo} updatePlan={updatePlan} careerPlan={careerPlan} />
                 : <Loading label="Loading requests from HAC…" />
