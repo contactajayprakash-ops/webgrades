@@ -6,7 +6,7 @@
 //   /data        { username, password, type, quarter?, date? } -> { success, userName, data }
 //   /ipr-dates   { username, password } -> { success, availableDates }
 //
-// type ∈ class | schedule | rank | transcript | week | attendance | ipr
+// type ∈ class | schedule | rank | transcript | week | attendance | ipr | careerplan
 // ============================================================
 
 // Requests go to a SAME-ORIGIN path ("/api/…") by default: the CloudFront

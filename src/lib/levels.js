@@ -17,12 +17,15 @@ export const levelsKeyFor = (username) => `wg_levels_${username || '_anon'}`
 
 const ROMAN = { I: '1', II: '2', III: '3', IV: '4' }
 
-// Level-free subject key shared by live names and transcript abbreviations:
-// "Biology Adv" / "BIO" -> "BIOLOGY", "English 1 Adv" / "ENG 1" -> "ENGLISH1".
+// Level-free subject key shared by live names, Career Plan names and transcript
+// abbreviations: "Biology Adv" / "BIO" -> "BIOLOGY", "English 1 Adv" / "ENG 1"
+// -> "ENGLISH1". Also drops the delivery markers the Career Plan carries ("Algebra
+// 1 Adv HS", "Geometry Adv HS S1 Online", "EA Algebra 2") so those key the same.
 export function levelSubject(name) {
   let n = String(name || '').toUpperCase()
   n = n.replace(/@.*$/, '')
-  n = n.replace(/\b(?:ADV(?:ANCED)?|GT|HON(?:ORS)?|PRE-?\s?AP|PAP)\b/g, ' ')
+  n = n.replace(/^(?:EA|CR|OC)\b\s*/g, ' ')
+  n = n.replace(/\b(?:ADV(?:ANCED)?|GT|HON(?:ORS)?|PRE-?\s?AP|PAP|HS|ONLINE|VL|YR|S[12])\b/g, ' ')
   n = n.replace(/\b(IV|III|II|I)\b/g, (m) => ROMAN[m])
   return n.replace(/[^A-Z0-9]/g, '')
 }

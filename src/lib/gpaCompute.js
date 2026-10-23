@@ -6,6 +6,28 @@ import { liveWeight, parseGrade, semesterGrade, liveSemesterAverage } from './gp
 import { cleanCourseName, courseKey, transcriptPeriod, currentSchoolYear } from './courses.js'
 import { transcriptCourseName } from './courseCatalog.js'
 import { transcriptWeight } from './levels.js'
+import { planFacts, planCourseForLive } from './careerPlan.js'
+
+// Career Plan facts for every prior-year transcript course, keyed the way the
+// cumulative setup keys them (c.code). Each plan row is matched at most once per
+// year. Shared by buildCumRows and the GPA page so the badge a row shows and the
+// way it is counted can never disagree.
+export function transcriptPlanFacts(plan, priorCourses) {
+  const out = {}
+  if (!plan?.ok) return out
+  const used = new Map() // year -> Set(plan group)
+  for (const c of priorCourses || []) {
+    if (!used.has(c.year)) used.set(c.year, new Set())
+    out[c.code] = planFacts(plan, c.year, c.description, used.get(c.year))
+  }
+  return out
+}
+
+// Career Plan facts for a current-year live class (matched by course code).
+export function livePlanFacts(plan, rawName) {
+  const g = planCourseForLive(plan, rawName)
+  return g ? { match: g, ea: g.ea, cr: g.cr } : { match: null, ea: false, cr: false }
+}
 
 export const PERIOD_QUARTERS = { s1: ['1', '2'], s2: ['3', '4'], year: ['1', '2', '3', '4'] }
 
@@ -180,11 +202,15 @@ export function effectiveLinks(currentLive, prefs) {
 // 3.5). Splitting per semester also leaves the WEIGHTED 6.0 unchanged — its
 // formula is linear, so two 0.5-credit semesters equal one 1.0-credit year
 // average. Selection stays per COURSE (baseKey); the GPA is computed per row.
-export function buildCumRows({ currentLive, priorCourses, included, period, prefs, latestYear, levels }) {
+export function buildCumRows({ currentLive, priorCourses, included, period, prefs, latestYear, levels, plan = null }) {
   const rows = []
   const weights = prefs.cumulative.weights || {}
   const creditsOv = prefs.cumulative.credits || {}
   const grades = prefs.cumulative.grades || {}
+  // Credit-by-exam (EA) courses from the Career Plan are left out unless the
+  // student turned "Count EA" on — FISD's own GPA leaves them out.
+  const countEa = !!prefs.cumulative.countEa
+  const facts = transcriptPlanFacts(plan, priorCourses)
   const wantS1 = period !== 's2'
   const wantS2 = period !== 's1'
   const push = (baseKey, name, year, semTag, grade, credit, weight, manual) => {
@@ -206,6 +232,7 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
   for (const c of currentLive) {
     if (absorbed.has(c.key)) continue // this course is the S2 of a merged pair — its base emits it
     if (!included[c.key]) continue
+    if (!countEa && livePlanFacts(plan, c.rawName).ea) continue
     const weight = weights[c.key] ?? liveWeight(c.rawName)
     const L = links[c.key] ? byKey.get(links[c.key]) : null
 
@@ -236,7 +263,11 @@ export function buildCumRows({ currentLive, priorCourses, included, period, pref
   // credit (or full credit for a one-semester course).
   for (const c of priorCourses) {
     if (!included[c.code]) continue
-    const weight = weights[c.code] ?? transcriptWeight(c.description, c.courseCode, c.year, levels)
+    const f = facts[c.code]
+    if (f?.ea && !countEa) continue
+    // Weight: the student's override, else the Career Plan's full course name
+    // (it keeps the level the transcript drops), else the remembered level / guess.
+    const weight = weights[c.code] ?? f?.weight ?? transcriptWeight(c.description, c.courseCode, c.year, levels)
     const s1 = parseGrade(c.sem1), s2 = parseGrade(c.sem2)
     const full = creditsOv[c.code] ?? parseGrade(c.credit) ?? 1
     const both = s1 != null && s2 != null

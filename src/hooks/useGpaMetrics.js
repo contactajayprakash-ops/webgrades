@@ -7,6 +7,7 @@ import {
   buildLiveRows, buildCurrentLiveRaw, buildCurrentLive, buildPriorCourses, buildCumRows, splitTranscript,
 } from '../lib/gpaCompute.js'
 import { loadLevels } from '../lib/levels.js'
+import { indexCareerPlan } from '../lib/careerPlan.js'
 
 // The GPA numbers a student can pin to the dashboard — each maps to one of the
 // "cards with a number" on the GPA page. `pick` pulls the value from the metrics
@@ -45,6 +46,10 @@ export function useGpaMetrics(period = 'year') {
     const d = peekData('transcript')
     return d ? (d.transcript || []) : undefined
   })
+  // Career Plan: EA (credit by exam, left out by default) / CR markers and the
+  // level of every past course. Same source the GPA page reads, so the pinned
+  // dashboard number can't disagree with it.
+  const [planDoc, setPlanDoc] = useState(() => peekData('careerplan') || null)
 
   // Fetch anything the prefetch hasn't filled in yet (e.g. a cold dashboard).
   useEffect(() => {
@@ -52,6 +57,7 @@ export function useGpaMetrics(period = 'year') {
       if (!peekData('class', { quarter: n })) getData('class', { quarter: n }).catch(() => {})
     }
     if (!peekData('transcript')) getData('transcript').catch(() => {})
+    if (!peekData('careerplan')) getData('careerplan').then((d) => setPlanDoc(d || null)).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -60,6 +66,8 @@ export function useGpaMetrics(period = 'year') {
     setQuarters(readQuarters(peekData))
     const t = peekData('transcript')
     if (t) setTranscript(t.transcript || [])
+    const cp = peekData('careerplan')
+    if (cp) setPlanDoc(cp)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataVersion])
 
@@ -74,7 +82,7 @@ export function useGpaMetrics(period = 'year') {
     const priorCourses = buildPriorCourses(priorGroups)
     const cumRows = buildCumRows({
       currentLive, priorCourses, included: prefs.cumulative.included, period, prefs, latestYear,
-      levels: loadLevels(activeUsername),
+      levels: loadLevels(activeUsername), plan: indexCareerPlan(planDoc),
     })
     const cumW = weightedGpa(cumRows)
     const cumU = unweightedGpa(cumRows)
@@ -86,5 +94,5 @@ export function useGpaMetrics(period = 'year') {
       live: { weighted: liveW.gpa, unweighted: liveU.gpa, credits: liveW.credits, count: live.rows.length },
       cumulative: { weighted: cumW.gpa, unweighted: cumU.gpa, credits: cumW.credits, count: cumRows.length },
     }
-  }, [quarters, transcript, period, edits, prefs, activeUsername])
+  }, [quarters, transcript, planDoc, period, edits, prefs, activeUsername])
 }

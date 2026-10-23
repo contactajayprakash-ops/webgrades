@@ -75,7 +75,16 @@ const hotKeyedKey = (curQ) => (curQ ? `class:${JSON.stringify({ quarter: curQ })
 const WAVE_COLD = [
   ['schedule', {}],
   ['attendance', {}],
+  ['careerplan', {}], // Classes > Career Plan: every past course's full name + EA/CR markers (lib/careerPlan.js)
 ]
+// The cold wave counts as done (daily stamp) once these landed. `careerplan` is
+// not required: a Pi that predates it answers that one item with an error, and
+// requiring it would re-scrape schedule + attendance every hour until the Pi is
+// updated. A never-landed resource is still re-requested on every full sync
+// (coldDue), so nothing is lost — it just doesn't hold the others hostage.
+const COLD_REQUIRED = new Set(['schedule', 'attendance'])
+const coldLanded = (wave, gotByKey) => wave.length === WAVE_COLD.length
+  && wave.every(([t, e]) => gotByKey[keyOf(t, e)] !== undefined || !COLD_REQUIRED.has(t))
 
 // The GPA wave (other quarters + rank + transcript) and cold wave (schedule +
 // attendance) change about once a grading period — refresh them at most this
@@ -195,7 +204,7 @@ function diffResource(type, extra, oldData, newData) {
     if (type === 'rank') {
       return oldData.gpa !== newData.gpa || oldData.rank !== newData.rank ? ['Class rank / GPA updated'] : []
     }
-    const labels = { transcript: 'Transcript', schedule: 'Schedule', attendance: 'Attendance' }
+    const labels = { transcript: 'Transcript', schedule: 'Schedule', attendance: 'Attendance', careerplan: 'Career plan' }
     if (labels[type]) {
       return JSON.stringify(oldData) !== JSON.stringify(newData) ? [`${labels[type]} updated`] : []
     }
@@ -421,8 +430,7 @@ export function AuthProvider({ children }) {
             fetched++
           }
         })
-        if (wave === coldNeeded && wave.length === WAVE_COLD.length
-          && wave.every(([t, e]) => gotByKey[keyOf(t, e)] !== undefined)) stampCold(username)
+        if (wave === coldNeeded && coldLanded(wave, gotByKey)) stampCold(username)
         persistCache(username)
         done += wave.length
         // Stamp "Updated" as soon as the current grades land, not after the
@@ -559,8 +567,7 @@ export function AuthProvider({ children }) {
           const key = keyOf(type, extra)
           if (gotByKey[key] !== undefined) { acct.set(key, gotByKey[key]); fetched++ }
         }
-        if (wave === coldNeeded && wave.length === WAVE_COLD.length
-          && wave.every(([t, e]) => gotByKey[keyOf(t, e)] !== undefined)) stampCold(username)
+        if (wave === coldNeeded && coldLanded(wave, gotByKey)) stampCold(username)
         // File HAC's default view under its quarter too (same as syncAll).
         const hotKey = keyOf('class', {})
         if (wave === WAVE_HOT && curQ && gotByKey[hotKey] !== undefined) acct.set(hotKeyedKey(curQ), gotByKey[hotKey])

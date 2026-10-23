@@ -276,6 +276,41 @@ and `transcriptWeight` uses that instead of the guess once the year is on the
 transcript. Synced with settings but merged, never replaced, on pull; recording
 does not stamp settings as changed. Checked by `npm run test:levels`.
 
+## Career Plan (EA / CR markers, past-course levels)
+
+HAC's Classes → Career Plan page lists every course a student took with its FULL
+name and FISD course code, one column per school year. The Pi scrapes it as
+`careerplan` (`GET /HomeAccess/Classes/CareerPlan`; it is in the daily FULL
+snapshot tier and the client's cold wave) and the client reads it in
+`src/lib/careerPlan.js` for three things:
+
+- **Levels of past courses.** The transcript drops the level ("CHEM"); the Career
+  Plan keeps it ("Chemistry Adv S1"). A transcript row's weight is now: the
+  student's override → the matched Career Plan name → the remembered live level
+  (`levels.js`) → the name guess. An explicit AP/IB/DC transcript abbreviation is
+  never demoted by a fuzzy match.
+- **EA = credit by exam** (name and code start with `EA`, e.g. "EA Algebra 2 S1",
+  `EAMT200A`). FISD's GPA leaves those out, so the cumulative setup skips them
+  (checkbox disabled, "not counted") unless `prefs.cumulative.countEa` is on —
+  the "Count credit-by-exam (EA)" switch in the GPA setup toolbar.
+- **CR = summer / off-cycle** (`CR AP Comp Sci A-Math S1`, `CRMT420A`): counted
+  like any other course, just badged. Not every summer course shows up this way,
+  so the manual "Add course" path stays.
+
+Rules that keep it honest:
+
+- **Only the current and past school-year columns are trusted** (`year <=
+  currentSchoolYear()`). Later columns are the student's own editable requests.
+- Transcript rows are joined to Career Plan rows by **school year + name**
+  (`matchPlanCourse`: level-free subject key, then word overlap with
+  abbreviations expanded — "APCSA" ↔ "AP Comp Sci A-Math"), each plan row used at
+  most once per year, nothing below a 0.5 overlap. Current-year live classes join
+  by the course code their classwork heading starts with. `transcriptPlanFacts`
+  in `gpaCompute.js` is the one place this runs, so the badge a row shows and the
+  way it is counted can't disagree (GPA page, dashboard metrics, Transcript page).
+- A missing or older-shaped doc makes every lookup empty and the old guesses
+  apply. Checked by `npm run test:careerplan`.
+
 ## Offline behavior — do not "add" a cache, one already exists
 
 The service worker (`vite-plugin-pwa`, `generateSW`) precaches the shell only. It

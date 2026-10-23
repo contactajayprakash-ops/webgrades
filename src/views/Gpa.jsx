@@ -12,10 +12,12 @@ import { transcriptGrade, isNonGpaCourse } from '../lib/courses.js'
 import {
   PERIOD_QUARTERS, buildCurrentLiveRaw, buildCurrentLive,
   buildPriorCourses, buildCumRows, splitTranscript, resolvedPeriod, effectiveLinks,
+  transcriptPlanFacts, livePlanFacts,
 } from '../lib/gpaCompute.js'
 import { loadPrefs, savePrefs } from '../lib/prefs.js'
 import { transcriptCourseName } from '../lib/courseCatalog.js'
 import { loadLevels, transcriptWeight } from '../lib/levels.js'
+import { indexCareerPlan, PLAN_LABELS } from '../lib/careerPlan.js'
 import Glass from '../components/Glass.jsx'
 
 const TOUR_SEEN_KEY = 'wg_tour_cumulative_seen'
@@ -35,7 +37,8 @@ const CUM_TOUR_STEPS = [
     body: (
       <>
         Untick anything that shouldn’t count toward your GPA.{' '}
-        <strong className="tour-hi">Remove all courses taken through CBE</strong> (credit by exam) — those don’t count.
+        <strong className="tour-hi">Credit-by-exam classes (marked EA) are left out for you</strong> — Frisco doesn’t
+        count them. Summer classes (CR) count like any other.
       </>
     ),
   },
@@ -74,6 +77,9 @@ export default function Gpa() {
     const d = peekData('transcript')
     return d ? (d.transcript || []) : undefined
   })
+  // Career Plan (every past course's full name + EA/CR markers). Read from the
+  // cache; the cold sync wave fetches it ~daily, and a first visit asks for it.
+  const [planDoc, setPlanDoc] = useState(() => peekData('careerplan') || null)
   const { edits, count: whatIfCount } = useWhatIf()
 
   const updatePrefs = useCallback((mut) => {
@@ -115,6 +121,11 @@ export default function Gpa() {
   }, [period])
 
   useEffect(() => { loadTranscript() }, [loadTranscript])
+  useEffect(() => {
+    if (peekData('careerplan')) return
+    getData('careerplan').then((d) => setPlanDoc(d || null)).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // background sync finished — pull fresh data in place (no spinners)
   useEffect(() => {
@@ -128,6 +139,8 @@ export default function Gpa() {
     })
     const t = peekData('transcript')
     if (t) setTranscript(t.transcript || [])
+    const cp = peekData('careerplan')
+    if (cp) setPlanDoc(cp)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataVersion])
 
@@ -150,14 +163,16 @@ export default function Gpa() {
   // so a transcript "BIO" uses the real level instead of the guess. Re-read on
   // each data load — that's when AuthContext records the current year's.
   const levels = useMemo(() => loadLevels(activeUsername), [activeUsername, dataVersion])
+  const plan = useMemo(() => indexCareerPlan(planDoc), [planDoc])
+  const planFactsByCode = useMemo(() => transcriptPlanFacts(plan, priorCourses), [plan, priorCourses])
   // Effective mid-year course links (auto SS Research→AP Psych + any manual ones).
   const links = useMemo(() => effectiveLinks(currentLive, prefs), [currentLive, prefs])
 
   const cumIncluded = prefs.cumulative.included
 
   const cumRows = useMemo(
-    () => buildCumRows({ currentLive, priorCourses, included: cumIncluded, period, prefs, latestYear, levels }),
-    [currentLive, priorCourses, cumIncluded, period, prefs, latestYear, levels]
+    () => buildCumRows({ currentLive, priorCourses, included: cumIncluded, period, prefs, latestYear, levels, plan }),
+    [currentLive, priorCourses, cumIncluded, period, prefs, latestYear, levels, plan]
   )
 
   const cumResult = weightedGpa(cumRows)
@@ -212,6 +227,7 @@ export default function Gpa() {
         priorGroups={priorGroups} latestYear={latestYear} currentGrade={currentGrade}
         included={cumIncluded}
         weights={prefs.cumulative.weights} levels={levels}
+        plan={plan} planFacts={planFactsByCode} countEa={!!prefs.cumulative.countEa}
         credits={prefs.cumulative.credits || {}} grades={prefs.cumulative.grades || {}}
         quarters={prefs.cumulative.quarters || {}}
         links={links} explicitLinks={prefs.cumulative.links || {}}
@@ -248,6 +264,14 @@ function WeightSelect({ value, onChange, full }) {
       {WEIGHT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value} · {weightLabel(o.value)}</option>)}
     </select>
   )
+}
+
+// EA / CR marker from the Career Plan (null facts -> nothing).
+function PlanTag({ facts }) {
+  if (!facts) return null
+  const k = facts.ea ? 'ea' : facts.cr ? 'cr' : null
+  if (!k) return null
+  return <span className={`plan-tag ${k}`} title={PLAN_LABELS[k].title}>{PLAN_LABELS[k].tag}</span>
 }
 
 // Saved cumulative setups: load / overwrite / delete + save-current. Snapshots
@@ -303,17 +327,18 @@ function SavedConfigsMenu({ saves, onSave, onLoad, onOverwrite, onDelete }) {
 
 // One current-year course: Q1–Q4 auto-filled from live grades, weight, credit,
 // plus a "merge" affordance for a period that changes course at the semester.
-function SingleCard({ c, on, w, cr, qov, period, candidates, onToggle, setWeight, setCredit, setQuarter, onLink }) {
+function SingleCard({ c, on, w, cr, qov, period, candidates, facts, blocked, onToggle, setWeight, setCredit, setQuarter, onLink }) {
   const [picking, setPicking] = useState(false)
   const rp = resolvedPeriod(c, period)
   const yr = rp?.grade != null ? Math.round(rp.grade) : null
   const lg = letterGrade(yr)
   return (
-    <div className={`cum-course ${on ? '' : 'off'}`}>
+    <div className={`cum-course ${on && !blocked ? '' : 'off'}`}>
       <div className="cum-course-head">
         <label className="cum-check">
-          <input type="checkbox" checked={on} onChange={() => onToggle(c.key)} />
+          <input type="checkbox" checked={on} disabled={blocked} onChange={() => onToggle(c.key)} />
           <span className="cum-course-name">{c.name}</span>
+          <PlanTag facts={facts} />
         </label>
         <div className="cum-course-right">
           <WeightSelect value={w} onChange={(e) => setWeight(c.key, e.target.value)} />
@@ -423,7 +448,7 @@ function MergedCard({ base, cont, on, weightBase, weightCont, cr, qBase, qCont, 
   )
 }
 
-function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, included, weights, levels, credits, grades, quarters = {}, links = {}, explicitLinks = {}, manual = [], saves = [], onToggle, updatePrefs, onRetry }) {
+function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, latestYear, currentGrade, period, included, weights, levels, plan, planFacts = {}, countEa = false, credits, grades, quarters = {}, links = {}, explicitLinks = {}, manual = [], saves = [], onToggle, updatePrefs, onRetry }) {
   const [tourOpen, setTourOpen] = useState(false)
   const setupReady = currentLive.length > 0 || priorGroups.some((g) => (g.courses || []).length > 0)
   // Mid-year course links: `absorbed` are the S2 courses hidden inside a merged
@@ -448,16 +473,23 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
     return <Loading label="Loading classes…" />
   }
 
+  // Credit-by-exam rows are skipped unless "Count EA" is on (they never count
+  // either way while it's off — see buildCumRows).
+  const eaBlocked = (facts) => !!facts?.ea && !countEa
   const selectAllNumeric = () => updatePrefs((p) => {
     for (const c of currentLive) {
-      if ((c.s1 != null || c.s2 != null) && !isNonGpaCourse(c.name, c.rawName)) p.cumulative.included[c.key] = true
+      if ((c.s1 != null || c.s2 != null) && !isNonGpaCourse(c.name, c.rawName) && !eaBlocked(livePlanFacts(plan, c.rawName))) p.cumulative.included[c.key] = true
     }
     for (const g of priorGroups) for (const c of g.courses || []) {
-      if (transcriptGrade(c) != null && !isNonGpaCourse(c.description, c.courseCode)) {
-        p.cumulative.included[c.courseCode || `${g.year}-${c.description}`] = true
+      const code = c.courseCode || `${g.year}-${c.description}`
+      if (transcriptGrade(c) != null && !isNonGpaCourse(c.description, c.courseCode) && !eaBlocked(planFacts[code])) {
+        p.cumulative.included[code] = true
       }
     }
   })
+  const setCountEa = (v) => updatePrefs((p) => { p.cumulative.countEa = !!v })
+  // Any credit-by-exam course in the trusted years? (Only then is the switch worth showing.)
+  const hasEa = Object.values(planFacts).some((f) => f?.ea) || currentLive.some((c) => livePlanFacts(plan, c.rawName).ea)
   const clearAll = () => updatePrefs((p) => { p.cumulative.included = {} })
   const setWeight = (key, w) => updatePrefs((p) => { p.cumulative.weights[key] = Number(w) })
   // Merge a period that changes course mid-year: S1 stays `baseKey`, S2 becomes
@@ -566,6 +598,7 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
           Current-year classes come from live grades (real names, both semesters). Older courses come from your
           transcript. Check the ones that count toward class rank — pass/fail courses (grade “P”) can’t be averaged.
           Weights and the credit each course is worth (1.0 full-year, 0.5 single-semester) are editable here and remembered.
+          {plan?.ok && <> Levels and the <span className="plan-tag ea" style={{ marginLeft: 4 }}>EA</span> (credit by exam) / <span className="plan-tag cr" style={{ marginLeft: 4 }}>CR</span> (summer) markers come from your HAC Career Plan.</>}
         </p>
         <div className="flex mt-3" style={{ flexWrap: 'wrap' }}>
           <button className="btn ghost sm" data-tour="select-all" onClick={selectAllNumeric}>Select all graded</button>
@@ -574,6 +607,14 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
           {savedMenu}
           <button className="btn ghost sm" onClick={onRetry}><Icon.refresh width={15} height={15} /> Refresh</button>
           <span className="small faint">{selectedCount} selected</span>
+          {hasEa && (
+            <label className="cum-ea-toggle" title="Frisco's GPA leaves credit-by-exam courses out. Turn this on to count them anyway.">
+              <button type="button" className={`switch ${countEa ? 'on' : ''}`} role="switch" aria-checked={countEa} aria-label="Count credit-by-exam courses" onClick={() => setCountEa(!countEa)}>
+                <span className="knob" />
+              </button>
+              Count credit-by-exam (EA)
+            </label>
+          )}
         </div>
       </div>
 
@@ -605,9 +646,11 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
           const candidates = currentLive
             .filter((x) => x.key !== c.key && !absorbed.has(x.key) && !links[x.key])
             .map((x) => ({ key: x.key, name: x.name }))
+          const lf = livePlanFacts(plan, c.rawName)
           return (
             <SingleCard key={c.key} c={c} on={on} w={w}
               cr={credits[c.key] ?? c.credit} qov={quarters[c.key] || {}} period={period} candidates={candidates}
+              facts={lf} blocked={eaBlocked(lf)}
               onToggle={onToggle} setWeight={setWeight} setCredit={setCredit} setQuarter={setQuarter} onLink={linkCourse} />
           )
         })}
@@ -667,19 +710,25 @@ function CumulativeView({ transcript, currentLive, currentGroup, priorGroups, la
               const code = c.courseCode || `${g.year}-${c.description}`
               const grade = transcriptGrade(c)
               const numeric = grade != null
-              const w = weights[code] ?? transcriptWeight(c.description, c.courseCode, g.year, levels)
+              const f = planFacts[code]
+              const blocked = eaBlocked(f)
+              const w = weights[code] ?? f?.weight ?? transcriptWeight(c.description, c.courseCode, g.year, levels)
               const cr = credits[code] ?? (parseGrade(c.credit) ?? 0.5)
               const on = !!included[code]
               const lg = letterGrade(grade)
+              // The Career Plan's name keeps the level the transcript drops ("Chemistry Adv").
+              const name = f?.match?.name || transcriptCourseName(c.description)
               return (
-                <div key={ci} className={`cum-course ${numeric && on ? '' : 'off'}`}>
+                <div key={ci} className={`cum-course ${numeric && on && !blocked ? '' : 'off'}`}>
                   <div className="cum-course-head">
                     <label className="cum-check">
-                      <input type="checkbox" disabled={!numeric} checked={on} onChange={() => onToggle(code)} />
-                      <span className="cum-course-name">{transcriptCourseName(c.description)}</span>
+                      <input type="checkbox" disabled={!numeric || blocked} checked={on} onChange={() => onToggle(code)} />
+                      <span className="cum-course-name" title={c.description}>{name}</span>
+                      <PlanTag facts={f} />
                     </label>
                     <div className="cum-course-right">
-                      {numeric && <WeightSelect value={w} onChange={(e) => setWeight(code, e.target.value)} />}
+                      {numeric && !blocked && <WeightSelect value={w} onChange={(e) => setWeight(code, e.target.value)} />}
+                      {blocked && <span className="small faint">not counted</span>}
                       <span className={`cum-year ${numeric ? lg.cls : ''}`} title="Transcript year grade">{numeric ? grade : (c.sem1 || '—')}</span>
                     </div>
                   </div>
