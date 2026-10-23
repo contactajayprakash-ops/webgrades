@@ -235,41 +235,7 @@ export function factsFor(g, description) {
   return { match: g, ea: g.ea, cr: g.cr, weight: guess >= WEIGHTS.AP ? guess : g.weight }
 }
 
-// Completed PAST-year Career Plan courses with no transcript row — the summer AP
-// CSA that HAC lists as "CR" and hasn't posted yet. The GPA setup offers them as
-// one-tap "Add course" entries (the student types the grade). Left out: the
-// current year (live classes cover it), rows not marked complete, credit by exam
-// (never counted anyway), a PEIMS echo of a transcript row, a second row for a
-// course that was already matched under another name ("Computer Science I" next
-// to "Computer Science 1 Adv"), and the same course listed under two subject
-// areas ("AP Comp Sci A-Math" / "AP Comp Sci A-LOTE" — one suggestion, no suffix).
-const BUCKET_RE = /\s*-\s*(Math|LOTE|Sci(ence)?|Elec(tive)?|Tech\w*|SS)$/i
-export function planSuggestions(idx, priorCourses, facts, today = new Date()) {
-  if (!idx?.ok) return []
-  const cur = currentSchoolYear(today)
-  const matched = new Set(Object.values(facts || {}).map((f) => f?.match).filter(Boolean))
-  const matchedSubject = new Set([...matched].map((g) => `${g.year}|${g.subject}`))
-  const txCodes = new Set((priorCourses || []).map((c) => String(c.courseCode || '').replace(/\s*-.*$/, '').toUpperCase()).filter(Boolean))
-  const seen = new Set()
-  const out = []
-  for (const year of idx.trustedYears) {
-    if (year >= cur) continue
-    for (const g of idx.byYear.get(year) || []) {
-      if (matched.has(g) || !g.complete || g.ea) continue
-      if (g.codes.some((c) => txCodes.has(c.replace(/^T/, '')))) continue
-      if (g.subject && matchedSubject.has(`${g.year}|${g.subject}`)) continue
-      const name = g.name.replace(BUCKET_RE, '').trim()
-      const key = `${g.year}|${levelSubject(name) || name.toUpperCase()}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      out.push({ key, year: g.year, name, weight: g.weight, credit: g.credit || 1, cr: g.cr, group: g })
-    }
-  }
-  return out
-}
-
 // Short labels for the badges.
 export const PLAN_LABELS = {
   ea: { tag: 'EA', title: 'Credit by exam — Frisco leaves these out of the GPA' },
-  cr: { tag: 'CR', title: 'Summer / off-cycle course (CR) — counts like any other course' },
 }

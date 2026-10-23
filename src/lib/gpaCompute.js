@@ -6,7 +6,7 @@ import { liveWeight, parseGrade, semesterGrade, liveSemesterAverage } from './gp
 import { cleanCourseName, courseKey, transcriptPeriod, currentSchoolYear } from './courses.js'
 import { transcriptCourseName } from './courseCatalog.js'
 import { transcriptWeight } from './levels.js'
-import { factsFor, matchPlanCourses, planCourseForLive, planSuggestions } from './careerPlan.js'
+import { factsFor, matchPlanCourses, planCourseForLive } from './careerPlan.js'
 
 // Career Plan facts for every prior-year transcript course, keyed the way the
 // cumulative setup keys them (c.code). Each plan row is matched at most once per
@@ -19,13 +19,6 @@ export function transcriptPlanFacts(plan, priorCourses) {
   const matches = matchPlanCourses(plan, rows)
   for (const c of rows) out[c.key] = factsFor(matches.get(c.key) || null, c.description)
   return out
-}
-
-// Completed past-year Career Plan courses the transcript doesn't have yet
-// (see planSuggestions), minus the ones already added by hand.
-export function transcriptPlanSuggestions(plan, priorCourses, facts, manual = []) {
-  const added = new Set((manual || []).flatMap((m) => [m.plan, (m.name || '').trim().toUpperCase()]).filter(Boolean))
-  return planSuggestions(plan, priorCourses, facts).filter((s) => !added.has(s.key) && !added.has(s.name.toUpperCase()))
 }
 
 // Career Plan facts for a current-year live class (matched by course code).

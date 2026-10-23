@@ -294,9 +294,13 @@ snapshot tier and the client's cold wave) and the client reads it in
   `EAMT200A`). FISD's GPA leaves those out, so the cumulative setup skips them
   (checkbox disabled, "not counted") unless `prefs.cumulative.countEa` is on —
   the "Count credit-by-exam (EA)" switch in the GPA setup toolbar.
-- **CR = summer / off-cycle** (`CR AP Comp Sci A-Math S1`, `CRMT420A`): counted
-  like any other course, just badged. Not every summer course shows up this way,
-  so the manual "Add course" path stays.
+- **CR = summer / off-cycle** (`CR AP Comp Sci A-Math S1`, `CRMT420A`) is parsed
+  but **not shown**. Ajay had the summer badges and the "on your Career Plan but
+  not on your transcript yet" one-tap Add removed on 2026-10-23: they flagged
+  year-long courses (APWHIST, SS RES) as summer on other accounts. Don't re-add
+  summer detection without real pages from several students. HAC's per-year
+  "Summer School - High School" building label is hidden too (`yearBuilding`):
+  HAC gives a whole year one building, so it made every course look like summer.
 
 Rules that keep it honest:
 
@@ -320,13 +324,6 @@ Rules that keep it honest:
   plan's subject area. With those, that student's GPA computed here (EA out,
   athletics in) equalled HAC's own cumulative GPA to the rounding digit; counting
   EA rows or the old level guesses did not.
-- **Not on the transcript yet:** completed past-year plan rows nothing matched
-  (a summer `CR` AP course HAC hasn't posted) show in the GPA setup's "Added
-  courses" as one-tap **Add** (name, level, credit filled in; the student types the
-  grade) or × to hide (`prefs.cumulative.planHidden`). Skipped: the current year,
-  incomplete rows, EA rows, PEIMS echoes, a second row for an already-matched
-  subject, and the same course listed under two subject areas ("A-Math" / "A-LOTE"
-  collapse to one).
 - A missing or older-shaped doc makes every lookup empty and the old guesses
   apply. Checked by `npm run test:careerplan`.
 

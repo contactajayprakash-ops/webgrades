@@ -5,6 +5,7 @@ import { PageHead, Loading, ErrorBox, Empty, GradeBadge } from '../components/ui
 import { Icon } from '../components/icons.jsx'
 import { parseGrade } from '../lib/gpa.js'
 import { transcriptCourseName } from '../lib/courseCatalog.js'
+import { yearBuilding } from '../lib/courses.js'
 import { indexCareerPlan, PLAN_LABELS } from '../lib/careerPlan.js'
 import { buildPriorCourses, transcriptPlanFacts } from '../lib/gpaCompute.js'
 
@@ -37,7 +38,7 @@ export default function Transcript() {
               <div className="row-between" style={{ padding: '16px 20px' }}>
                 <div>
                   <h3>{g.year || 'Year'}{g.grade ? ` · Grade ${g.grade}` : ''}</h3>
-                  {g.building && <div className="small faint mt-2">{g.building}</div>}
+                  {yearBuilding(g.building) && <div className="small faint mt-2">{yearBuilding(g.building)}</div>}
                 </div>
                 {g.totalCredit && <span className="pill">Credits: {g.totalCredit}</span>}
               </div>
@@ -52,13 +53,13 @@ export default function Transcript() {
                   <tbody>
                     {(g.courses || []).map((c, j) => {
                       const f = facts[c.courseCode || `${g.year}-${c.description}`]
-                      const k = f?.ea ? 'ea' : f?.cr ? 'cr' : null
+                      const ea = !!f?.ea
                       return (
                       <tr key={j}>
                         <td>
                           {f?.match?.name || transcriptCourseName(c.description) || c.courseCode}
                           {c.courseCode && c.description && <span className="faint small"> · {c.courseCode}</span>}
-                          {k && <span className={`plan-tag ${k}`} title={PLAN_LABELS[k].title}>{PLAN_LABELS[k].tag}</span>}
+                          {ea && <span className="plan-tag ea" title={PLAN_LABELS.ea.title}>{PLAN_LABELS.ea.tag}</span>}
                         </td>
                         <td className="num"><GradeBadge value={parseGrade(c.sem1)} showLetter={false} /></td>
                         <td className="num"><GradeBadge value={parseGrade(c.sem2)} showLetter={false} /></td>

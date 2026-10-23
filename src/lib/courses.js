@@ -70,6 +70,12 @@ export function filterPhantomClasses(classes, wl) {
 // LOTE credit and don't count toward the weighted GPA, so "Select all graded"
 // skips them even when one happens to post a number grade. (Still manually
 // selectable if a student really wants to include one.)
+// HAC labels a whole transcript year with ONE building, and a year with any
+// summer-school course often reads "Summer School - High School" even though
+// most of it was the regular year. Showing that makes every course in the year
+// look like a summer course, so the label is dropped.
+export const yearBuilding = (b) => (b && !/summer/i.test(b) ? b : null)
+
 export function isNonGpaCourse(description, code) {
   const d = (description || '').toUpperCase().replace(/\s+/g, ' ').trim()
   return /^OTH(?:E)?R\s*FL/.test(d)

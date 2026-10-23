@@ -3,7 +3,7 @@
 // The Pi scrapes HAC's Classes > Career Plan as `careerplan`. The client reads it
 // for the level of every past course (the transcript drops "Adv"), for credit-
 // by-exam rows (EA prefix — left out of the GPA unless "Count EA" is on) and for
-// summer rows (CR prefix — counted, labelled). Future-year columns are the
+// summer rows (CR prefix — parsed, counted like any course, no longer shown). Future-year columns are the
 // student's own requests and must be ignored.
 //
 // The fixture mirrors a real 10th grader's Career Plan + transcript structure
@@ -18,8 +18,9 @@ globalThis.localStorage = {
   setItem: (k, v) => store.set(k, String(v)),
   removeItem: (k) => store.delete(k),
 }
-const { parsePlanName, indexCareerPlan, matchPlanCourse, matchPlanCourses, planCourseForLive, planFacts, planYearFor, planSuggestions } = await import('../src/lib/careerPlan.js')
-const { buildCumRows, buildPriorCourses, transcriptPlanFacts, transcriptPlanSuggestions } = await import('../src/lib/gpaCompute.js')
+const { parsePlanName, indexCareerPlan, matchPlanCourse, matchPlanCourses, planCourseForLive, planFacts, planYearFor } = await import('../src/lib/careerPlan.js')
+const { buildCumRows, buildPriorCourses, transcriptPlanFacts } = await import('../src/lib/gpaCompute.js')
+const { yearBuilding } = await import('../src/lib/courses.js')
 const { levelSubject } = await import('../src/lib/levels.js')
 
 let failed = 0
@@ -249,15 +250,9 @@ const rowsNone = buildCumRows({ ...args, prefs: prefsOff, plan: null })
 check('no plan → EA rows not detectable, so counted as before', rowsNone.some((r) => r.baseKey === K['ALG 2']))
 check('no plan → ALG 2 keeps the old 5.5 guess', w(rowsNone, K['ALG 2']) === 5.5)
 
-// ---- "on your Career Plan but not on your transcript yet" ----
-const sugg = planSuggestions(idx, prior, facts, today)
-check('exactly one suggestion: the summer AP CSA (Math + LOTE rows collapse to one)', sugg.length === 1 && sugg[0].name === 'AP Comp Sci A' && sugg[0].cr && sugg[0].weight === 6 && sugg[0].credit === 1 && sugg[0].year === '2025-2026')
-check('the PEIMS echo "Computer Science I" is not suggested', !sugg.some((s) => /Computer Science I/.test(s.name)))
-check('current-year (incomplete) rows are not suggested', !sugg.some((s) => s.year === '2026-2027'))
-check('a hand-added course with the suggestion key hides it', transcriptPlanSuggestions(idx, prior, facts, [{ id: '1', name: 'AP Comp Sci A', plan: sugg[0].key }]).length === 0)
-check('a hand-added course with the same name hides it too', transcriptPlanSuggestions(idx, prior, facts, [{ id: '1', name: 'ap comp sci a' }]).length === 0)
-check('an unrelated hand-added course leaves it', transcriptPlanSuggestions(idx, prior, facts, [{ id: '1', name: 'Band' }]).length === 1)
-check('no plan → no suggestions', planSuggestions(indexCareerPlan(null), prior, {}).length === 0)
+// ---- HAC's per-year "Summer School" building label is not shown ----
+check('yearBuilding hides "Summer School - High School"', yearBuilding('Summer School - High School') === null)
+check('yearBuilding keeps a real school', yearBuilding('Lone Star High School') === 'Lone Star High School')
 
 if (failed) { console.error(`\n${failed} failed`); process.exit(1) }
 console.log('\nall career plan checks passed')
